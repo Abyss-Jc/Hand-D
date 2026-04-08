@@ -17,6 +17,12 @@ HAND_CONNECTIONS = [
     (0,5), (5,9), (9,13), (13,17)        # palm
 ]
 
+scatter_artist = None
+line_artists = []
+quiver_y_artist = None
+quiver_z_artist = None
+is_initialized = False
+
 # 1. Load Data
 try:
     df = pd.read_csv(FILE_NAME)
@@ -33,41 +39,94 @@ plt.subplots_adjust(bottom=0.25)
 
 # 3. Visualization Function
 def draw_hand(index):
-    ax.clear()
+    global scatter_artist, line_artists, quiver_y_artist, quiver_z_artist, is_initialized
     
     if len(df) == 0:
+        ax.clear()
         ax.set_title("Dataset is Empty!")
         ax.set_axis_off()
+        is_initialized = False # Reset if empty
         return
 
-    # Ensure index is within current bounds (important after deletions)
+    # Ensure index is within current bounds
     index = min(max(int(index), 0), len(df) - 1)
     
-    # Extract the first 63 features
+    # Extract features
     row = df.iloc[index]
     landmarks = row.iloc[:63].values.reshape(21, 3)
     label = row['label']
     handedness = row['handedness']
+
+    global_y = row.iloc[63:66].values.astype(float)
+    global_z = row.iloc[66:69].values.astype(float)
     
-    # Apply your spatial hack to center the hand
+    # Apply spatial hack
     xs, ys, zs = landmarks[:, 0], landmarks[:, 1]-1, landmarks[:, 2]
-    
-    # Plot points and skeleton
-    ax.scatter(xs, ys, zs, c='red', s=50)
-    for connection in HAND_CONNECTIONS:
-        start_idx, end_idx = connection
-        ax.plot(
-            [landmarks[start_idx, 0], landmarks[end_idx, 0]],
-            [landmarks[start_idx, 1]-1, landmarks[end_idx, 1]-1],
-            [landmarks[start_idx, 2], landmarks[end_idx, 2]],
-            color='blue', linewidth=2
-        )
-    
-    # Formatting
+
+    # ==========================================
+    # PHASE 1: INITIAL SETUP (Runs only once)
+    # ==========================================
+    if not is_initialized:
+        ax.clear()
+        
+        # Draw and save the scatter artist
+        scatter_artist = ax.scatter(xs, ys, zs, c='red', s=50)
+        
+        # Draw and save the line artists
+        line_artists = []
+        for connection in HAND_CONNECTIONS:
+            start_idx, end_idx = connection
+            line, = ax.plot(
+                [landmarks[start_idx, 0], landmarks[end_idx, 0]],
+                [landmarks[start_idx, 1]-1, landmarks[end_idx, 1]-1],
+                [landmarks[start_idx, 2], landmarks[end_idx, 2]],
+                color='blue', linewidth=2
+            )
+            line_artists.append(line)
+
+        # Draw and save quivers
+        quiver_y_artist = ax.quiver(0, -1, 0, -global_y[0], -global_y[1], -global_y[2], 
+                  color='green', linewidth=3, length=0.6, arrow_length_ratio=0.2, label='Global Y (Hand Up)')
+        
+        quiver_z_artist = ax.quiver(0, -1, 0, -global_z[0], -global_z[1], -global_z[2], 
+                  color='purple', linewidth=3, length=0.6, arrow_length_ratio=0.2, label='Global Z (Hand Forward)')
+        
+        # Formatting (Only needs to be set once now!)
+        ax.set_xlim(1, -1); ax.set_ylim(1, -1); ax.set_zlim(-1, 1)
+        ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+        ax.view_init(elev=-90, azim=-90)
+        ax.legend(loc='upper left', bbox_to_anchor=(0.8, 1.05))
+        
+        is_initialized = True
+
+    # ==========================================
+    # PHASE 2: UPDATE DATA (Runs on every click)
+    # ==========================================
+    else:
+        # Update Scatter Points
+        scatter_artist._offsets3d = (xs, ys, zs)
+        
+        # Update Line Positions
+        for i, connection in enumerate(HAND_CONNECTIONS):
+            start_idx, end_idx = connection
+            line_artists[i].set_data_3d(
+                [landmarks[start_idx, 0], landmarks[end_idx, 0]],
+                [landmarks[start_idx, 1]-1, landmarks[end_idx, 1]-1],
+                [landmarks[start_idx, 2], landmarks[end_idx, 2]]
+            )
+            
+        # Update Quivers (Remove the old ones, draw new ones)
+        quiver_y_artist.remove()
+        quiver_z_artist.remove()
+        
+        quiver_y_artist = ax.quiver(0, -1, 0, -global_y[0], -global_y[1], -global_y[2], 
+                  color='green', linewidth=3, length=0.6, arrow_length_ratio=0.2)
+        
+        quiver_z_artist = ax.quiver(0, -1, 0, -global_z[0], -global_z[1], -global_z[2], 
+                  color='purple', linewidth=3, length=0.6, arrow_length_ratio=0.2)
+
+    # Dynamic Title (Updates every time)
     ax.set_title(f"Sample: {index} | Total: {len(df)} | Label: {label} | Hand: {'Left' if handedness == 1 else 'Right'}")
-    ax.set_xlim(1, -1); ax.set_ylim(1, -1); ax.set_zlim(-1, 1)
-    ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
-    ax.view_init(elev=-90, azim=-90)
 
 # --- UI CONTROLS SETUP ---
 
