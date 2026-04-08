@@ -208,4 +208,6 @@ __marimo__/
 
 #Custom
 tests/
+models/
+de_env/
 
