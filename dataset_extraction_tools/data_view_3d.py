@@ -63,7 +63,6 @@ def draw_hand(index):
     # Apply spatial hack
     xs, ys, zs = landmarks[:, 0], landmarks[:, 1]-1, landmarks[:, 2]
 
-   
     if not is_initialized:
         ax.clear()
         
@@ -90,14 +89,13 @@ def draw_hand(index):
                   color='purple', linewidth=3, length=0.6, arrow_length_ratio=0.2, label='Global Z (Hand Forward)')
         
         # Formatting (Only needs to be set once now!)
-        ax.set_xlim(1, -1); ax.set_ylim(1, -1); ax.set_zlim(1, -1)
+        ax.set_xlim(-1, 1); ax.set_ylim(1,-1); ax.set_zlim(-1, 1)
         ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
         ax.view_init(elev=-90, azim=-90)
         ax.legend(loc='upper left', bbox_to_anchor=(0.8, 1.05))
         
         is_initialized = True
-
-    
+ 
     else:
         # Update Scatter Points
         scatter_artist._offsets3d = (xs, ys, zs)
