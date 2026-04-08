@@ -7,6 +7,16 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
 import urllib.request
+import argparse
+
+# --- PARSE ARGUMENTS ---
+parser = argparse.ArgumentParser(description='Hand gesture data collection')
+parser.add_argument('--label', type=str, required=True, help='Gesture name')
+parser.add_argument('--handedness', type=str, default='Any', help='Expected handedness (Left/Right/Any)')
+parser.add_argument('--samples', type=int, default=250, help='Number of samples to collect')
+parser.add_argument('--output', type=str, default='datasets/gesture_dataset.csv', help='Output CSV file')
+parser.add_argument('--stride', type=int, default=5, help='Frame stride (process every N frames)')
+args = parser.parse_args()
 
 # --- DOWNLOAD MODEL IF NOT PRESENT ---
 MODEL_PATH = "models/hand_landmarker.task"
@@ -33,21 +43,71 @@ def extract_features_with_plot(landmarks_3d, handedness):
     handedness_binary = 1.0 if handedness == "Left" else 0.0
     if handedness == "Left":
         translated_pts[:, 0] = -translated_pts[:, 0]
-    v_y_raw = translated_pts[9]
-    scale_factor = np.linalg.norm(v_y_raw)
-    if scale_factor < 1e-6:
+
+    # More robust scaling factor: average distance from wrist to MCPs
+    # (Landmarks 5, 9, 13, 17 are MCPs for index, middle, ring, pinky fingers)
+    mcps = translated_pts[[5, 9, 13, 17]]
+    scale_factor = np.mean(np.linalg.norm(mcps - translated_pts[0], axis=1)) # Distance from wrist to MCP
+    if scale_factor < 1e-3: # Increased threshold for very small hands or bad detection
+        print("Debug: Skipping due to small scale_factor")
         return None, None
+
     scaled_pts = translated_pts / scale_factor
-    global_y = scaled_pts[9]
-    v_idx = scaled_pts[5]
-    v_z = np.cross(global_y, v_idx)
-    norm_z = np.linalg.norm(v_z)
-    if norm_z < 1e-6:
+
+    # Define a more robust canonical coordinate system based on the palm
+    # Using wrist (0), MCP_index (5), MCP_pinky (17) to define a plane
+    p_wrist = scaled_pts[0] # Should be [0,0,0] after translation
+    p_index_mcp = scaled_pts[5]
+    p_pinky_mcp = scaled_pts[17]
+    p_middle_mcp = scaled_pts[9]
+
+    # Global Y-axis: vector from wrist to middle finger MCP
+    global_y = p_middle_mcp - p_wrist
+    norm_global_y = np.linalg.norm(global_y)
+    if norm_global_y < 1e-3:
+        print("Debug: Skipping due to small norm_global_y")
         return None, None
-    global_z = v_z / norm_z
+    global_y = global_y / norm_global_y
+
+    # Global Z-axis: Normal of the plane formed by wrist, index MCP, and pinky MCP
+    # Ensure points are not collinear by checking cross product norm
+    vec1 = p_index_mcp - p_wrist
+    vec2 = p_pinky_mcp - p_wrist
+    
+    cross_product_norm = np.linalg.norm(np.cross(vec1, vec2))
+    if cross_product_norm < 1e-3: # Increased threshold for collinear points
+        print("Debug: Skipping due to collinear palm points for global_z")
+        return None, None
+
+    global_z = np.cross(vec1, vec2)
+    global_z = global_z / np.linalg.norm(global_z) # Normalize global_z
+
+    # Global X-axis: cross product of global_y and global_z
     global_x = np.cross(global_y, global_z)
+    norm_global_x = np.linalg.norm(global_x)
+    if norm_global_x < 1e-3:
+        print("Debug: Skipping due to small norm_global_x")
+        return None, None
+    global_x = global_x / norm_global_x
+
+    # Re-orthogonalize global_y to ensure it's perfectly perpendicular to global_x and global_z
+    global_y = np.cross(global_z, global_x)
+    global_y = global_y / np.linalg.norm(global_y)
+
+
     M = np.stack([global_x, global_y, global_z], axis=1)
     canonical_pts = np.dot(scaled_pts, M)
+
+    # Additional filter: Check if canonical points are within a reasonable range
+    if np.any(np.abs(canonical_pts) > 2.0): # Points outside [-2.0, 2.0] range are suspicious
+        print("Debug: Skipping due to canonical points out of range")
+        return None, None
+    
+    # Existing part of the function continues from here
+    base_features = np.concatenate([canonical_pts.flatten(), global_y, global_z])
+    features = np.append(base_features, handedness_binary)
+    return features, canonical_pts
+
     base_features = np.concatenate([canonical_pts.flatten(), global_y, global_z])
     features = np.append(base_features, handedness_binary)
     return features, canonical_pts
@@ -100,10 +160,19 @@ options = vision.HandLandmarkerOptions(
 detector = vision.HandLandmarker.create_from_options(options)
 
 # --- COLLECTION CONFIG ---
-LABEL = input("Enter gesture name (e.g., Thumbs_Up): ")
-TARGET_SAMPLES = int(input(f"How many samples to collect for '{LABEL}': "))
-FILE_NAME = "datasets/gesture_dataset.csv"
-STRIDE = 5
+LABEL = args.label
+EXPECTED_HANDEDNESS = args.handedness.capitalize()
+TARGET_SAMPLES = args.samples
+FILE_NAME = args.output
+STRIDE = args.stride
+
+print(f"\n=== Configuration ===")
+print(f"Gesture: {LABEL}")
+print(f"Handedness: {EXPECTED_HANDEDNESS}")
+print(f"Target samples: {TARGET_SAMPLES}")
+print(f"Output file: {FILE_NAME}")
+print(f"Frame stride: {STRIDE}")
+print("========================\n")
 
 cap = cv2.VideoCapture(0)
 samples_collected = 0
@@ -147,8 +216,15 @@ while samples_collected < TARGET_SAMPLES:
             handedness = detection_result.handedness[0][0].category_name
             landmarks_array = np.array([[lm.x, lm.y, lm.z] for lm in hand_world_landmarks])
 
+            # Handedness filtering
+            if EXPECTED_HANDEDNESS != "Any" and handedness != EXPECTED_HANDEDNESS:
+                cv2.putText(frame, f"Skipped: Detected {handedness}, Expected {EXPECTED_HANDEDNESS}", (10, 170),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                print(f"Skipped: Detected {handedness}, Expected {EXPECTED_HANDEDNESS}")
+                continue
+
             features, canonical_pts = extract_features_with_plot(landmarks_array, handedness)
-            #update_canonical_plot(canonical_pts)      <------------=======[UNSTABLE]=======
+            #update_canonical_plot(canonical_pts)      <------------=======[UNSTABLE]=======\
 
             if features is not None:
                 row = list(features) + [LABEL]
@@ -156,7 +232,9 @@ while samples_collected < TARGET_SAMPLES:
                 samples_collected += 1
                 print(f"Collected sample {samples_collected}/{TARGET_SAMPLES}")
             else:
-                print("Skipped: unstable hand orientation (cross product too small)")
+                cv2.putText(frame, "Skipped: Unstable hand orientation", (10, 170),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                print("Skipped: unstable hand orientation")
 
             # Draw 2D landmarks on camera feed
             hand_landmarks_2d = detection_result.hand_landmarks[0]

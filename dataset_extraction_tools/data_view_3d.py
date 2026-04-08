@@ -3,9 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 from mpl_toolkits.mplot3d import Axes3D
+import argparse
 
-# --- CONFIG ---
-FILE_NAME = "datasets/gesture_dataset.csv"
+# --- PARSE ARGUMENTS ---
+parser = argparse.ArgumentParser(description='3D hand gesture visualizer')
+parser.add_argument('--label', type=str, default=None, help='Filter by gesture label')
+parser.add_argument('--file', type=str, default='datasets/gesture_dataset.csv', help='CSV file')
+args = parser.parse_args()
+
+FILE_NAME = args.file
 
 # Connections for the hand skeleton
 HAND_CONNECTIONS = [
@@ -27,6 +33,10 @@ is_initialized = False
 try:
     df = pd.read_csv(FILE_NAME)
     print(f"Loaded {len(df)} samples from {FILE_NAME}")
+    
+    if args.label:
+        df = df[df['label'] == args.label].reset_index(drop=True)
+        print(f"Filtered to {len(df)} samples with label '{args.label}'")
 except FileNotFoundError:
     print(f"Error: {FILE_NAME} not found. Run your collection script first!")
     exit()
@@ -63,6 +73,9 @@ def draw_hand(index):
     # Apply spatial hack
     xs, ys, zs = landmarks[:, 0], landmarks[:, 1]-1, landmarks[:, 2]
 
+    # ==========================================
+    # PHASE 1: INITIAL SETUP (Runs only once)
+    # ==========================================
     if not is_initialized:
         ax.clear()
         
@@ -89,13 +102,16 @@ def draw_hand(index):
                   color='purple', linewidth=3, length=0.6, arrow_length_ratio=0.2, label='Global Z (Hand Forward)')
         
         # Formatting (Only needs to be set once now!)
-        ax.set_xlim(-1, 1); ax.set_ylim(1,-1); ax.set_zlim(-1, 1)
+        ax.set_xlim(1, -1); ax.set_ylim(1, -1); ax.set_zlim(-1, 1)
         ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
         ax.view_init(elev=-90, azim=-90)
         ax.legend(loc='upper left', bbox_to_anchor=(0.8, 1.05))
         
         is_initialized = True
- 
+
+    # ==========================================
+    # PHASE 2: UPDATE DATA (Runs on every click)
+    # ==========================================
     else:
         # Update Scatter Points
         scatter_artist._offsets3d = (xs, ys, zs)
