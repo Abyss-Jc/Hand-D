@@ -11,7 +11,7 @@ parser.add_argument('--label', type=str, default=None, help='Filter by gesture l
 parser.add_argument('--file', type=str, default='datasets/gesture_dataset.csv', help='CSV file')
 args = parser.parse_args()
 
-FILE_NAME = args.file
+FILE_NAME = f"datasets/{args.file}"
 
 # Connections for the hand skeleton
 HAND_CONNECTIONS = [
@@ -102,7 +102,7 @@ def draw_hand(index):
                   color='purple', linewidth=3, length=0.6, arrow_length_ratio=0.2, label='Global Z (Hand Forward)')
         
         # Formatting (Only needs to be set once now!)
-        ax.set_xlim(1, -1); ax.set_ylim(1, -1); ax.set_zlim(-1, 1)
+        ax.set_xlim(-1, 1); ax.set_ylim(1, -1); ax.set_zlim(1, -1)
         ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
         ax.view_init(elev=-90, azim=-90)
         ax.legend(loc='upper left', bbox_to_anchor=(0.8, 1.05))

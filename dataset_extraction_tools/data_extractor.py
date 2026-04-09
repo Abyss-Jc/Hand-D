@@ -163,7 +163,7 @@ detector = vision.HandLandmarker.create_from_options(options)
 LABEL = args.label
 EXPECTED_HANDEDNESS = args.handedness.capitalize()
 TARGET_SAMPLES = args.samples
-FILE_NAME = args.output
+FILE_NAME = f"datasets/{args.output}"
 STRIDE = args.stride
 
 print(f"\n=== Configuration ===")
