@@ -11,7 +11,7 @@ parser.add_argument('--label', type=str, default=None, help='Filter by gesture l
 parser.add_argument('--file', type=str, default='gesture_dataset.csv', help='CSV file')
 args = parser.parse_args()
 
-FILE_NAME = f"datasets/{args.file}"
+FILE_NAME = args.file
 
 # Connections for the hand skeleton
 HAND_CONNECTIONS = [
