@@ -199,8 +199,9 @@ def save_data(event):
             existing_df = pd.read_csv(FILE_NAME)
         
         combined_df = pd.concat([existing_df, df], ignore_index=True)
+        combined_df = combined_df.drop_duplicates()
         combined_df.to_csv(FILE_NAME, index=False)
-        print(f"Saved {len(df)} samples. Total in file: {len(combined_df)}")
+        print(f"Saved {len(combined_df)} unique samples")
     else:
         print("Dataset is empty. Nothing to save.")
 
