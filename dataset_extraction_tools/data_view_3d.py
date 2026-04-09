@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 from mpl_toolkits.mplot3d import Axes3D
 import argparse
+import os
 
 # --- PARSE ARGUMENTS ---
 parser = argparse.ArgumentParser(description='3D hand gesture visualizer')
@@ -193,8 +194,13 @@ def delete_current(event):
 
 def save_data(event):
     if len(df) > 0:
-        df.to_csv(FILE_NAME, index=False)
-        print(f"Saved {len(df)} cleaned samples back to '{FILE_NAME}'")
+        existing_df = pd.DataFrame()
+        if os.path.exists(FILE_NAME):
+            existing_df = pd.read_csv(FILE_NAME)
+        
+        combined_df = pd.concat([existing_df, df], ignore_index=True)
+        combined_df.to_csv(FILE_NAME, index=False)
+        print(f"Saved {len(df)} samples. Total in file: {len(combined_df)}")
     else:
         print("Dataset is empty. Nothing to save.")
 
