@@ -15,7 +15,10 @@ parser.add_argument('--label', type=str, required=True, help='Gesture name')
 parser.add_argument('--handedness', type=str, default='Any', help='Expected handedness (Left/Right/Any)')
 parser.add_argument('--samples', type=int, default=250, help='Number of samples to collect')
 parser.add_argument('--output', type=str, default='datasets/gesture_dataset.csv', help='Output CSV file')
-parser.add_argument('--stride', type=int, default=5, help='Frame stride (process every N frames)')
+parser.add_argument('--stride', type=int, default=8, help='Frame stride (process every N frames)')
+parser.add_argument('--warmup', type=int, default=10, help='Warmup frames to discard at start')
+parser.add_argument('--extras', type=int, default=10, help='Extra samples beyond target')
+parser.add_argument('--autosave', type=int, default=25, help='Auto-save every N samples')
 args = parser.parse_args()
 
 # --- DOWNLOAD MODEL IF NOT PRESENT ---
@@ -108,10 +111,6 @@ def extract_features_with_plot(landmarks_3d, handedness):
     features = np.append(base_features, handedness_binary)
     return features, canonical_pts
 
-    base_features = np.concatenate([canonical_pts.flatten(), global_y, global_z])
-    features = np.append(base_features, handedness_binary)
-    return features, canonical_pts
-
 # # --- SETUP 3D PLOT (with persistent artists) ---
 
 # # plt.ion()
@@ -165,19 +164,28 @@ EXPECTED_HANDEDNESS = args.handedness.capitalize()
 TARGET_SAMPLES = args.samples
 FILE_NAME = args.output
 STRIDE = args.stride
+WARMUP = args.warmup
+EXTRAS = args.extras
+AUTOSAVE_INTERVAL = args.autosave
 
 print(f"\n=== Configuration ===")
 print(f"Gesture: {LABEL}")
 print(f"Handedness: {EXPECTED_HANDEDNESS}")
 print(f"Target samples: {TARGET_SAMPLES}")
+print(f"Extra samples: {EXTRAS}")
 print(f"Output file: {FILE_NAME}")
 print(f"Frame stride: {STRIDE}")
+print(f"Warmup frames: {WARMUP}")
+print(f"Auto-save interval: {AUTOSAVE_INTERVAL}")
 print("========================\n")
 
 cap = cv2.VideoCapture(0)
 samples_collected = 0
 frame_count = 0
 collected_rows = []
+warmup_count = 0
+detection_count = 0
+TOTAL_TARGET = TARGET_SAMPLES + EXTRAS
 
 # CSV header
 try:
@@ -191,9 +199,15 @@ if file_empty:
     with open(FILE_NAME, mode='w', newline='') as f:
         csv.writer(f).writerow(header)
 
-print(f"Collecting {TARGET_SAMPLES} samples. Press 'r' to reject last, 'q' to quit.")
+def save_collected():
+    if collected_rows:
+        with open(FILE_NAME, mode='a', newline='') as f:
+            csv.writer(f).writerows(collected_rows)
+        print(f"Auto-saved {len(collected_rows)} samples to {FILE_NAME}")
 
-while samples_collected < TARGET_SAMPLES:
+print(f"Collecting {TARGET_SAMPLES} + {EXTRAS} extras (warmup: {WARMUP}). Press 'r' to reject last, 'q' to quit.")
+
+while samples_collected < TOTAL_TARGET:
     ret, frame = cap.read()
     if not ret:
         break
@@ -202,9 +216,11 @@ while samples_collected < TARGET_SAMPLES:
     frame = cv2.flip(frame, 1)
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    cv2.putText(frame, f"Samples: {samples_collected}/{TARGET_SAMPLES}", (10, 50),
+    cv2.putText(frame, f"Samples: {samples_collected}/{TARGET_SAMPLES} (+{samples_collected - TARGET_SAMPLES if samples_collected > TARGET_SAMPLES else 0} extra)", (10, 50),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    cv2.putText(frame, "Press 'r' to reject last, 'q' to quit", (10, 90),
+    cv2.putText(frame, "Warmup remaining: " + str(max(0, WARMUP - warmup_count)), (10, 85),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+    cv2.putText(frame, "Press 'r' to reject last, 'q' to quit", (10, 120),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
     if frame_count % STRIDE == 0:
@@ -218,21 +234,34 @@ while samples_collected < TARGET_SAMPLES:
 
             # Handedness filtering
             if EXPECTED_HANDEDNESS != "Any" and handedness != EXPECTED_HANDEDNESS:
-                cv2.putText(frame, f"Skipped: Detected {handedness}, Expected {EXPECTED_HANDEDNESS}", (10, 170),
+                cv2.putText(frame, f"Skipped: Detected {handedness}, Expected {EXPECTED_HANDEDNESS}", (10, 200),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 print(f"Skipped: Detected {handedness}, Expected {EXPECTED_HANDEDNESS}")
                 continue
 
+            # Warmup: skip first N detection frames
+            detection_count += 1
+            if detection_count <= WARMUP:
+                warmup_count += 1
+                cv2.putText(frame, f"Warmup: {warmup_count}/{WARMUP}", (10, 160),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                print(f"Warmup frame {warmup_count}/{WARMUP}")
+                continue
+
             features, canonical_pts = extract_features_with_plot(landmarks_array, handedness)
-            #update_canonical_plot(canonical_pts)      <------------=======[UNSTABLE]=======\
 
             if features is not None:
                 row = list(features) + [LABEL]
                 collected_rows.append(row)
                 samples_collected += 1
-                print(f"Collected sample {samples_collected}/{TARGET_SAMPLES}")
+                print(f"Collected sample {samples_collected}/{TOTAL_TARGET}")
+                
+                # Auto-save every N samples
+                if samples_collected % AUTOSAVE_INTERVAL == 0:
+                    save_collected()
+                    collected_rows = []
             else:
-                cv2.putText(frame, "Skipped: Unstable hand orientation", (10, 170),
+                cv2.putText(frame, "Skipped: Unstable hand orientation", (10, 200),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 print("Skipped: unstable hand orientation")
 
@@ -247,7 +276,7 @@ while samples_collected < TARGET_SAMPLES:
                     pt1 = (int(hand_landmarks_2d[i].x * w), int(hand_landmarks_2d[i].y * h))
                     pt2 = (int(hand_landmarks_2d[j].x * w), int(hand_landmarks_2d[j].y * h))
                     cv2.line(frame, pt1, pt2, (255, 0, 0), 2)
-            cv2.putText(frame, f"{handedness}", (10, 130),
+            cv2.putText(frame, f"{handedness}", (10, 160),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
     cv2.imshow("Data Collection", frame)
@@ -257,12 +286,15 @@ while samples_collected < TARGET_SAMPLES:
     elif key == ord('r') and samples_collected > 0:
         collected_rows.pop()
         samples_collected -= 1
-        print(f"Rejected last sample. Now at {samples_collected}/{TARGET_SAMPLES}")
+        print(f"Rejected last sample. Now at {samples_collected}/{TOTAL_TARGET}")
 
-if collected_rows:
-    with open(FILE_NAME, mode='a', newline='') as f:
-        csv.writer(f).writerows(collected_rows)
-    print(f"Saved {len(collected_rows)} samples to {FILE_NAME}")
+# Save remaining collected rows
+save_collected()
+
+if samples_collected >= TARGET_SAMPLES:
+    print(f"Collection complete: {samples_collected}/{TOTAL_TARGET} samples collected")
+elif samples_collected > 0:
+    print(f"Partial collection: {samples_collected}/{TOTAL_TARGET} samples collected")
 else:
     print("No samples collected.")
 
