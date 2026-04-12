@@ -44,15 +44,15 @@ def extract_features_with_plot(landmarks_3d, handedness):
     wrist = landmarks_3d[0]
     translated_pts = landmarks_3d - wrist
     
-    # Mirror correction: flip handedness because camera is mirrored (cv2.flip(frame, 1))
-    if handedness == "Left":
-        handedness = "Right"
-    else:
-        handedness = "Left"
-    
-    handedness_binary = 1.0 if handedness == "Left" else 0.0
-    if handedness == "Left":
+    raw_mp_detection = handedness
+
+    actual_handedness = "Right" if raw_mp_detection == "Left" else "Left"
+    handedness_binary = 1.0 if actual_handedness == "Left" else 0.0
+
+    if raw_mp_detection == "Left":
         translated_pts[:, 0] = -translated_pts[:, 0]
+    
+    
 
     # More robust scaling factor: average distance from wrist to MCPs
     # (Landmarks 5, 9, 13, 17 are MCPs for index, middle, ring, pinky fingers)
