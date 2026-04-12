@@ -109,7 +109,7 @@ def extract_features_with_plot(landmarks_3d, handedness):
     canonical_pts = np.dot(scaled_pts, M)
 
     # Additional filter: Check if canonical points are within a reasonable range
-    if np.any(np.abs(canonical_pts) > 2.0): # Points outside [-2.0, 2.0] range are suspicious
+    if np.any(np.abs(canonical_pts) > 4.0): # Points outside [-2.0, 2.0] range are suspicious
         print("Debug: Skipping due to canonical points out of range")
         return None, None
     
