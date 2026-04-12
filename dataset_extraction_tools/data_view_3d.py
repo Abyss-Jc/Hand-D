@@ -9,7 +9,7 @@ import os
 # --- PARSE ARGUMENTS ---
 parser = argparse.ArgumentParser(description='3D hand gesture visualizer')
 parser.add_argument('--label', type=str, default=None, help='Filter by gesture label')
-parser.add_argument('--file', type=str, default='gesture_dataset.csv', help='CSV file')
+parser.add_argument('--file', type=str, default='datasets/gesture_dataset.csv', help='CSV file')
 args = parser.parse_args()
 
 FILE_NAME = args.file
