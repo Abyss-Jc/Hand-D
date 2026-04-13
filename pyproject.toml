@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 120
+indent-width = 2
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "ASYNC", "B", "A", "C4", "T10", "EM", "ISC", "ICN", "PIE", "PTH", "RET", "SLF", "SIM", "TID", "ARG"]
+ignore = ["E501", "ANN401", "RET504"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
