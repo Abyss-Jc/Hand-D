@@ -18,3 +18,4 @@ pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 six==1.17.0
 sounddevice==0.5.5
+torch ==2.7.0
