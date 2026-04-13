@@ -88,7 +88,7 @@ See `datasets/gesture_dataset.csv`
 
 ## Authors
 
-- [Josue Chavez](https://github.com)
+- [Josue Chavez](https://github.com/Abyss-Jc)
 - [Eduardo Quant](https://github.com/caml07)
 
 ## License
