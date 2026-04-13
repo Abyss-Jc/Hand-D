@@ -87,7 +87,24 @@ model.eval()
 
 ## 3. Hand Gesture Definitions
 
-### 3.1 Right Hand Gestures (Drawing/Erasing)
+### Hand Configuration
+The application supports **left-handed and right-handed users**. Users can configure which hand is used for:
+- **Drawing Hand**: Index_Finger (draw) and Fist (erase)
+- **Modifier Hand**: Thumb_Up (thickness) and Ruler_Gesture (straight line)
+
+Default configuration (right-handed):
+- **Drawing Hand**: Right hand
+- **Modifier Hand**: Left hand
+
+Alternate configuration (left-handed):
+- **Drawing Hand**: Left hand
+- **Modifier Hand**: Right hand
+
+Configuration is selected on first launch via a simple prompt or in settings.
+
+### 3.1 Drawing Hand Gestures (Drawing/Erasing)
+
+The drawing hand (configured as left or right) performs these gestures:
 
 | Gesture Name | MediaPipe Equivalent | Detection Criteria |
 |--------------|---------------------|---------------------|
@@ -105,7 +122,9 @@ model.eval()
 
 ---
 
-### 3.2 Left Hand Gestures (Modifier Actions)
+### 3.2 Modifier Hand Gestures (Controls)
+
+The modifier hand (opposite of drawing hand) performs these gestures:
 
 | Gesture Name | MediaPipe Equivalent | Function |
 |--------------|---------------------|----------|
@@ -151,9 +170,17 @@ for i, handedness in enumerate(detection_result.handedness):
 ## 4. Two-Hand Operation
 
 ### Concept
-This application uses **two-hand operation**:
-- **Right Hand**: Drawing and erasing actions
-- **Left Hand**: Modifier controls (thickness, ruler mode)
+This application uses **two-hand operation** determined by user configuration:
+- **Drawing Hand**: Index_Finger (draw) and Fist (erase)
+- **Modifier Hand**: Thumb_Up (thickness) and Ruler_Gesture (straight line)
+
+For RIGHT-HANDED users (default):
+- **Drawing Hand**: Right hand
+- **Modifier Hand**: Left hand
+
+For LEFT-HANDED users (configurable):
+- **Drawing Hand**: Left hand
+- **Modifier Hand**: Right hand
 
 ### Concurrent Gesture Processing
 The application processes both hands simultaneously:
@@ -228,17 +255,24 @@ IF Right_Hand == Fist AND Left_Hand == (any):
 
 **Trigger**: Display on first application open only
 
-**Content**:
+**Hand Configuration Prompt** (first launch only):
+```
+Are you right-handed or left-handed?
+[1] Right-handed (default)
+[2] Left-handed
+```
+
+**Content after configuration** (example for right-handed):
 ```
 Welcome to Visualizer-App!
 
 HOW TO USE:
 
-RIGHT HAND (Drawing):
+YOUR DRAWING HAND (Right):
 • Index Finger extended → Draw
 • Fist (all fingers curled) → Erase
 
-LEFT HAND (Modifiers):
+YOUR MODIFIER HAND (Left):
 • Thumb Up → Adjust thickness
   (move thumb left/right to change stroke width)
 • Ruler Gesture → Draw straight line
@@ -247,6 +281,10 @@ LEFT HAND (Modifiers):
 TWO-HAND OPERATION:
 • Draw with right hand + adjust thickness with left thumb
 • Draw with right hand + use ruler with left hand
+
+TWO-HAND OPERATION (left-handed config):
+• Draw with left hand + adjust thickness with right thumb
+• Draw with left hand + use ruler with right hand
 
 TOGGLE MODES:
 • Press 'M' to switch between Camera View and Dark Mode
