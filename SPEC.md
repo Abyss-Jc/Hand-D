@@ -12,7 +12,7 @@ This application is part of a hand gesture recognition project for a virtual whi
   - Object recognition for drawing tool
   - Touch detection algorithm
 
-- **test28.html** (smm.axtarget.xyz/demo)
+- **test28.html**: https://smm.axtarget.xyz/test28.html
   - Black background with green hand landmarks
   - Drawing with index finger gesture
   - Pinch gesture to grab and move drawings
