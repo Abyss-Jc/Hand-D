@@ -5,9 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# ==========================================
-# 1. DEFINE THE PYTORCH MODEL
-# ==========================================
+#Pytorch model definition
 class GestureMLP(nn.Module):
     def __init__(self):
         super(GestureMLP, self).__init__()
@@ -39,9 +37,9 @@ model.eval() # CRITICAL: Turns off Dropout for live inference
 
 print("✅ Model loaded successfully!")
 
-# ==========================================
-# 2. FEATURE EXTRACTION (Same as collection)
-# ==========================================
+
+# 2. Feature Extraction (Same as collection)
+
 def extract_features(landmarks_3d, handedness):
     wrist = landmarks_3d[0]
     translated_pts = landmarks_3d - wrist

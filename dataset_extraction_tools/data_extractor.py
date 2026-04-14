@@ -290,7 +290,7 @@ while samples_collected < TOTAL_TARGET:
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
         break
-    elif key == ord('r') and samples_collected > 0:
+    elif key == ord('r') and len(collected_rows) > 0:
         collected_rows.pop()
         samples_collected -= 1
         print(f"Rejected last sample. Now at {samples_collected}/{TOTAL_TARGET}")
