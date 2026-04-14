@@ -4,18 +4,18 @@ gesture_engine.py
 Handles MediaPipe hand tracking, feature canonicalization, and gesture inference.
 Runs in a background daemon thread; delivers results via a callback.
 
-Expected model: models/gesture_model.pt  (full model saved with torch.save(model, ...))
+Expected model: models/gesture_mlp.pth  (state_dict saved with torch.save(model.state_dict(), ...))
 
-GestureMLP architecture (for reference):
+GestureMLP architecture:
     Linear(69 -> 128) -> ReLU -> Dropout(0.2)
     -> Linear(128 -> 64) -> ReLU
     -> Linear(64 -> 4)
 
-Output classes (must match Josué's label encoding order):
-    0: Index_Finger
-    1: Fist
-    2: Thumb_Up
-    3: Ruler_Gesture
+Output classes (Josué's label encoding order):
+    0: Fist
+    1: Index_Finger
+    2: Ruler_Gesture
+    3: Thumb_Up
 """
 
 import time
@@ -33,6 +33,7 @@ from mediapipe.tasks.python import vision
 # Torch is optional until the real model arrives — stub kicks in if missing
 try:
   import torch
+  import torch.nn as nn
 
   TORCH_AVAILABLE = True
 except ImportError:
@@ -46,9 +47,10 @@ LANDMARK_MODEL_PATH = Path('models/hand_landmarker.task')
 LANDMARK_MODEL_URL = (
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
 )
-GESTURE_MODEL_PATH = Path('models/gesture_model.pt')
+GESTURE_MODEL_PATH = Path('models/gesture_mlp.pth')
 
-GESTURE_LABELS = ['Index_Finger', 'Fist', 'Thumb_Up', 'Ruler_Gesture']
+# Order must match Josué's LabelEncoder output — verified from prediction_test.py
+GESTURE_LABELS = ['Fist', 'Index_Finger', 'Ruler_Gesture', 'Thumb_Up']
 
 # MediaPipe hand connections (for Dark Mode landmark drawing)
 HAND_CONNECTIONS: list[tuple[int, int]] = [
@@ -141,11 +143,9 @@ def canonicalize(landmarks_3d: np.ndarray, raw_mp_handedness: str) -> np.ndarray
   if np.any(np.abs(canonical) > 4.0):
     return None
 
-  # handedness_binary: 1.0 = Left (actual), 0.0 = Right (actual)
-  actual_left = raw_mp_handedness != 'Left'  # flipped because MediaPipe mirrors
-  handedness_binary = 1.0 if actual_left else 0.0
-
-  features = np.concatenate([canonical.flatten(), global_y, global_z, [handedness_binary]])
+  # Note: handedness_binary is NOT included — Josué's model was trained on
+  # 63 (canonical coords) + 3 (global_y) + 3 (global_z) = 69 features only.
+  features = np.concatenate([canonical.flatten(), global_y, global_z])
   return features.astype(np.float32)  # shape (69,)
 
 
@@ -154,16 +154,46 @@ def canonicalize(landmarks_3d: np.ndarray, raw_mp_handedness: str) -> np.ndarray
 # ---------------------------------------------------------------------------
 
 
-class _TorchModel:
-  """Wraps a full torch.save(model, ...) file."""
+class _GestureMLP(nn.Module):
+  """
+  MLP architecture — must match exactly what Josué used for training.
+  Defined here so we can instantiate it before loading state_dict.
+  """
 
   def __init__(self) -> None:
-    self._model = torch.load(GESTURE_MODEL_PATH, map_location='cpu')  # noqa: S614
+    super().__init__()
+    self.fc1     = nn.Linear(69, 128)
+    self.relu1   = nn.ReLU()
+    self.dropout = nn.Dropout(0.2)
+    self.fc2     = nn.Linear(128, 64)
+    self.relu2   = nn.ReLU()
+    self.output  = nn.Linear(64, 4)
+
+  def forward(self, x: 'torch.Tensor') -> 'torch.Tensor':
+    x = self.fc1(x)
+    x = self.relu1(x)
+    x = self.dropout(x)
+    x = self.fc2(x)
+    x = self.relu2(x)
+    return self.output(x)
+
+
+class _TorchModel:
+  """Loads gesture_mlp.pth (state_dict) and wraps inference."""
+
+  def __init__(self) -> None:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    self._device = device
+    self._model = _GestureMLP()
+    self._model.load_state_dict(
+      torch.load(GESTURE_MODEL_PATH, map_location=device)  # noqa: S614
+    )
+    self._model.to(device)
     self._model.eval()
-    print(f'[GestureEngine] Loaded PyTorch model from {GESTURE_MODEL_PATH}')
+    print(f'[GestureEngine] Loaded model from {GESTURE_MODEL_PATH} on {device}')
 
   def predict(self, features: np.ndarray) -> str:
-    tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+    tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self._device)
     with torch.no_grad():
       logits = self._model(tensor)
       idx = torch.argmax(logits, dim=1).item()
