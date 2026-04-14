@@ -16,7 +16,7 @@ class GestureMLP(nn.Module):
         self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(128, 64)
         self.relu2 = nn.ReLU()
-        self.output = nn.Linear(64, 4)
+        self.output = nn.Linear(64, 5)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -28,7 +28,7 @@ class GestureMLP(nn.Module):
         return x
 
 # Labels mapping (Reversed from training)
-LABELS = {0: 'Fist', 1: 'Index_Finger', 2: 'Ruler_Gesture', 3: 'Thumb_Up'}
+LABELS = {0: 'Fist', 1: 'Index_Finger', 2: 'Ruler_Gesture', 3: 'Thumb_Up', 4: 'Idle'}
 
 # Load the trained model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
