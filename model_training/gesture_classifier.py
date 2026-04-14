@@ -46,7 +46,7 @@ class GestureDataset(Dataset):
         self.label_map = {
             'Fist':0,
             'Index_Finger':1,
-            'Ruler_Gesture':2,
+            'Ruler':2,
             'Thumb_Up':3
         }
 
@@ -99,7 +99,7 @@ optimizer = optim.Adam(model.parameters(),lr=0.001)
 
 model.to(device)
 
-EPOCHS = 20
+EPOCHS = 19
 
 print(f"Starting training on {device} for {EPOCHS} epochs...\n")
 
