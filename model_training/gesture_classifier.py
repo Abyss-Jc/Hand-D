@@ -47,8 +47,7 @@ class GestureDataset(Dataset):
             'Fist':0,
             'Index_Finger':1,
             'Ruler':2,
-            'Thumb_Up':3,
-            'Idle':4
+            'Thumb_Up':3
         }
 
         feature_cols = [f"feat_{i}" for i in range(69)]
@@ -73,7 +72,7 @@ class GestureDataset(Dataset):
 
 
 
-model = GestureMLP(69, 5)
+model = GestureMLP(69, 4)
 print(model)
 
 dataset = GestureDataset('datasets/gesture_dataset.csv')
@@ -100,7 +99,7 @@ optimizer = optim.Adam(model.parameters(),lr=0.001)
 
 model.to(device)
 
-EPOCHS = 30
+EPOCHS = 19
 
 print(f"Starting training on {device} for {EPOCHS} epochs...\n")
 
