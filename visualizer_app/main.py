@@ -102,7 +102,7 @@ class App:
   def _build_window(self) -> None:
     self._root.title(APP_TITLE)
     self._root.configure(bg='#1e1e2e')
-    self._root.state('zoomed')  # maximized; works on Windows + most Linux WMs
+    self._root.state('normal')  # maximized; works on Windows + most Linux WMs
     self._root.protocol('WM_DELETE_WINDOW', self._on_close)
 
   def _build_layout(self) -> None:
