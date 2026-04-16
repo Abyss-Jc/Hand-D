@@ -5,7 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-#Pytorch model definition
+# ==========================================
+# 1. DEFINE THE PYTORCH MODEL
+# ==========================================
 class GestureMLP(nn.Module):
     def __init__(self):
         super(GestureMLP, self).__init__()
@@ -14,7 +16,7 @@ class GestureMLP(nn.Module):
         self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(128, 64)
         self.relu2 = nn.ReLU()
-        self.output = nn.Linear(64, 5)
+        self.output = nn.Linear(64, 4)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -26,7 +28,7 @@ class GestureMLP(nn.Module):
         return x
 
 # Labels mapping (Reversed from training)
-LABELS = {0: 'Fist', 1: 'Index_Finger', 2: 'Ruler_Gesture', 3: 'Thumb_Up', 4: 'Idle'}
+LABELS = {0: 'Fist', 1: 'Index_Finger', 2: 'Ruler_Gesture', 3: 'Thumb_Up'}
 
 # Load the trained model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,9 +39,9 @@ model.eval() # CRITICAL: Turns off Dropout for live inference
 
 print("✅ Model loaded successfully!")
 
-
-# 2. Feature Extraction (Same as collection)
-
+# ==========================================
+# 2. FEATURE EXTRACTION (Same as collection)
+# ==========================================
 def extract_features(landmarks_3d, handedness):
     wrist = landmarks_3d[0]
     translated_pts = landmarks_3d - wrist
