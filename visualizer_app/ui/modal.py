@@ -41,6 +41,7 @@ _SHORTCUTS = [
   ('M', 'Toggle Camera / Dark Mode'),
   ('C', 'Clear canvas'),
   ('S', 'Save as SVG'),
+  ('W', 'Spawns this window'),
   ('1', 'Color → Red'),
   ('2', 'Color → Black'),
   ('3', 'Color → Blue'),
