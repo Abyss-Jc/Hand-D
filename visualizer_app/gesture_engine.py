@@ -182,14 +182,18 @@ class _TorchModel:
   """Loads gesture_mlp.pth (state_dict) and wraps inference."""
 
   def __init__(self, model_path: Path) -> None:
-    self._device = torch.device('cpu')
+    # Dynamic detection: Use GPU (Cuda) if available, otherwise fall back to CPU.
+    self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     self._model = _GestureMLP()
-    self._model.load_state_dict(
-      torch.load(model_path, map_location=self._device, weights_only=True)
-    )
+    # map_location is key: load weights correctly regardless of where they were trained (GPU) 
+    # and where they run (CPU/GPU).
+    state_dict = torch.load(model_path, map_location=self._device, weights_only=True)
+    self._model.load_state_dict(state_dict)
+    
     self._model.to(self._device)
     self._model.eval()
-    print(f'[GestureEngine] Loaded model from {model_path} on {self._device}')
+    print(f'[GestureEngine] Running inference on: {self._device}')
 
   def predict(self, features: np.ndarray) -> str:
     tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self._device)
@@ -371,6 +375,13 @@ class GestureEngine(Thread):
 
   def stop(self) -> None:
     self.running = False
+
+  def pause(self) -> None:
+    self.running = False
+
+  def resume(self) -> None:
+    if not self.running:
+      self.running = True
 
   # ------------------------------------------------------------------
   # Result parsing

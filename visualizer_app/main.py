@@ -138,6 +138,8 @@ class App:
   # ------------------------------------------------------------------
 
   def _bind_shortcuts(self) -> None:
+    self._root.bind('<KeyPress-w>', lambda _e: self._show_welcome_manual())
+    self._root.bind('<KeyPress-W>', lambda _e: self._show_welcome_manual())
     self._root.bind('<KeyPress-m>', lambda _e: self._on_mode_toggle())
     self._root.bind('<KeyPress-M>', lambda _e: self._on_mode_toggle())
     self._root.bind('<KeyPress-c>', lambda _e: self._on_clear())
@@ -323,6 +325,31 @@ class App:
   def _on_mode_toggle(self) -> None:
     self._camera_mode = not self._camera_mode
     self._toolbar.set_camera_mode(self._camera_mode)
+    
+    # Intelligent Color Switching
+    current_color = self._canvas.color
+    
+    if not self._camera_mode:  # Entering Dark Mode (Black Background)
+      if current_color.lower() == 'black':
+        self._canvas.set_color('white')
+        self._toolbar._highlight_swatch('white')  # noqa: SLF001
+    else:  # Returning to Camera Mode (Light/Real Background)
+      if current_color.lower() == 'white':
+        self._canvas.set_color('black')
+        self._toolbar._highlight_swatch('black')  # noqa: SLF001
+
+  def _show_welcome_manual(self) -> None:
+    """Allows opening the modal even if 'Don't show again' was checked."""
+    # Temporarily pause the engine to avoid thread conflicts
+    if self._engine is not None:
+      self._engine.pause()
+    WelcomeModal(
+      self._root,
+      on_confirm=self._on_modal_confirm,
+      initial_hand=self._cfg.drawing_hand,
+    )
+    if self._engine is not None:
+      self._engine.resume()
 
   # ------------------------------------------------------------------
   # Shutdown
