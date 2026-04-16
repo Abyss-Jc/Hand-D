@@ -50,7 +50,7 @@ LANDMARK_MODEL_URL = (
 GESTURE_MODEL_PATH = Path('models/gesture_mlp.pth')
 
 # Order must match Josué's LabelEncoder output — verified from prediction_test.py
-GESTURE_LABELS = ['Fist', 'Index_Finger', 'Ruler_Gesture', 'Thumb_Up']
+GESTURE_LABELS = ['Fist', 'Index_Finger', 'Ruler', 'Thumb_Up', 'Idle']
 
 # MediaPipe hand connections (for Dark Mode landmark drawing)
 HAND_CONNECTIONS: list[tuple[int, int]] = [
@@ -167,7 +167,7 @@ class _GestureMLP(nn.Module):
     self.dropout = nn.Dropout(0.2)
     self.fc2     = nn.Linear(128, 64)
     self.relu2   = nn.ReLU()
-    self.output  = nn.Linear(64, 4)
+    self.output  = nn.Linear(64, 5)
 
   def forward(self, x: 'torch.Tensor') -> 'torch.Tensor':
     x = self.fc1(x)
@@ -181,16 +181,15 @@ class _GestureMLP(nn.Module):
 class _TorchModel:
   """Loads gesture_mlp.pth (state_dict) and wraps inference."""
 
-  def __init__(self) -> None:
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    self._device = device
+  def __init__(self, model_path: Path) -> None:
+    self._device = torch.device('cpu')
     self._model = _GestureMLP()
     self._model.load_state_dict(
-      torch.load(GESTURE_MODEL_PATH, map_location=device)  # noqa: S614
+      torch.load(model_path, map_location=self._device, weights_only=True)
     )
-    self._model.to(device)
+    self._model.to(self._device)
     self._model.eval()
-    print(f'[GestureEngine] Loaded model from {GESTURE_MODEL_PATH} on {device}')
+    print(f'[GestureEngine] Loaded model from {model_path} on {self._device}')
 
   def predict(self, features: np.ndarray) -> str:
     tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self._device)
@@ -226,13 +225,13 @@ class _StubModel:
       return 'Fist'
     if abs(thumb_tip_x) > 0.4:
       return 'Thumb_Up'
-    return 'Ruler_Gesture'
+    return 'Ruler'
 
 
 def _load_gesture_model() -> _TorchModel | _StubModel:
   if TORCH_AVAILABLE and GESTURE_MODEL_PATH.exists():
     try:
-      return _TorchModel()
+      return _TorchModel(GESTURE_MODEL_PATH)
     except Exception as e:  # noqa: BLE001
       print(f'[GestureEngine] Failed to load model: {e}. Using stub.')
   else:
@@ -396,10 +395,6 @@ class GestureEngine(Thread):
       gr.landmarks_2d.append(lms_2d)
       gr.handedness_list.append(actual_handedness)
 
-      # Fingertip screen coords (normalised → pixel)
-      tip_x = lms_2d[INDEX_TIP].x * w
-      tip_y = lms_2d[INDEX_TIP].y * h
-
       # 3D world landmarks — for gesture classification
       lms_world = detection_result.hand_world_landmarks[i]
       landmarks_3d = np.array([[lm.x, lm.y, lm.z] for lm in lms_world])
@@ -409,6 +404,15 @@ class GestureEngine(Thread):
         continue
 
       gesture = self._gesture_clf.predict(features)
+
+      # [Ergonomic KISS] Dynamic landmark selection for tracking
+      if gesture == 'Fist':
+        tracking_landmark = lms_2d[9]  # Middle Finger MCP - true "center" of fist
+      else:
+        tracking_landmark = lms_2d[8]  # Index Finger Tip - ideal for pointer/pencil
+
+      tip_x = tracking_landmark.x * w
+      tip_y = tracking_landmark.y * h
 
       if actual_handedness == self.drawing_hand:
         gr.drawing_gesture = gesture

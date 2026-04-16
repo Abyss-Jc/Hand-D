@@ -192,11 +192,17 @@ class Canvas:
     # ------------------------------------------------------------------
     # State machine transitions
     # ------------------------------------------------------------------
+    
+    # Handle Idle state explicitly
+    if drawing == 'Idle' or drawing is None:
+      self._enter_idle()
+      return
+
     match (drawing, modifier):
       case ('Fist', _):
         self._enter_erasing(tip)
 
-      case ('Index_Finger', 'Ruler_Gesture'):
+      case ('Index_Finger', 'Ruler'):
         self._enter_or_continue_ruler(tip)
 
       case ('Index_Finger', _):
