@@ -50,10 +50,7 @@ LANDMARK_MODEL_URL = (
 GESTURE_MODEL_PATH = Path('models/gesture_mlp.pth')
 
 # Order must match Josué's LabelEncoder output — verified from prediction_test.py
-GESTURE_LABELS = ['Fist', 'Index_Finger', 'Ruler', 'Thumb_Up']
-
-# Confidence threshold for Idle detection
-IDLE_THRESHOLD = 0.70
+GESTURE_LABELS = ['Fist', 'Index_Finger', 'Ruler', 'Thumb_Up', 'Idle']
 
 # MediaPipe hand connections (for Dark Mode landmark drawing)
 HAND_CONNECTIONS: list[tuple[int, int]] = [
@@ -170,7 +167,7 @@ class _GestureMLP(nn.Module):
     self.dropout = nn.Dropout(0.2)
     self.fc2     = nn.Linear(128, 64)
     self.relu2   = nn.ReLU()
-    self.output  = nn.Linear(64, 4)
+    self.output  = nn.Linear(64, 5)
 
   def forward(self, x: 'torch.Tensor') -> 'torch.Tensor':
     x = self.fc1(x)
@@ -198,16 +195,8 @@ class _TorchModel:
     tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(self._device)
     with torch.no_grad():
       logits = self._model(tensor)
-      
-      # Convert logits to probabilities using Softmax
-      probabilities = torch.nn.functional.softmax(logits, dim=1)[0]
-      max_prob, idx = torch.max(probabilities, dim=0)
-      
-      # IDLE LOGIC: If model is less than 70% confident, hand is relaxed
-      if max_prob.item() < IDLE_THRESHOLD:
-        return 'Idle'
-      
-      return GESTURE_LABELS[idx.item()]
+      idx = torch.argmax(logits, dim=1).item()
+      return GESTURE_LABELS[idx]
 
 
 class _StubModel:

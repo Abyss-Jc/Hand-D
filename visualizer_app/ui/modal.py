@@ -112,7 +112,7 @@ class WelcomeModal(tk.Toplevel):
 
     # Center on screen
     self.update_idletasks()
-    w, h = 540, 620
+    w, h = 540, 800
     sw = self.winfo_screenwidth()
     sh = self.winfo_screenheight()
     x = (sw - w) // 2
