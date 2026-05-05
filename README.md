@@ -50,7 +50,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install torch torchvision --index-url [https://download.pytorch.org/whl/cpu](https://download.pytorch.org/whl/cpu)
 
 # For GPU (NVIDIA):
-# pip install torch torchvision --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
+pip install torch torchvision --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
 
 # Install the rest of the dependencies
 pip install -r requirements.txt
