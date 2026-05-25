@@ -2,8 +2,6 @@
 
 A gesture-controlled virtual whiteboard application using hand tracking.
 
-[Placeholder: App screenshot - Camera mode]
-[Placeholder: App screenshot - Dark mode]
 
 ## Description
 
@@ -23,8 +21,6 @@ We recently upgraded the core engine to use a custom PyTorch model that natively
 - Left/right-handed support.
 
 ## Gestures
-
-[Placeholder: Gesture reference images]
 
 | Gesture | Hand | Action |
 |---------|------|--------|
