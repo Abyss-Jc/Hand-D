@@ -34,7 +34,7 @@ We recently upgraded the core engine to use a custom PyTorch model that natively
 
 ```bash
 # Clone the repository
-git clone [https://github.com/Abyss-Jc/Hand-D.git](https://github.com/Abyss-Jc/Hand-D.git)
+git clone https://github.com/Abyss-Jc/Hand-D.git
 cd Hand-D
 
 # Create virtual environment (Python 3.8+)
