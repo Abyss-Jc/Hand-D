@@ -1,5 +1,13 @@
 # Hand-D v2 modernization
 
+## Canonical documentation
+
+- Product requirements: `docs/requirements/hand-d-v2.md`
+- Architecture reference: `docs/reference/architecture.md`
+- Delivery sequencing: `docs/changes/hand-d-v2-roadmap.md`
+- Durable decisions: `docs/adr/`
+- Developer operations: `docs/runbook/development.md`
+
 ## Objective
 
 Evolve the semester project into two maintained surfaces: the **Hand-D App** for real-time gesture drawing and **Hand-D Studio** for the ML/data lifecycle. Preserve CPU as the universal fallback while validating optional hardware acceleration per supported platform.
