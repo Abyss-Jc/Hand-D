@@ -30,6 +30,12 @@ A Sample whose human review state determines whether it may be used for training
 **Review Status**:
 The human curation state of a Sample: unreviewed, accepted, or rejected. New samples begin unreviewed; Studio may batch-accept reviewed groups so curation does not require approving every observation individually.
 
+**Review Event**:
+An immutable audit record of a human curation transition for a Sample, such as unreviewed → accepted or accepted → rejected, including when the decision occurred and optional review context/reason.
+
+**Feature Transform**:
+A versioned transformation contract that converts a canonical raw Sample into the model-ready feature representation expected by a compatible model. Callers depend on the transform's identity and output contract, not on its internal normalization/rotation/scaling implementation.
+
 **Collection Provenance**:
 Local metadata describing where and how a Sample was collected, including an anonymous device identifier, platform, camera, relevant software versions, participant, and capture/session identifiers. It is stored with the dataset and is not remote analytics telemetry.
 
@@ -38,6 +44,3 @@ An independent collection run for one participant, started after repositioning/r
 
 **Capture**:
 A contiguous collection segment for one target gesture and hand inside a Collection Session.
-
-**Collection Task**:
-The operator-facing target for collecting one gesture/hand quota. It may contain more than one Capture segment when collection is interrupted and later resumed.

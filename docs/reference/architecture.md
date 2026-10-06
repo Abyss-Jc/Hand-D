@@ -126,9 +126,33 @@ A Capture represents one continuous collection context inside a Collection Sessi
 
 An incomplete Capture that has never been referenced by an immutable snapshot may be explicitly discarded and physically deleted with its Samples. Once data is referenced by a snapshot, destructive cleanup must not invalidate the snapshot's ability to reproduce the historical training/evaluation view.
 
+### Feature Transform seam
+
+Feature canonicalization is a shared deep module. Its interface exposes the transform identity/version and the model-ready output contract; mirror correction, translation, scale normalization, canonical-frame rotation, global orientation features, and validation remain implementation details behind the seam.
+
+The current legacy-compatible transform produces the existing 69-value feature contract. New raw Samples can be reprocessed through this transform or through future transforms because their image/world landmarks are preserved. Legacy CSV rows do not have raw landmarks, so they can only participate where their stored 69-feature representation is contract-compatible.
+
+Snapshots reference the Feature Transform contract used to materialize model input; they do not duplicate or expose the transform's internal geometry algorithm.
+
 ### Model Assessment
 
 Prediction confidence and class scores belong to the pair **sample + model version**, not permanently to the sample itself. Model disagreement or low confidence can prioritize review, but does not imply invalid data.
+
+Each assessment references the exact Model Artifact that produced it. Studio may designate one model version as the current review model for a curation pass, but historical assessments from prior models remain immutable and queryable.
+
+The first uncertainty ranking uses the margin between the top two class scores. A low margin indicates that the model's decision is ambiguous relative to its nearest competing class; the threshold is calibrated from development-validation behavior rather than treated as a universal probability claim.
+
+Suggested for Review is exposed as a ranked queue: explicit model disagreement ranks ahead of otherwise-correct but low-margin predictions. The stored Model Assessment keeps the underlying scores/margin; any UI review budget or cutoff is a view over that evidence rather than a mutation of the Sample.
+
+### Curation state
+
+Human curation is represented by an append-only Review Event history plus an efficiently queryable current Review Status. Automatic signals may prioritize a Sample in Suggested for Review but do not mutate its human review state.
+
+Rejection annotation is optional. Studio exposes a small default tag vocabulary for common causes and permits custom tags when new failure modes appear. Tags are review context rather than Sample truth, and an optional free-form note may accompany them.
+
+Rejected Samples remain part of the canonical historical dataset and are filtered out when eligible snapshot membership is materialized. Physical deletion is reserved for the previously defined explicit discard path for incomplete, snapshot-unreferenced Captures.
+
+Review changes never rewrite an existing immutable snapshot. They affect eligibility only when a later snapshot is created.
 
 ### Platform backend policy
 

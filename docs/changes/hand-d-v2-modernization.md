@@ -55,10 +55,22 @@ Implementation beyond planning/documentation is deferred until the current grill
 
 - The final evaluation should answer whether Hand-D generalizes to a participant who was not used for training.
 - The existing legacy dataset remains usable for training because recollecting an equivalent dataset before the milestone is not realistic.
+- Legacy rows only preserve the existing derived 69-feature representation, not the raw landmarks/provenance needed to regenerate a different transform. Therefore a v2 model can combine legacy and new samples only while their feature contract remains compatible; an incompatible future transform must treat legacy data as unavailable for that model.
+- The first v2 baseline deliberately preserves the existing 69-feature contract so legacy rows and newly collected raw Samples can participate in one compatible training path. New raw Samples remain cross-version reusable because future Feature Transforms can regenerate alternate feature representations from their stored landmarks; legacy rows remain limited to the compatible v1 path.
+- The intended gesture of a collected Sample is immutable for the milestone. Wrong-gesture or incorrectly collected observations are rejected/discarded and recollected rather than relabeled into another class.
+- Canonical SampleCore data is immutable after persistence for the milestone: raw landmarks and collection provenance remain historical facts, while ReviewState and versioned ModelAssessment records can evolve.
+- Canonicalization becomes one shared versioned Feature Transform seam used by runtime inference and training/evaluation materialization. The seam hides mirror correction, translation, scaling, canonical rotation, global orientation features, and validation from callers.
 - The legacy dataset must not be treated as authoritative validation or final-test data because its participant/session provenance is unknown.
 - Participant-held-out evaluation must account for possible identity leakage from the legacy dataset. If a participant may already exist inside legacy data, a model trained on that legacy dataset cannot honestly claim that participant was unseen.
 - The current realistic collection pool is two participants, with a third participant as a desired milestone improvement.
 - If a genuinely new third participant can be collected, that participant is the preferred final held-out test participant.
+- Train/validation assignment is session-aware: a Collection Session belongs wholly to one split. P003, when available and genuinely unseen, is held out entirely from model development for the preferred final test.
+- Legacy usefulness is tested through two otherwise comparable training candidates: new-v2-only and new-v2-plus-legacy. Both are compared against the same fixed, reproducible v2 session-validation folds; P003 is not repeatedly consulted during that choice.
+- Macro F1 is the primary promotion metric, accompanied by accuracy, per-class precision/recall/F1, and confusion-matrix review. A material failure on a product-critical class can prevent promotion even when overall accuracy is higher.
+- Development validation uses leave-one-Collection-Session-out cross-validation across P001/P002. Each fold holds out one whole Session and trains on the remaining development Sessions, then metrics are aggregated across folds. This avoids privileging one arbitrary Session and prevents temporally adjacent Samples from leaking across train/validation.
+- The legacy experiment is paired fold-by-fold: each with-legacy candidate and its without-legacy counterpart use the same v2 Session membership, transform, evaluation path, and seed policy; compatible legacy rows are added only to training. P003 remains sealed throughout this comparison.
+- Learning curves use increasing fractions of each fold's training data (initially 25%, 50%, 75%, 100%) and the same session-grouped validation protocol. If Macro F1 is still materially rising at full data, collect more Samples rather than assuming the initial ~100 accepted Samples per gesture/session are sufficient.
+- P003 remains sealed during model development. Feature-transform choice, legacy augmentation, model architecture/hyperparameters, thresholds, and promotion criteria are frozen using only the P001/P002 development protocol; the final selected candidate is then evaluated against P003 once for the milestone report.
 - If only two participants are available, the project should report session-level validation and an explicitly limited participant-level experiment rather than overstating generalization.
 - New data collection should use at least two independent collection sessions for the primary participants. A session means a separate capture run with the camera/collector restarted and the participant repositioned; it does not require a different day.
 - Within each capture, the participant keeps the intended gesture while introducing moderate natural variation in hand position, distance, and orientation. The milestone does not require exaggerated/extreme motion conditions.
@@ -67,6 +79,15 @@ Implementation beyond planning/documentation is deferred until the current grill
 - The initial capture quota is 120 observations per gesture/capture, with an approximate post-curation target of 100. This is a configurable pilot default, not a claim that 100 samples are always sufficient; learning-curve/validation evidence will determine whether more collection materially improves the model.
 - Stored observations are sampled on a configurable time interval rather than a fixed frame stride, so collection density does not depend directly on whether a camera happens to run at 30 FPS or 60 FPS.
 - New samples begin unreviewed. The Curator prioritizes Suggested for Review observations and supports a deliberate batch-accept action for the remaining group so curation does not require inspecting every sample individually.
+- Suggested for Review combines explainable model signals (disagreement/uncertainty) with non-fatal geometry/tracking signals. These signals only prioritize human review and never mutate the Sample automatically.
+- Before batch-accepting the apparently clean remainder, Studio presents a small random quality-control subset so systematic capture issues can still be noticed without returning to one-by-one review.
+- Review decisions are auditable through immutable Review Events. Rejected Samples are excluded from training/snapshot eligibility but remain canonically stored and traceable; rejection is not deletion.
+- Review changes are prospective for snapshot generation: an existing immutable snapshot is never rewritten when a Sample's later Review Status changes.
+- Model-assisted review is versioned: every Model Assessment references the exact model artifact/version that produced its prediction and scores. Studio may choose a current review model for a curation pass, but older assessments are preserved rather than overwritten.
+- Initial uncertainty ranking uses top-two class-score margin, with thresholds derived from development-validation evidence. This is used to prioritize ambiguous Samples, not to claim calibrated real-world probability.
+- The milestone starts Suggested for Review with model disagreement and uncertainty only. Geometry/tracking anomaly heuristics remain an extension point and are added only when observed data justifies a specific rule.
+- Suggested for Review is a ranked queue: disagreement first, then lower top-two score margin. Validation can inform how much of that ranking to review, but the system stores the underlying assessment scores rather than hard-coding one universal cutoff.
+- Reject remains a one-step curation action. A small default rejection-tag vocabulary supports consistent analysis, while reviewers may add custom tags for previously unseen causes; tags and notes remain optional extra context, not a requirement to change Review Status.
 - SQLite is the canonical mutable v2 dataset store for collection, provenance, review state, and Studio queries. Training/evaluation is isolated from mutable database state through immutable dataset snapshots that freeze sample membership, splits, feature-transform version, label mapping/order, and reproducibility settings. NumPy/NPZ training arrays are derived from snapshots rather than treated as canonical data.
 - Canonical Samples retain both MediaPipe image-normalized landmarks and world landmarks. The legacy collector only persisted derived canonical features from world landmarks; v2 preserves the pre-feature geometry so transforms can be changed without recollecting.
 - Raw landmarks are stored relationally in SQLite as 21 rows per Sample, each containing the image-normalized and world x/y/z coordinates for one landmark index. At the milestone scale this is small enough to remain simple, inspectable, and queryable.
@@ -79,9 +100,8 @@ Implementation beyond planning/documentation is deferred until the current grill
 
 ## Open decisions
 
-- Train/validation/test split strategy using participant/session provenance.
-- Exact machine-generated review signals and thresholds used to prioritize samples in Studio.
-- Desktop prototype comparison and acceptance measurements.
+- Snapshot integrity/versioning when later curation changes labels or review state in the canonical SQLite database.
+- Frontend delivery model first; transport/IPC is a dependent decision. A browser-hosted web UI may use HTTP/WebSocket/SSE to a local Python process and need no desktop shell, while a packaged Tauri/Electron direction introduces shell lifecycle/packaging concerns and may use shell IPC or another local transport.
 - Real-time performance budgets for gesture latency, capture FPS, CPU/GPU use, and startup.
 - Exact release/platform matrix for the October milestone.
 - Migration/version policy for MediaPipe, PyTorch, Python, and packaging.
