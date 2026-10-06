@@ -18,11 +18,26 @@ The hand whose gesture directly controls drawing and erasing actions.
 **Modifier Hand**:
 The hand used to modify the Drawing Hand's action, such as changing thickness or activating ruler behavior.
 
+**Participant**:
+A pseudonymous person who contributes collection data, identified by a project-local ID such as P001 rather than a real name.
+
 **Sample**:
 A single frame-based hand observation stored as raw MediaPipe landmarks plus provenance and its intended gesture label. It does not contain a photo or video frame.
 
 **Curated Sample**:
 A Sample whose human review state determines whether it may be used for training. Machine-generated quality signals may place samples into a Suggested for Review queue, but they do not reject or relabel samples automatically.
 
+**Review Status**:
+The human curation state of a Sample: unreviewed, accepted, or rejected. New samples begin unreviewed; Studio may batch-accept reviewed groups so curation does not require approving every observation individually.
+
 **Collection Provenance**:
 Local metadata describing where and how a Sample was collected, including an anonymous device identifier, platform, camera, relevant software versions, participant, and capture/session identifiers. It is stored with the dataset and is not remote analytics telemetry.
+
+**Collection Session**:
+An independent collection run for one participant, started after repositioning/restarting the collector so it represents a distinct capture context.
+
+**Capture**:
+A contiguous collection segment for one target gesture and hand inside a Collection Session.
+
+**Collection Task**:
+The operator-facing target for collecting one gesture/hand quota. It may contain more than one Capture segment when collection is interrupted and later resumed.

@@ -28,6 +28,22 @@ For POSIX shells other than Fish, use the activation script appropriate for that
 
 Dependency installation commands will be added here only after the v2 compatibility set has been selected and actually verified.
 
+### Canonical dataset collaboration
+
+For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:
+
+```text
+1. git pull / update the modernization branch
+2. confirm no teammate is currently editing the canonical dataset
+3. collect / curate using the current handd.sqlite
+4. close Studio so database writes are finished
+5. commit the dataset change
+6. push the branch
+7. release dataset editing ownership
+```
+
+Git is not expected to merge two independently modified SQLite files. If two contributors need concurrent collection later, add an explicit session import/export workflow rather than relying on binary merges.
+
 ## Comprobar
 
 Verified on 2026-10-05:

@@ -85,7 +85,7 @@ Training/evaluation should be invokable reproducibly from tooling/CLI for the mi
 
 ### Dataset Core
 
-The canonical observation is raw landmark data plus provenance and human labeling/review state. A versioned transform produces the feature representation used by a specific model.
+The canonical observation is raw landmark data plus provenance and human labeling/review state. The canonical working store is SQLite so Studio can query, curate, and update this state transactionally. A versioned transform produces the feature representation used by a specific model.
 
 Conceptual relationships:
 
@@ -97,12 +97,34 @@ flowchart TD
     C --> O[Sample / Observation]
     O --> R[Human Review State]
     O --> F[Versioned Feature Transform]
-    F --> T[Training Dataset]
+    F --> SNAP[Immutable Dataset Snapshot]
+    SNAP --> T[Vectorized Training Artifact]
     M[Model Version] --> A[Model Assessment]
     O --> A
 ```
 
 The operator should only need to choose participant, gesture, hand, and collection target. Session IDs, capture IDs, timestamps, anonymous device identity, platform, camera, and relevant versions are generated/recorded automatically.
+
+Canonical landmark storage is relational at the current scale:
+
+```text
+samples
+└── sample_id
+
+landmarks
+├── sample_id
+├── landmark_index        # 0..20
+├── image_x / image_y / image_z
+└── world_x / world_y / world_z
+```
+
+One Sample therefore owns exactly 21 landmark rows. This representation is intentionally inspectable and testable; vectorized arrays are produced later by the feature/snapshot pipeline.
+
+### Capture lifecycle
+
+A Capture represents one continuous collection context inside a Collection Session. It may be paused and resumed while that Session remains active. If the Session ends, an incomplete Capture remains partial and a later Session starts a new Capture.
+
+An incomplete Capture that has never been referenced by an immutable snapshot may be explicitly discarded and physically deleted with its Samples. Once data is referenced by a snapshot, destructive cleanup must not invalidate the snapshot's ability to reproduce the historical training/evaluation view.
 
 ### Model Assessment
 
@@ -130,8 +152,9 @@ Target interfaces are conceptual until implementation begins:
 - **Derived feature sample**: source sample ID, transform/version ID, model-compatible feature vector.
 - **Model assessment**: source sample ID, model version, predicted label, confidence/class scores, evaluation timestamp.
 - **Model artifact metadata**: label order, input feature contract, transform version, architecture/version, and compatibility information.
+- **Dataset snapshot**: immutable membership and split manifest tied to the canonical sample IDs, with feature-transform version, label mapping/order, seed/configuration, and integrity/version information.
 
-The exact serialization/storage format remains open.
+SQLite is the canonical mutable working store. A snapshot freezes the exact training/evaluation view of that store. Vectorized arrays such as NumPy/NPZ are derived artifacts that may be regenerated from the snapshot; they are not the canonical source of collection provenance or curation state.
 
 ## Operación y límites
 

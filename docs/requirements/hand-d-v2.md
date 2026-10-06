@@ -13,9 +13,18 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Training and evaluation must become reproducible, but a training/evaluation GUI is outside the October milestone.
 - Runtime inference prioritizes the freshest result and interaction latency rather than processing every camera frame.
 - Data collection remains frame-based and deliberate.
+- Within a capture, the participant should preserve the target gesture while moving naturally through moderate changes in position, distance, and orientation rather than holding one perfect static pose or forcing extreme motion.
+- Primary participants should contribute at least two independent collection sessions with moderate natural differences between runs.
+- The Collector uses a sample quota rather than a fixed duration. Technically invalid detections do not count toward the quota, and the capture quota includes reserve samples so later human curation can reject observations without immediately requiring recollection.
+- The initial collection default is 120 stored observations per gesture/capture, targeting roughly 100 usable observations after curation. The quota is configurable and must be revisited using validation/learning-curve evidence rather than assuming that 100 is universally sufficient.
+- Collection sampling uses a configurable time interval between stored observations instead of a fixed frame stride so collection density is not tied to camera FPS.
 - The canonical v2 sample stores raw MediaPipe landmarks, labels, and provenance; feature vectors are versioned derived data.
+- Each canonical Sample stores both MediaPipe image-normalized hand landmarks and world landmarks. The current 69-feature representation is derived from raw landmarks rather than being the only persisted observation.
+- In SQLite, each Sample owns 21 relational landmark rows keyed by landmark index, with image-normalized x/y/z and world x/y/z stored as numeric columns. This keeps raw geometry inspectable and avoids opaque binary encoding at the current dataset scale.
+- The canonical working dataset is stored in SQLite. Training does not consume mutable database state implicitly; each training/evaluation run must be tied to an immutable dataset snapshot that records the selected sample IDs, split assignments, transform/version information, labels/order, and reproducibility configuration. Materialized NumPy/NPZ arrays may be generated from that snapshot as derived training artifacts.
 - Photos and video are not stored as part of the canonical dataset.
 - Dataset curation is reversible. Automatic signals may create a Suggested for Review queue, but only a human review action decides whether a sample is accepted or rejected.
+- Newly collected samples begin unreviewed. Studio must support reviewing Suggested for Review samples first and batch-accepting the remaining group so human curation remains meaningful without requiring one click per sample.
 - CPU is a functional fallback on every supported platform. GPU acceleration is optional and capability-driven.
 - macOS Apple Silicon is a first-class validation target. NVIDIA CUDA, Apple MPS, AMD ROCm, and Intel XPU are only enabled where the selected runtime stack and hardware are actually supported.
 - The desktop shell is not selected by assumption. Tauri, Electron, or another candidate must be validated through a focused prototype before becoming a durable architecture decision.
@@ -37,6 +46,20 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-010 | Primary-hand data has been collected | Handedness invariance is evaluated | A smaller opposite-hand verification set tests whether canonicalization actually generalizes across hands |
 | V2-011 | A desktop-shell candidate is proposed | It becomes the production direction | A focused prototype has first validated sidecar lifecycle, IPC/event flow, startup/shutdown behavior, and relevant packaging constraints |
 | V2-012 | Dependencies are updated | The migration is accepted | The selected Python, MediaPipe, PyTorch, packaging, and acceleration combination is documented and verified on the available target environments |
+| V2-013 | A capture is running | The participant maintains the target gesture | Moderate natural motion/position/orientation variation is retained rather than requiring a single idealized pose |
+| V2-014 | A frame has no usable hand detection or fails technical landmark checks | The Collector considers the frame | It is skipped and does not consume the capture quota |
+| V2-015 | A capture reaches its configured collection quota | Human curation happens later | Reserve observations are available so some samples may be rejected without assuming every collected observation must enter training |
+| V2-016 | A collection run uses the initial defaults | A gesture capture completes | Studio stores up to 120 technically valid observations as a starting quota, with the value configurable rather than hard-coded as a model requirement |
+| V2-017 | Cameras run at different FPS | The same collection interval is configured | Observation sampling cadence is time-based rather than changing implicitly with camera frame rate |
+| V2-018 | A new capture has been collected | The Curator opens it | Samples begin unreviewed, Suggested for Review items can be inspected first, and the remaining group can be batch-accepted by a human action |
+| V2-019 | Training/evaluation is started from the canonical SQLite dataset | The run is created | The exact sample membership, split assignment, feature-transform version, label mapping/order, and reproducibility settings are frozen in a snapshot before model training |
+| V2-020 | A training snapshot exists | Vectorized model input is needed | Derived NumPy/NPZ arrays may be regenerated from the snapshot without changing the canonical observations or review history |
+| V2-021 | MediaPipe returns both normalized image landmarks and world landmarks for a valid observation | Studio persists the Sample | Both landmark sets are stored canonically so later tracking/feature transforms can be regenerated without the camera frame |
+| V2-022 | A canonical Sample is persisted | Its landmarks are stored | Exactly 21 landmark rows are associated with the Sample, each carrying image-normalized and world x/y/z coordinates |
+| V2-023 | A Capture is paused and resumed within the same active Collection Session | Collection continues | Studio resumes the same Capture and continues toward its configured quota |
+| V2-024 | An incomplete Capture has never been referenced by an immutable dataset snapshot | The operator chooses Discard | Studio may permanently delete that Capture and its Samples after explicit confirmation |
+| V2-025 | A Collection Session has ended | A partial Capture from that Session still exists | The partial Capture remains historically partial; a later Collection Session creates a new Capture rather than silently continuing the old one |
+| V2-026 | A Sample/Capture is referenced by an immutable snapshot | A destructive delete is requested | Studio must preserve snapshot reproducibility and must not silently hard-delete the referenced data |
 
 ## Alcance
 
@@ -68,7 +91,6 @@ Open:
 
 - Exact train/validation/test generation rules after the session schema is finalized.
 - Exact machine-generated review signals and confidence thresholds.
-- Storage format for v2 sessions/samples.
 - Runtime performance budgets.
 - Desktop-shell winner after prototype measurements.
 - Exact compatible dependency versions and packaging strategy.
