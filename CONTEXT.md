@@ -36,6 +36,15 @@ An immutable audit record of a human curation transition for a Sample, such as u
 **Feature Transform**:
 A versioned transformation contract that converts a canonical raw Sample into the model-ready feature representation expected by a compatible model. Callers depend on the transform's identity and output contract, not on its internal normalization/rotation/scaling implementation.
 
+**Development Snapshot**:
+An immutable, self-contained ML view of the accepted P001/P002 development data plus optional compatible legacy features. It contains a manifest describing exact membership, session-validation folds, transform/label contracts, and experiment configuration together with materialized NPZ arrays representing the exact model inputs used by training/evaluation.
+
+**Final Test Snapshot**:
+An immutable snapshot created for the sealed P003 unseen-participant evaluation after development choices are frozen. P003 is not included in the Development Snapshot.
+
+**Model Artifact**:
+A versioned model bundle containing trained weights plus metadata that declares the model architecture, input/Feature Transform contract, label order, source snapshot, training configuration, and evaluation evidence. Runtime validates this contract before using the weights.
+
 **Collection Provenance**:
 Local metadata describing where and how a Sample was collected, including an anonymous device identifier, platform, camera, relevant software versions, participant, and capture/session identifiers. It is stored with the dataset and is not remote analytics telemetry.
 

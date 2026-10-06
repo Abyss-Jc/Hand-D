@@ -52,7 +52,9 @@ flowchart LR
     RT --> UI[Hand-D App Frontend]
 
     STUDIO[Hand-D Studio] --> DATA[Dataset Core]
-    DATA --> TRAIN[Training / Evaluation]
+    DATA --> SB[Snapshot Builder]
+    SB --> SNAP[Development / Final Test Snapshots]
+    SNAP --> TRAIN[Training / Evaluation]
     TRAIN --> MODEL[Versioned Model Artifact]
     MODEL --> RT
 
@@ -97,8 +99,10 @@ flowchart TD
     C --> O[Sample / Observation]
     O --> R[Human Review State]
     O --> F[Versioned Feature Transform]
-    F --> SNAP[Immutable Dataset Snapshot]
-    SNAP --> T[Vectorized Training Artifact]
+    F --> SB[Snapshot Builder]
+    SB --> SNAP[Immutable Snapshot: manifest + NPZ]
+    SNAP --> T[Training / Evaluation]
+    T --> MA[Versioned Model Artifact]
     M[Model Version] --> A[Model Assessment]
     O --> A
 ```
@@ -133,6 +137,47 @@ Feature canonicalization is a shared deep module. Its interface exposes the tran
 The current legacy-compatible transform produces the existing 69-value feature contract. New raw Samples can be reprocessed through this transform or through future transforms because their image/world landmarks are preserved. Legacy CSV rows do not have raw landmarks, so they can only participate where their stored 69-feature representation is contract-compatible.
 
 Snapshots reference the Feature Transform contract used to materialize model input; they do not duplicate or expose the transform's internal geometry algorithm.
+
+### Snapshot Builder
+
+Snapshot Builder is the boundary between mutable Dataset Core state and reproducible ML execution. It reads an approved historical view from SQLite, applies the selected Feature Transform exactly once during materialization, and emits an immutable snapshot. Training/evaluation does not query SQLite directly after the snapshot exists.
+
+The milestone snapshot consists conceptually of a manifest.json plus dataset.npz.
+
+The manifest records the snapshot identity, selected Sample membership, participant/session membership, label order, Feature Transform identity/version/output contract, session-validation fold definitions, legacy availability/membership, seed/reproducibility configuration, and source revision/integrity metadata.
+
+The NPZ contains the exact materialized model inputs associated with that manifest, including feature arrays, labels, stable source identifiers, and split/fold metadata needed by training/evaluation. For v2 Samples these arrays are derived from canonical raw landmarks at snapshot creation. Compatible legacy rows remain a separate materialized partition because they have only the existing derived 69-feature contract and cannot be regenerated through future incompatible transforms.
+
+The Development Snapshot is shared across the P001/P002 development protocol. It freezes the v2 development materialization, compatible legacy materialization, and fixed Collection-Session folds. Selecting a fold, choosing legacy=false or legacy=true, and choosing a learning-curve fraction are experiment configuration over this same immutable evidence base rather than separate independently-created datasets.
+
+This guarantees that with-legacy and without-legacy comparisons change the intended variable instead of silently changing validation membership.
+
+P003 is never materialized into the Development Snapshot. Once all development/model-selection decisions are frozen, Snapshot Builder may create a separate Final Test Snapshot for P003 and that snapshot is used for the single held-out final evaluation.
+
+An existing snapshot is self-contained for ML execution. Later SQLite review changes or Feature Transform implementation changes do not alter its manifest or materialized NPZ. New canonical decisions require a new snapshot.
+
+Immutability is enforced by creation semantics rather than filesystem permissions: Snapshot Builder never overwrites an existing snapshot ID. If membership, transform, folds, or materialized content changes, it allocates a new snapshot version.
+
+### Model Artifact
+
+Training output is a versioned bundle rather than an unqualified weights file. The milestone bundle consists conceptually of weights.pth, manifest.json, and metrics.json.
+
+The model manifest declares, at minimum:
+
+- model identity and architecture/version;
+- Feature Transform identity/version and expected output contract;
+- expected input dtype/feature count;
+- label mapping/order;
+- source Development Snapshot identity;
+- training configuration and seed information;
+- legacy inclusion policy and relevant experiment configuration;
+- compatibility/runtime metadata.
+
+The metrics document carries the evaluation evidence associated with the artifact, including aggregate session-cross-validation Macro F1, accuracy, per-class precision/recall/F1, confusion-matrix data, learning-curve summary, and other promotion evidence produced by the finalized protocol.
+
+Runtime treats the model manifest as a compatibility contract. It validates the expected Feature Transform/input and label mapping before loading the model for inference. A dimensionally compatible but semantically incompatible model must not be allowed to run merely because its tensor shape happens to match.
+
+Model Artifact creation follows the same rule: an existing model version is never replaced in place. A new training output receives a new model ID/version.
 
 ### Model Assessment
 
@@ -175,10 +220,11 @@ Target interfaces are conceptual until implementation begins:
 - **Canonical sample**: raw MediaPipe landmarks, target gesture, participant ID, hand, session/capture IDs, local provenance, timestamp/frame index, human review state.
 - **Derived feature sample**: source sample ID, transform/version ID, model-compatible feature vector.
 - **Model assessment**: source sample ID, model version, predicted label, confidence/class scores, evaluation timestamp.
-- **Model artifact metadata**: label order, input feature contract, transform version, architecture/version, and compatibility information.
-- **Dataset snapshot**: immutable membership and split manifest tied to the canonical sample IDs, with feature-transform version, label mapping/order, seed/configuration, and integrity/version information.
+- **Model artifact**: versioned weights plus manifest and metrics, including label order, input feature contract, Feature Transform version, architecture/version, source snapshot, experiment configuration, and compatibility information.
+- **Development snapshot**: immutable manifest + NPZ materialization for P001/P002 development and compatible legacy data, with fixed session-validation folds, feature/label contracts, seed/configuration, and integrity/version information.
+- **Final test snapshot**: separate immutable manifest + NPZ materialization for the sealed P003 evaluation after development choices are frozen.
 
-SQLite is the canonical mutable working store. A snapshot freezes the exact training/evaluation view of that store. Vectorized arrays such as NumPy/NPZ are derived artifacts that may be regenerated from the snapshot; they are not the canonical source of collection provenance or curation state.
+SQLite is the canonical mutable working store. A snapshot freezes the exact training/evaluation view of that store. Its NPZ is the immutable materialized ML input for that snapshot, while SQLite remains the canonical source of collection provenance and evolving curation state. Regenerating a materially different NPZ/manifest creates a new snapshot rather than rewriting an existing one.
 
 ## Operación y límites
 
