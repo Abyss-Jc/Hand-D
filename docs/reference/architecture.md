@@ -66,6 +66,13 @@ flowchart LR
 
 The App is the product surface. It consumes processed runtime results and owns the drawing document/canvas state. Strokes, erasures, color/thickness, undo/redo, and current-document state are frontend/application concerns; they do not live inside the Python sidecar. The App should not own ML training, dataset curation, or direct knowledge of training storage.
 
+Hand-D is one desktop application with two product spaces:
+
+- **Whiteboard/App** — default destination for drawing and normal runtime use.
+- **Studio** — secondary advanced project/data space for workspace/model configuration, collection, curation, and project inspection.
+
+These are navigation/product boundaries, not separate executables. They share the Tauri shell, release lifecycle, runtime supervisor, workspace contract, and compatible Model Artifact system.
+
 ### Runtime Core
 
 The runtime owns camera access, MediaPipe processing, shared feature transformation, gesture inference, temporal gesture behavior, hardware backend selection, and lifecycle/error states. The App frontend consumes results from this boundary.
@@ -137,8 +144,10 @@ The existing project inspirations in README.md — BaranDev/virtual-whiteboard a
 
 ### Hand-D Studio
 
-Studio is a developer-facing surface for:
+Studio is an advanced project/data surface for:
 
+- Project Workspace selection/configuration;
+- compatible Model Artifact selection/promotion;
 - participant selection;
 - collection sessions/captures;
 - dataset inspection;
@@ -147,6 +156,19 @@ Studio is a developer-facing surface for:
 - dataset export/preparation.
 
 Training/evaluation should be invokable reproducibly from tooling/CLI for the milestone, but is not required inside the Studio GUI.
+
+Studio is intentionally secondary to the Whiteboard so normal users are not forced to understand dataset/model concepts before drawing. It is not developer-only: technical concepts are progressively disclosed, and both technical and non-technical users may use the same surface at different levels of detail.
+
+### Easy Mode
+
+Easy Mode is a presentation policy over the same product/domain model, not a separate application mode with separate storage or behavior. It may:
+
+- prefer human-readable model/workspace labels over artifact IDs;
+- hide low-level metrics/IDs/configuration until requested;
+- present recommended/default actions prominently;
+- collapse advanced runtime/data controls behind explicit disclosure.
+
+Easy Mode must not silently mutate data, bypass Model Artifact compatibility checks, create a different workspace format, or make destructive curation actions less explicit.
 
 ### Dataset Core
 

@@ -49,6 +49,9 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - Drawing/canvas document state is frontend-owned. Python provides transient gesture/tracking/runtime signals, so a sidecar restart does not erase strokes, undo/redo history, color/thickness, or the active document.
 - Every restarted sidecar creates a fresh Runtime Session with a new ID/endpoint/token. The frontend performs state resynchronization after READY, subscribes to the new session, and drops delayed events from old sessions rather than replaying stale gestures.
 - Application releases use Semantic Versioning + Git tags + CI-produced GitHub Releases. App versioning remains separate from workspace/database/snapshot/model versions, and the milestone does not add silent automatic updates.
+- Hand-D App and Studio are two spaces inside one desktop application, not separate executables. Whiteboard is the default startup/product surface; Studio is secondary navigation for workspace/model configuration, collection, curation, and project inspection.
+- Studio is not developer-only. Hand-D supports progressive disclosure so technical and non-technical users can use the same product surface without exposing all ML/data complexity by default.
+- Easy Mode is a UI/presentation layer over the same workspace/data/runtime contracts. It reduces technical density and emphasizes safe/recommended controls without introducing separate storage, model, or runtime behavior.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:

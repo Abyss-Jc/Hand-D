@@ -85,6 +85,11 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Runtime event envelopes include enough ordering/identity information to reject stale delivery, at minimum runtime_session_id, monotonic sequence information, timestamp, event type, and payload. Old gesture events are never replayed after restart because real-time interaction values freshness over historical delivery.
 - Hand-D application releases follow Semantic Versioning and Git tags. A release tag such as v2.1.0 triggers native CI builds and GitHub Release artifacts for the supported desktop targets. Application release versioning is independent from Project Workspace, Dataset Snapshot, Feature Transform, and Model Artifact versioning.
 - The milestone CD model publishes versioned release artifacts after CI passes; it does not silently auto-update installed clients. An automatic updater may be added later without changing the workspace/data separation.
+- Hand-D App and Hand-D Studio ship as two spaces inside one desktop application rather than separate installed executables. The application has one Tauri shell, one runtime lifecycle, one update/version surface, and shared workspace/model contracts.
+- Normal startup lands directly in the Whiteboard/App experience. Runtime initialization happens in the background; opening or configuring a Project Workspace is not a prerequisite for basic drawing with the packaged/default compatible model.
+- Studio is secondary navigation rather than the dominant product surface. It contains workspace/model selection, collection, curation, dataset/project inspection, and advanced configuration without forcing those concepts into the normal Whiteboard UI.
+- Studio is not treated as developer-only. Both technical and non-technical users may access it; progressive disclosure controls how much implementation/model detail is shown.
+- Hand-D provides an Easy Mode presentation that reduces technical density and exposes high-level/safe controls while preserving the same underlying workspace, SQLite data, Model Artifacts, and runtime behavior. Switching Easy Mode does not create a different data format or feature implementation.
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
@@ -179,6 +184,9 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-084 | A restarted sidecar reaches READY | The frontend reconnects | A new Runtime Session ID/token/endpoint is used, the frontend fetches/resynchronizes current runtime state, then subscribes to new-session events |
 | V2-085 | A delayed event from the old sidecar arrives after reconnection | The frontend validates the event envelope | The event is ignored because its Runtime Session identity no longer matches the active session; old gesture events are not replayed |
 | V2-086 | A versioned application release is prepared | A SemVer Git tag is published after CI passes | Native release artifacts are attached to a GitHub Release while Project Workspace/data/model versioning remains independent |
+| V2-087 | A normal user launches Hand-D | The desktop shell opens | Whiteboard is the primary/default destination and runtime prepares in the background without requiring workspace/model/database setup first |
+| V2-088 | A user opens Studio | Advanced project controls are needed | Workspace/model configuration, collection, curation, and project inspection are available inside the same installed application rather than a second executable |
+| V2-089 | Easy Mode is enabled | The user navigates Whiteboard or Studio | Technical density and advanced controls are reduced through progressive disclosure without changing the underlying Project Workspace, dataset, Model Artifact compatibility, or runtime semantics |
 
 ## Alcance
 

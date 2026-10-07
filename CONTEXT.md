@@ -9,8 +9,14 @@ The user-facing real-time whiteboard experience. It consumes gesture results and
 _Avoid_: Visualizer App, main GUI
 
 **Hand-D Studio**:
-The developer-facing tooling used to collect, inspect, purge, train, evaluate, and benchmark Hand-D gesture data and models.
+The advanced project/data workspace inside the same Hand-D desktop application. It is used to select/manage a Project Workspace, configure the active model/runtime inputs, collect Samples, inspect/curate data, and access advanced project controls. It is not restricted to software developers.
 _Avoid_: Dataset App, admin app
+
+**Project Workspace**:
+A user-selected writable Hand-D project directory that owns the canonical SQLite dataset plus project-scoped snapshots, generated Model Artifacts, reports, and workspace configuration. It is separate from the installed application bundle and can be opened by both source and packaged Hand-D builds.
+
+**Easy Mode**:
+A progressive-disclosure UI mode that reduces technical density and exposes safer/high-level controls without changing the underlying workspace, data model, runtime contracts, or artifact compatibility. Advanced controls remain available by switching presentation mode rather than through a different application.
 
 **Drawing Hand**:
 The hand whose gesture directly controls drawing and erasing actions.
