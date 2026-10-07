@@ -64,7 +64,7 @@ flowchart LR
 
 ### Hand-D App
 
-The App is the product surface. It consumes processed runtime results and drawing state. It should not own ML training, dataset curation, or direct knowledge of training storage.
+The App is the product surface. It consumes processed runtime results and owns the drawing document/canvas state. Strokes, erasures, color/thickness, undo/redo, and current-document state are frontend/application concerns; they do not live inside the Python sidecar. The App should not own ML training, dataset curation, or direct knowledge of training storage.
 
 ### Runtime Core
 
@@ -105,6 +105,17 @@ Health is modeled by subsystem rather than as one boolean. At minimum the fronte
 The milestone IPC direction is a loopback HTTP + WebSocket service hosted by Python. HTTP is suitable for request/response operations such as health/configuration and WebSocket carries low-latency runtime events and interactive commands. The service binds only to loopback; the prototype must define dynamic port discovery, per-launch trust/authentication, Tauri capability/CSP scopes, reconnect semantics, protocol versioning, and shutdown behavior.
 
 Endpoint discovery uses OS allocation rather than a fixed port. Python binds to 127.0.0.1:0, reads back the assigned port, and reports it to Tauri/Rust in the sidecar readiness handshake. Tauri/Rust supplies a fresh random launch token to the sidecar and exposes connection information only to the Hand-D frontend/runtime bridge. Restarting the sidecar creates a new endpoint/session rather than assuming that a previous port remains valid.
+
+Each sidecar process is a distinct **Runtime Session**. The session receives a unique runtime_session_id in addition to its endpoint/token. Reconnection after a restart follows this sequence:
+
+1. Rust detects the old process exit and starts a replacement sidecar.
+2. The new process binds a new loopback endpoint and reports READY with a new Runtime Session identity.
+3. The frontend discards/invalidates the old runtime subscription.
+4. The frontend requests a current runtime snapshot: selected camera/status, active model, drawing/modifier hand settings, preview state/capabilities, and subsystem health.
+5. The frontend applies that runtime snapshot without touching its drawing document.
+6. A new WebSocket subscription begins for the new Runtime Session.
+
+Runtime events carry the session identity plus sequence/timestamp metadata. Any delayed event from an older Runtime Session is ignored. Real-time gesture events are not replayed across process restart: a gesture from the dead process is already stale and cannot improve current interaction.
 
 This localhost service is the Python sidecar API; it is distinct from Tauri's optional localhost plugin for serving frontend assets.
 
@@ -275,6 +286,10 @@ The intended v2 desktop matrix is:
 Tauri external sidecars are target-specific binaries, so each supported target receives its own packaged Python executable and native Tauri build. PyInstaller is not treated as a cross-compiler: Windows artifacts are built on Windows, macOS artifacts on macOS, and Linux artifacts on Linux.
 
 Native CI follows the same rule using standard GitHub Actions runners for Linux, macOS, and Windows. CI validates buildability, tests, sidecar startup/READY behavior, and packaging per operating system. Camera/device behavior remains a hardware smoke-test concern and is not falsely inferred from CI alone.
+
+Application delivery uses Semantic Versioning independently from dataset/model evolution. A Git tag such as v2.1.0 represents an application release; passing native CI jobs produce the corresponding GitHub Release artifacts. Project Workspace contents, Dataset Snapshots, Feature Transform versions, and Model Artifacts keep their own identities and are not reset/re-versioned merely because the desktop application is updated.
+
+The milestone release pipeline is continuous delivery, not unattended deployment: artifacts are built/published for explicit version tags, while automatic in-app updating remains future work.
 
 The milestone Python runtime is **Python 3.13**. This is a project/runtime constraint rather than a host-OS constraint; developers may run newer system Python versions while Hand-D's environment/build tooling provisions 3.13.
 

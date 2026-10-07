@@ -46,6 +46,9 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - A packaged release may include a read-only fallback model, while compatible workspace Model Artifacts can be promoted/selected later through the same manifest compatibility contract.
 - CI uses standard native GitHub Actions runners for Linux, macOS, and Windows; paid/larger runners are not required by the milestone plan.
 - Windows milestone support requires its own native CI/package/startup/model-load checks rather than being inferred from Linux/macOS success. Real camera/MJPEG/gesture validation is added on Windows hardware when available.
+- Drawing/canvas document state is frontend-owned. Python provides transient gesture/tracking/runtime signals, so a sidecar restart does not erase strokes, undo/redo history, color/thickness, or the active document.
+- Every restarted sidecar creates a fresh Runtime Session with a new ID/endpoint/token. The frontend performs state resynchronization after READY, subscribes to the new session, and drops delayed events from old sessions rather than replaying stale gestures.
+- Application releases use Semantic Versioning + Git tags + CI-produced GitHub Releases. App versioning remains separate from workspace/database/snapshot/model versions, and the milestone does not add silent automatic updates.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:
