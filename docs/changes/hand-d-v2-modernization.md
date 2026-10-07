@@ -55,6 +55,10 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - Project Workspaces are portable directories with workspace-relative references, suitable for move/copy/clone and direct Git use.
 - Each workspace owns an Active Model selection; Whiteboard uses it when that workspace is open and otherwise falls back to the packaged compatible model.
 - Easy Mode is OFF by default for v2 and affects both Whiteboard and Studio only through progressive disclosure.
+- Studio's v2 primary navigation is Overview, Collect, Dataset, Models, and Workspace.
+- Collect follows Participant -> Collection Session -> Capture, with the user selecting participant/gesture/hand/quota and provenance generated automatically. Canonical persistence remains 21 image + world landmark points per Sample; the 69-value baseline is a later Feature Transform output.
+- Dataset combines Browse + Review. Ordinary “deletion” becomes Drop, a reversible soft-delete Review Status that preserves canonical SQLite truth and Review Event history while excluding the Sample from normal active views and future snapshots.
+- Models contains a Training & Evaluation subsection even though training execution is still CLI/tooling-owned for this milestone; the UI exposes the reproducible snapshot/config/command and then surfaces resulting Model Artifacts.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:

@@ -34,10 +34,10 @@ A single frame-based hand observation stored as raw MediaPipe landmarks plus pro
 A Sample whose human review state determines whether it may be used for training. Machine-generated quality signals may place samples into a Suggested for Review queue, but they do not reject or relabel samples automatically.
 
 **Review Status**:
-The human curation state of a Sample: unreviewed, accepted, or rejected. New samples begin unreviewed; Studio may batch-accept reviewed groups so curation does not require approving every observation individually.
+The human curation state of a Sample: unreviewed, accepted, rejected, or dropped. New samples begin unreviewed; Studio may batch-accept reviewed groups so curation does not require approving every observation individually. Rejected means a reviewed Sample is unsuitable for training. Dropped is a reversible soft-delete state that removes a Sample from normal active views/training eligibility while preserving it as canonical history.
 
 **Review Event**:
-An immutable audit record of a human curation transition for a Sample, such as unreviewed → accepted or accepted → rejected, including when the decision occurred and optional review context/reason.
+An immutable audit record of a human curation transition for a Sample, such as unreviewed → accepted, accepted → rejected, or accepted → dropped, including when the decision occurred and optional review context/reason.
 
 **Feature Transform**:
 A versioned transformation contract that converts a canonical raw Sample into the model-ready feature representation expected by a compatible model. Callers depend on the transform's identity and output contract, not on its internal normalization/rotation/scaling implementation.

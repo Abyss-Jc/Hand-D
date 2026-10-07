@@ -152,12 +152,44 @@ Studio is an advanced project/data surface for:
 - collection sessions/captures;
 - dataset inspection;
 - Suggested for Review;
-- accepted/rejected curation;
+- accepted/rejected/dropped curation;
 - dataset export/preparation.
 
 Training/evaluation should be invokable reproducibly from tooling/CLI for the milestone, but is not required inside the Studio GUI.
 
 Studio is intentionally secondary to the Whiteboard so normal users are not forced to understand dataset/model concepts before drawing. It is not developer-only: technical concepts are progressively disclosed, and both technical and non-technical users may use the same surface at different levels of detail.
+
+The v2 Studio information architecture is:
+
+```text
+Studio
+├── Overview
+├── Collect
+├── Dataset
+├── Models
+└── Workspace
+```
+
+Overview summarizes workspace health, Active Model, dataset/review counts, recent Collection Sessions, and runtime/camera health.
+
+Collect implements the canonical flow:
+
+```text
+Participant
+  -> Collection Session
+    -> Capture setup (gesture, hand, target quota)
+      -> Live capture/preview/progress
+        -> Pause/Resume/Stop
+          -> Complete capture / next gesture / review / end session
+```
+
+The operator chooses only the participant, target gesture, hand, and target quota for normal collection. Session/capture IDs, timestamps, anonymous device identity, platform, camera, software versions, and other Collection Provenance are recorded automatically.
+
+Every accepted technical observation persists the canonical 21-point MediaPipe data: 21 normalized image-space x/y/z triples plus 21 world-space x/y/z triples. The 69-value legacy-compatible model input is not what Collect stores as source truth; it is materialized later through Feature Transform v1.
+
+Dataset contains **Browse** and **Review**. Browse exposes filters and summaries over participant/session/capture/gesture/hand/review state. Review exposes Suggested for Review, Accept, Reject, Drop, optional tags/notes, random QC, and deliberate batch acceptance.
+
+Models contains Active Model selection, available compatible artifacts, compatibility/provenance, and evaluation evidence. A **Training & Evaluation** subsection bridges to the reproducible external training workflow for the milestone: it can show the selected snapshot/configuration and produce/copy the exact command or launch aid, while actual training remains CLI/tool-owned. New Model Artifacts are discovered back into Models afterward. This preserves a stable UI location for training today and a natural home for a future GUI-owned training action.
 
 ### Easy Mode
 
@@ -173,6 +205,15 @@ Easy Mode must not silently mutate data, bypass Model Artifact compatibility che
 ### Dataset Core
 
 The canonical observation is raw landmark data plus provenance and human labeling/review state. The canonical working store is SQLite so Studio can query, curate, and update this state transactionally. A versioned transform produces the feature representation used by a specific model.
+
+Review Status has four milestone values:
+
+- **unreviewed** — no human curation decision yet;
+- **accepted** — eligible for future snapshot membership, subject to snapshot rules;
+- **rejected** — reviewed and intentionally excluded because the Sample is unsuitable for training;
+- **dropped** — reversible soft delete; hidden from normal active views and excluded from future snapshots while remaining canonical/auditable.
+
+Reject and Drop are intentionally different semantics. Neither physically removes the Sample or its landmarks. A Drop is represented through the same append-only Review Event history so it can be restored later without loss of provenance.
 
 Conceptual relationships:
 
@@ -213,7 +254,7 @@ One Sample therefore owns exactly 21 landmark rows. This representation is inten
 
 A Capture represents one continuous collection context inside a Collection Session. It may be paused and resumed while that Session remains active. If the Session ends, an incomplete Capture remains partial and a later Session starts a new Capture.
 
-An incomplete Capture that has never been referenced by an immutable snapshot may be explicitly discarded and physically deleted with its Samples. Once data is referenced by a snapshot, destructive cleanup must not invalidate the snapshot's ability to reproduce the historical training/evaluation view.
+An incomplete Capture that has never been referenced by an immutable snapshot may still be explicitly discarded and physically deleted with its Samples after confirmation. This remains the narrow hard-delete exception. Ordinary per-Sample deletion in Dataset is Drop/soft-delete. Once data is referenced by a snapshot, destructive cleanup must not invalidate the snapshot's ability to reproduce the historical training/evaluation view.
 
 ### Feature Transform seam
 
@@ -280,7 +321,7 @@ Human curation is represented by an append-only Review Event history plus an eff
 
 Rejection annotation is optional. Studio exposes a small default tag vocabulary for common causes and permits custom tags when new failure modes appear. Tags are review context rather than Sample truth, and an optional free-form note may accompany them.
 
-Rejected Samples remain part of the canonical historical dataset and are filtered out when eligible snapshot membership is materialized. Physical deletion is reserved for the previously defined explicit discard path for incomplete, snapshot-unreferenced Captures.
+Rejected and Dropped Samples remain part of the canonical historical dataset and are filtered out when eligible snapshot membership is materialized. Physical deletion is reserved for the previously defined explicit discard path for incomplete, snapshot-unreferenced Captures.
 
 Review changes never rewrite an existing immutable snapshot. They affect eligibility only when a later snapshot is created.
 
