@@ -74,6 +74,11 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - The v2 desktop target matrix includes all three major desktop operating systems: Linux x86-64, macOS Apple Silicon (arm64), and Windows x86-64. Validation and milestone effort prioritize Linux and macOS first because those are the actively available development/lab environments; Windows remains an intended supported target and must receive a native build/test pass rather than being claimed from source compatibility alone.
 - The packaged Python sidecar standardizes on Python 3.13 for the milestone. Developer host Python versions are not part of the runtime contract; local development uses a project-managed Python 3.13 environment and packaged builds embed the sidecar runtime/dependencies.
 - MediaPipe migration from the current 0.10.x line to 1.1.x is prototype/TDD-gated. Before changing production runtime code, tests capture the current Hand Landmarker/Feature Transform contract: model task loads, LIVE_STREAM callback behavior, 21 image landmarks, 21 world landmarks, handedness semantics, timestamp ordering, and legacy-compatible 69-feature output. The migration is accepted only after the same contract tests pass on the new version and target-platform smoke/benchmark checks succeed.
+- Packaging is a distribution/UX layer, not the only way to run Hand-D. Development and advanced workflows remain runnable from the terminal/project environment, while packaged desktop builds provide the normal end-user launch/install experience.
+- Mutable project state never lives inside the installed application bundle. Hand-D separates installed resources from a writable **Project Workspace** that contains the canonical SQLite dataset, immutable snapshots, generated Model Artifacts, and other project-owned mutable outputs. Studio can open/select this workspace explicitly so the same data can participate in the team's Git/sequential-ownership workflow.
+- Packaged builds may ship a read-only default/fallback Model Artifact as an application resource, but newly trained/promoted models are written to the Project Workspace and may become the active runtime model only after compatibility validation. Retraining or collecting more Samples therefore does not require rebuilding/reinstalling the application.
+- CI uses GitHub Actions with standard native hosted runners for Linux, macOS, and Windows. The public repository's standard-runner workflow is designed to remain within GitHub's free public-repository Actions model; larger/paid runners are not part of the milestone plan.
+- Windows support requires more than a source-level compile claim. The Windows job must at minimum run no-camera unit/contract tests, build the Python sidecar, build the Tauri desktop artifact/installer path, verify sidecar READY/IPC startup, and load the model headlessly. A real Windows camera/MJPEG/gesture smoke test is added when suitable hardware is available.
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
@@ -159,6 +164,11 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-075 | A developer builds or packages the Python sidecar | The project environment is created | The milestone runtime uses project-managed Python 3.13 regardless of the developer machine's system Python version |
 | V2-076 | MediaPipe 1.1.x migration begins | Runtime implementation changes | Existing contract tests are written/green against the current supported behavior first, then the dependency/runtime migration is implemented until the same contract passes on the new version |
 | V2-077 | MediaPipe 1.1.x contract tests pass locally | The migration is considered for adoption | Linux x86-64 and macOS arm64 smoke/performance checks pass first, followed by a Windows x86-64 native packaging/smoke pass before three-platform support is declared |
+| V2-078 | Hand-D is launched from source during development | The developer uses the project environment | App/Studio/runtime can run without an installer; packaging is not a prerequisite for collection, curation, training tooling, or runtime development |
+| V2-079 | A packaged Hand-D build is installed | Studio collects/curates data or tooling creates snapshots/models | Mutable SQLite, snapshots, and generated Model Artifacts are written to a writable Project Workspace outside the installed app bundle |
+| V2-080 | A new compatible Model Artifact is produced after installation | The user/team promotes it | Runtime may select the new workspace model without rebuilding the desktop package; an incompatible artifact is rejected by the existing Model Artifact contract checks |
+| V2-081 | CI runs for the v2 branch/release candidate | Platform jobs execute | Standard GitHub-hosted Linux, macOS, and Windows runners build/test their native target; the milestone does not depend on paid/larger runners |
+| V2-082 | Windows support is reported | The Windows CI/native validation job completes | No-camera contract tests, Python-sidecar packaging, Tauri build, READY/IPC startup, and headless model load pass before Windows is described as supported at the milestone level |
 
 ## Alcance
 
@@ -189,7 +199,7 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 Open:
 
 - Exact HTTP/WebSocket message schema plus MJPEG preview quality/resolution/FPS tuning.
-- Exact dependency pins after the MediaPipe 1.1.x TDD compatibility spike, plus per-platform packaging formats/build automation.
+- Exact dependency pins after the MediaPipe 1.1.x TDD compatibility spike, plus final release packaging formats/build automation.
 
 Confirmed direction is tracked in `docs/changes/hand-d-v2-modernization.md`. This document should be updated when an open product requirement becomes a confirmed decision.
 

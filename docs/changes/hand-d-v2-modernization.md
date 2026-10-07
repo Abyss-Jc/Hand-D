@@ -41,6 +41,11 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - The v2 release matrix includes Linux x86-64, macOS arm64, and Windows x86-64. Linux and Apple Silicon are the first validation priority because they are the available development/lab environments; Windows remains an intended supported target and receives its own native build/smoke pass before support is claimed.
 - The sidecar runtime standardizes on project-managed Python 3.13 for the milestone. The developer host's system Python is not the runtime contract.
 - MediaPipe 1.1.x adoption is TDD/prototype-gated: first freeze contract tests for landmark shape/semantics, LIVE_STREAM callbacks/timestamps, handedness, and Feature Transform v1 compatibility; then upgrade and make those same tests pass, followed by Linux/macOS and Windows target validation.
+- Packaging is optional for development and required only as the polished distribution path. Hand-D remains runnable from the terminal/project environment.
+- Installed binaries/resources are separated from a writable Project Workspace. SQLite collection/curation state, immutable snapshots, and newly generated Model Artifacts live outside the app bundle, so collecting more data or retraining does not require reinstalling/rebuilding Hand-D.
+- A packaged release may include a read-only fallback model, while compatible workspace Model Artifacts can be promoted/selected later through the same manifest compatibility contract.
+- CI uses standard native GitHub Actions runners for Linux, macOS, and Windows; paid/larger runners are not required by the milestone plan.
+- Windows milestone support requires its own native CI/package/startup/model-load checks rather than being inferred from Linux/macOS success. Real camera/MJPEG/gesture validation is added on Windows hardware when available.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:

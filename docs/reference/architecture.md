@@ -274,7 +274,22 @@ The intended v2 desktop matrix is:
 
 Tauri external sidecars are target-specific binaries, so each supported target receives its own packaged Python executable and native Tauri build. PyInstaller is not treated as a cross-compiler: Windows artifacts are built on Windows, macOS artifacts on macOS, and Linux artifacts on Linux.
 
+Native CI follows the same rule using standard GitHub Actions runners for Linux, macOS, and Windows. CI validates buildability, tests, sidecar startup/READY behavior, and packaging per operating system. Camera/device behavior remains a hardware smoke-test concern and is not falsely inferred from CI alone.
+
 The milestone Python runtime is **Python 3.13**. This is a project/runtime constraint rather than a host-OS constraint; developers may run newer system Python versions while Hand-D's environment/build tooling provisions 3.13.
+
+### Installed application vs Project Workspace
+
+Packaging does not define Hand-D's data lifecycle. There are two independent locations:
+
+1. **Installed application/resources** — Tauri shell, packaged Python sidecar, static UI assets, MediaPipe task resources, and optionally a read-only default/fallback Model Artifact.
+2. **Project Workspace** — writable project state: canonical SQLite dataset, snapshots, generated Model Artifacts, reports, and other mutable ML/data outputs.
+
+The Project Workspace is never placed inside the installed app bundle. Studio opens/selects it explicitly so collection and curation remain compatible with the team's sequential Git ownership workflow. Development-from-source and installed builds can point at the same workspace when intentionally configured to do so.
+
+Retraining therefore produces a new workspace Model Artifact rather than modifying packaged resources. Runtime resolves the active model from compatible workspace artifacts, with the packaged model available as a fallback/bootstrap artifact where appropriate.
+
+Normal preferences/cache/logs may use the platform application-data directories, but those are distinct from the project dataset/workspace. Tauri's writable app-data paths are appropriate for application-owned state; the canonical team dataset remains an explicit project/workspace concern.
 
 ### MediaPipe migration gate
 
