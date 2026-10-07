@@ -38,6 +38,9 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - The Tauri shell opens immediately even while Python/MediaPipe/model/camera initialization is still running. Runtime-dependent controls show a clear preparing state instead of blocking the entire application behind startup.
 - If the Python sidecar crashes, Tauri/Rust performs one automatic restart while preserving frontend/canvas state. Recovery is communicated visibly; if the restart fails, the user can explicitly retry without losing the current canvas/session UI.
 - Runtime health is component-specific. Camera/permission failures degrade camera-dependent features without collapsing the whole application; model, IPC, sidecar, and camera failures are surfaced as distinct states.
+- The v2 release matrix includes Linux x86-64, macOS arm64, and Windows x86-64. Linux and Apple Silicon are the first validation priority because they are the available development/lab environments; Windows remains an intended supported target and receives its own native build/smoke pass before support is claimed.
+- The sidecar runtime standardizes on project-managed Python 3.13 for the milestone. The developer host's system Python is not the runtime contract.
+- MediaPipe 1.1.x adoption is TDD/prototype-gated: first freeze contract tests for landmark shape/semantics, LIVE_STREAM callbacks/timestamps, handedness, and Feature Transform v1 compatibility; then upgrade and make those same tests pass, followed by Linux/macOS and Windows target validation.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:
@@ -121,5 +124,4 @@ Implementation beyond planning/documentation is deferred until the current grill
 ## Open decisions
 
 - Exact HTTP/WebSocket protocol schema, reconnection behavior, and MJPEG quality/resolution/FPS tuning.
-- Exact release/platform matrix for the October milestone.
-- Migration/version policy for MediaPipe, PyTorch, Python, and packaging.
+- Exact dependency pins after the compatibility spike and per-platform packaging/build automation details.

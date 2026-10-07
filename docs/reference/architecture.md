@@ -264,6 +264,33 @@ Preferred acceleration is capability-driven:
 
 Vendor SDK support alone is not enough to claim that Hand-D supports a PyTorch backend on a given machine.
 
+### Platform/runtime matrix
+
+The intended v2 desktop matrix is:
+
+- **Linux x86-64** — first-priority development/validation target; CPU baseline on the current Tiger Lake/CachyOS host, with optional acceleration only when a supported PyTorch backend is actually present.
+- **macOS arm64** — first-priority lab target; Apple Silicon CPU + MPS validation on the M4 lab machines.
+- **Windows x86-64** — supported v2 target, but validated after Linux/macOS because no equivalent always-available Windows test host is part of the primary development loop.
+
+Tauri external sidecars are target-specific binaries, so each supported target receives its own packaged Python executable and native Tauri build. PyInstaller is not treated as a cross-compiler: Windows artifacts are built on Windows, macOS artifacts on macOS, and Linux artifacts on Linux.
+
+The milestone Python runtime is **Python 3.13**. This is a project/runtime constraint rather than a host-OS constraint; developers may run newer system Python versions while Hand-D's environment/build tooling provisions 3.13.
+
+### MediaPipe migration gate
+
+The move from the current MediaPipe 0.10.x dependency to 1.1.x follows TDD:
+
+1. Freeze executable contract tests against the currently relied-on behavior.
+2. Verify task-model loading and LIVE_STREAM/detect_async callback semantics.
+3. Assert 21 normalized image landmarks and 21 world landmarks for valid detections.
+4. Assert handedness conversion semantics and monotonic timestamp handling.
+5. Assert that shared Feature Transform v1 still produces the expected float32[69] contract for compatible fixtures.
+6. Upgrade MediaPipe/runtime integration.
+7. Make the same tests pass without weakening assertions merely to accommodate the upgrade.
+8. Run Linux x86-64 and macOS arm64 smoke/performance checks first, then Windows x86-64 packaging/smoke validation.
+
+The dependency version is pinned only after this compatibility gate succeeds. A failed gate is evidence to remain temporarily on the current compatible line rather than forcing a migration for novelty.
+
 ## Interfaces y datos
 
 Target interfaces are conceptual until implementation begins:

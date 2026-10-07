@@ -71,6 +71,9 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - The Tauri shell remains usable while the Python runtime is starting or recovering. Canvas/UI state is presented immediately, while camera/gesture-dependent controls expose a clear preparing/recovering state until the sidecar reports ready.
 - If the Python sidecar exits unexpectedly, Tauri/Rust performs one automatic restart attempt while preserving frontend/canvas state. During recovery the UI communicates that Hand-D is preparing/recovering rather than appearing frozen or silently resetting. If automatic recovery fails, the current UI/canvas state remains intact and the user is offered an explicit runtime retry.
 - Runtime health is component-specific rather than all-or-nothing. Camera failure, camera permission failure, model-load failure, sidecar/IPC failure, and other recoverable runtime faults are surfaced distinctly so unaffected UI/settings/canvas functionality can remain available.
+- The v2 desktop target matrix includes all three major desktop operating systems: Linux x86-64, macOS Apple Silicon (arm64), and Windows x86-64. Validation and milestone effort prioritize Linux and macOS first because those are the actively available development/lab environments; Windows remains an intended supported target and must receive a native build/test pass rather than being claimed from source compatibility alone.
+- The packaged Python sidecar standardizes on Python 3.13 for the milestone. Developer host Python versions are not part of the runtime contract; local development uses a project-managed Python 3.13 environment and packaged builds embed the sidecar runtime/dependencies.
+- MediaPipe migration from the current 0.10.x line to 1.1.x is prototype/TDD-gated. Before changing production runtime code, tests capture the current Hand Landmarker/Feature Transform contract: model task loads, LIVE_STREAM callback behavior, 21 image landmarks, 21 world landmarks, handedness semantics, timestamp ordering, and legacy-compatible 69-feature output. The migration is accepted only after the same contract tests pass on the new version and target-platform smoke/benchmark checks succeed.
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
@@ -152,6 +155,10 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-071 | The Python sidecar exits unexpectedly during use | Tauri detects the process exit | Tauri/Rust attempts one automatic restart while preserving frontend/canvas state and visibly communicates recovery progress |
 | V2-072 | Automatic sidecar recovery fails | The retry attempt completes unsuccessfully | Canvas/UI state remains intact and the user receives an explicit action to retry/restart the runtime rather than losing the session |
 | V2-073 | Camera or permission initialization fails while the sidecar/model remain healthy | Runtime health is reported | Hand-D enters a camera-specific degraded state and keeps unrelated UI/canvas/settings available, with camera retry/source-selection recovery actions |
+| V2-074 | A v2 release candidate is prepared | Platform support is reported | Native builds are produced/tested for Linux x86-64, macOS arm64, and Windows x86-64; Linux/macOS receive first validation priority, while Windows support is not claimed without its own native build/smoke pass |
+| V2-075 | A developer builds or packages the Python sidecar | The project environment is created | The milestone runtime uses project-managed Python 3.13 regardless of the developer machine's system Python version |
+| V2-076 | MediaPipe 1.1.x migration begins | Runtime implementation changes | Existing contract tests are written/green against the current supported behavior first, then the dependency/runtime migration is implemented until the same contract passes on the new version |
+| V2-077 | MediaPipe 1.1.x contract tests pass locally | The migration is considered for adoption | Linux x86-64 and macOS arm64 smoke/performance checks pass first, followed by a Windows x86-64 native packaging/smoke pass before three-platform support is declared |
 
 ## Alcance
 
@@ -182,7 +189,7 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 Open:
 
 - Exact HTTP/WebSocket message schema plus MJPEG preview quality/resolution/FPS tuning.
-- Exact compatible dependency versions and packaging strategy.
+- Exact dependency pins after the MediaPipe 1.1.x TDD compatibility spike, plus per-platform packaging formats/build automation.
 
 Confirmed direction is tracked in `docs/changes/hand-d-v2-modernization.md`. This document should be updated when an open product requirement becomes a confirmed decision.
 
