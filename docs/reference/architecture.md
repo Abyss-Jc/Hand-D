@@ -172,6 +172,8 @@ Studio
 
 Overview summarizes workspace health, Active Model, dataset/review counts, recent Collection Sessions, and runtime/camera health.
 
+Overview is intentionally operational: it answers "what workspace/model am I using, is the runtime healthy, what data/review work is pending, and what should I do next?" rather than duplicating the detailed analytics available under Dataset/Models.
+
 Collect implements the canonical flow:
 
 ```text
@@ -185,11 +187,17 @@ Participant
 
 The operator chooses only the participant, target gesture, hand, and target quota for normal collection. Session/capture IDs, timestamps, anonymous device identity, platform, camera, software versions, and other Collection Provenance are recorded automatically.
 
+Participants are scoped inside Collect. A selected participant starts or resumes the human workflow context, while each new Collection Session remains a distinct provenance boundary. Within that active Session, Collect presents gestures as a Capture checklist so repeated participant/session setup is unnecessary.
+
+The gesture vocabulary is workspace-extensible for collection. A new gesture definition may be created and collected immediately, but the gesture is not a runtime capability merely because rows exist in SQLite. Runtime recognition requires a compatible Model Artifact whose label manifest includes the gesture; using that recognition to trigger a Whiteboard action additionally requires an explicit product/runtime mapping.
+
 Every accepted technical observation persists the canonical 21-point MediaPipe data: 21 normalized image-space x/y/z triples plus 21 world-space x/y/z triples. The 69-value legacy-compatible model input is not what Collect stores as source truth; it is materialized later through Feature Transform v1.
 
 Dataset contains **Browse** and **Review**. Browse exposes filters and summaries over participant/session/capture/gesture/hand/review state. Review exposes Suggested for Review, Accept, Reject, Drop, optional tags/notes, random QC, and deliberate batch acceptance.
 
 Models contains Active Model selection, available compatible artifacts, compatibility/provenance, and evaluation evidence. A **Training & Evaluation** subsection bridges to the reproducible external training workflow for the milestone: it can show the selected snapshot/configuration and produce/copy the exact command or launch aid, while actual training remains CLI/tool-owned. New Model Artifacts are discovered back into Models afterward. This preserves a stable UI location for training today and a natural home for a future GUI-owned training action.
+
+Workspace uses the desktop operating system's native directory chooser through Tauri for Open/Create operations. A new workspace asks only for a name and target location; Hand-D initializes the config, SQLite store, and expected project directories itself.
 
 ### Easy Mode
 
