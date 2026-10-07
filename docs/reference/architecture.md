@@ -96,6 +96,12 @@ The post-landmarker gesture-response budget is p95 <50 ms preferred and p95 <100
 
 Tauri/Rust owns the Python sidecar as a long-lived child process. Rust is responsible for spawn, readiness/health, crash/exit observation, log capture, restart policy, and orderly shutdown. Frontend components use application-level commands/events and do not directly own process creation.
 
+Runtime lifecycle is resilient rather than modal. The Tauri shell/frontend is allowed to become interactive before Python, MediaPipe, the model, and camera are fully ready. Runtime-dependent affordances expose preparing/recovering/degraded states while canvas and non-runtime UI remain available.
+
+On unexpected sidecar exit, Rust performs one automatic restart attempt. Frontend/canvas state is not reset as a side effect of restarting Python. If the restarted sidecar reaches READY, normal runtime subscriptions resume; if recovery fails, the shell remains open and exposes an explicit retry action.
+
+Health is modeled by subsystem rather than as one boolean. At minimum the frontend can distinguish sidecar/process health, IPC connection, model readiness, camera availability/permission, and preview state. A camera-specific failure does not imply that the shell, canvas, settings, or already-loaded model metadata must be discarded.
+
 The milestone IPC direction is a loopback HTTP + WebSocket service hosted by Python. HTTP is suitable for request/response operations such as health/configuration and WebSocket carries low-latency runtime events and interactive commands. The service binds only to loopback; the prototype must define dynamic port discovery, per-launch trust/authentication, Tauri capability/CSP scopes, reconnect semantics, protocol versioning, and shutdown behavior.
 
 Endpoint discovery uses OS allocation rather than a fixed port. Python binds to 127.0.0.1:0, reads back the assigned port, and reports it to Tauri/Rust in the sidecar readiness handshake. Tauri/Rust supplies a fresh random launch token to the sidecar and exposes connection information only to the Hand-D frontend/runtime bridge. Restarting the sidecar creates a new endpoint/session rather than assuming that a previous port remains valid.

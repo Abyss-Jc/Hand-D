@@ -68,6 +68,9 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Effective live inference cadence is also capability-driven: target the source cadence up to 60 Hz when feasible, prefer at least 30 gesture/tracking updates per second on capable supported hardware, and treat sustained operation below 20 Hz as a performance red flag. MediaPipe may still drop stale input frames to preserve freshness rather than accumulating latency.
 - Frontend canvas/render cadence is independent from camera and inference cadence and should target the display's normal refresh (60 Hz on the milestone targets) using the latest available gesture/tracking state. Rendering at 60 Hz must not be misreported as 60 Hz inference.
 - Under load, Hand-D protects gesture latency and inference freshness before preview fidelity. It should first lower MJPEG quality/resolution, then reduce preview FPS toward the visible floor, and may suspend hidden/minimized preview work before allowing frame backlogs or large gesture latency.
+- The Tauri shell remains usable while the Python runtime is starting or recovering. Canvas/UI state is presented immediately, while camera/gesture-dependent controls expose a clear preparing/recovering state until the sidecar reports ready.
+- If the Python sidecar exits unexpectedly, Tauri/Rust performs one automatic restart attempt while preserving frontend/canvas state. During recovery the UI communicates that Hand-D is preparing/recovering rather than appearing frozen or silently resetting. If automatic recovery fails, the current UI/canvas state remains intact and the user is offered an explicit runtime retry.
+- Runtime health is component-specific rather than all-or-nothing. Camera failure, camera permission failure, model-load failure, sidecar/IPC failure, and other recoverable runtime faults are surfaced distinctly so unaffected UI/settings/canvas functionality can remain available.
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
@@ -145,6 +148,10 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-067 | Live camera inference runs on a supported target | Runtime cadence is measured | Hand-D targets source cadence up to 60 Hz when feasible, prefers >=30 gesture/tracking updates/s on capable hardware, and flags sustained <20 Hz as degraded rather than building stale-frame backlog |
 | V2-068 | Camera/inference cadence is lower than display refresh | The drawing UI renders | The frontend may render at 60 Hz using latest-state smoothing/interpolation without claiming or fabricating additional inference results |
 | V2-069 | Runtime load threatens latency or freshness | Adaptive degradation activates | Preview quality/resolution/FPS is reduced or preview work is suspended before allowing unbounded frame queues or sacrificing gesture responsiveness |
+| V2-070 | The desktop shell opens while Python/MediaPipe/model initialization is still running | The user sees Hand-D | Canvas/UI state appears immediately with an explicit preparing state; camera/gesture-dependent controls become available when runtime readiness is confirmed |
+| V2-071 | The Python sidecar exits unexpectedly during use | Tauri detects the process exit | Tauri/Rust attempts one automatic restart while preserving frontend/canvas state and visibly communicates recovery progress |
+| V2-072 | Automatic sidecar recovery fails | The retry attempt completes unsuccessfully | Canvas/UI state remains intact and the user receives an explicit action to retry/restart the runtime rather than losing the session |
+| V2-073 | Camera or permission initialization fails while the sidecar/model remain healthy | Runtime health is reported | Hand-D enters a camera-specific degraded state and keeps unrelated UI/canvas/settings available, with camera retry/source-selection recovery actions |
 
 ## Alcance
 

@@ -35,6 +35,9 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - Runtime performance budgets are now explicit: preferred p95 post-landmarker gesture-response latency <50 ms, hard ceiling <100 ms; preview uses the camera's real source cadence up to 60 FPS when sustainable, with 30 FPS baseline and 24 FPS normal floor; inference targets source cadence up to 60 Hz, prefers >=30 updates/s on capable hardware, and treats sustained <20 Hz as degraded.
 - Camera, inference, preview, and frontend rendering are decoupled. The canvas may render at 60 Hz from latest state while MediaPipe runs at its actual cadence; Hand-D never fabricates duplicate camera/inference frames to advertise a higher rate.
 - Degradation protects interaction first: reduce MJPEG quality/resolution, then preview FPS or disable hidden preview work before accepting stale-frame queues or large gesture latency.
+- The Tauri shell opens immediately even while Python/MediaPipe/model/camera initialization is still running. Runtime-dependent controls show a clear preparing state instead of blocking the entire application behind startup.
+- If the Python sidecar crashes, Tauri/Rust performs one automatic restart while preserving frontend/canvas state. Recovery is communicated visibly; if the restart fails, the user can explicitly retry without losing the current canvas/session UI.
+- Runtime health is component-specific. Camera/permission failures degrade camera-dependent features without collapsing the whole application; model, IPC, sidecar, and camera failures are surfaced as distinct states.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:
