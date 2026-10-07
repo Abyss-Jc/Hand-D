@@ -63,6 +63,11 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Hand-D v2 adopts HTTP MJPEG as the preview transport. The Python sidecar serves the latest preview frames directly over its authenticated loopback HTTP endpoint and the Tauri webview consumes the stream natively. Heavy frame bytes therefore stay outside Tauri command/event IPC and outside application-level JSON/WebSocket control traffic.
 - The architecture follows the same proven data-plane/control-plane separation used by FaceRay (Tauri 2 + Python/MediaPipe sidecar): video stays in the Python-side data plane and the webview pulls a loopback MJPEG stream directly. Hand-D keeps its own HTTP/WebSocket control contract rather than copying FaceRay's stdio control protocol.
 - MJPEG quality/resolution/FPS remains performance-tuned on the CachyOS Tiger Lake development laptop and Apple Silicon M4, but the transport itself is now the selected v2 architecture. A dedicated binary WebSocket preview is contingency/future work only if MJPEG later fails an explicit supported-target budget.
+- Gesture-response latency is a first-class runtime budget. From a usable MediaPipe result entering Hand-D's post-landmarker pipeline through Feature Transform, model inference, temporal state, IPC, and frontend state delivery, the preferred p95 target is below 50 ms and the hard UX ceiling is below 100 ms. Camera/sensor latency is measured separately when the platform exposes timestamps reliably.
+- Camera/preview cadence is capability-driven. Hand-D probes the actual source mode and prefers source-native preview up to 60 FPS when the camera and runtime can sustain it within the gesture-latency budget. A stable 30 FPS preview is the baseline target, with 24 FPS as the minimum normal visible-preview floor before the runtime is considered degraded. Hand-D does not synthesize duplicate frames merely to report 60 FPS.
+- Effective live inference cadence is also capability-driven: target the source cadence up to 60 Hz when feasible, prefer at least 30 gesture/tracking updates per second on capable supported hardware, and treat sustained operation below 20 Hz as a performance red flag. MediaPipe may still drop stale input frames to preserve freshness rather than accumulating latency.
+- Frontend canvas/render cadence is independent from camera and inference cadence and should target the display's normal refresh (60 Hz on the milestone targets) using the latest available gesture/tracking state. Rendering at 60 Hz must not be misreported as 60 Hz inference.
+- Under load, Hand-D protects gesture latency and inference freshness before preview fidelity. It should first lower MJPEG quality/resolution, then reduce preview FPS toward the visible floor, and may suspend hidden/minimized preview work before allowing frame backlogs or large gesture latency.
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
@@ -135,6 +140,11 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-062 | The v2 live preview is enabled | The Tauri webview renders camera feedback | The Python sidecar serves MJPEG directly over its authenticated loopback HTTP endpoint and the webview consumes the stream without routing frame bytes through Tauri command/event IPC or JSON/WebSocket control messages |
 | V2-063 | Preview rendering becomes slow, hidden, or minimized | Runtime remains active | Gesture/control events remain responsive and preview frames may be throttled/dropped independently rather than backpressuring inference/control |
 | V2-064 | Direct MJPEG preview later fails an explicit supported-target performance budget | Preview transport is reconsidered | A dedicated binary WebSocket JPEG path may be prototyped as a fallback using the same latest-frame/drop semantics rather than replacing the control WebSocket with video traffic |
+| V2-065 | A usable MediaPipe result enters Hand-D's gesture-response pipeline | The frontend receives the corresponding runtime state | Preferred p95 latency is <50 ms and the hard milestone ceiling is <100 ms for Feature Transform + model inference + temporal state + IPC/frontend delivery |
+| V2-066 | A camera exposes a stable 60 FPS mode and the machine can sustain it within latency budgets | Preview is enabled | Hand-D may render MJPEG preview up to the source-native 60 FPS; otherwise it targets the highest stable source-native cadence, with 30 FPS as baseline and 24 FPS as the normal visible-preview floor |
+| V2-067 | Live camera inference runs on a supported target | Runtime cadence is measured | Hand-D targets source cadence up to 60 Hz when feasible, prefers >=30 gesture/tracking updates/s on capable hardware, and flags sustained <20 Hz as degraded rather than building stale-frame backlog |
+| V2-068 | Camera/inference cadence is lower than display refresh | The drawing UI renders | The frontend may render at 60 Hz using latest-state smoothing/interpolation without claiming or fabricating additional inference results |
+| V2-069 | Runtime load threatens latency or freshness | Adaptive degradation activates | Preview quality/resolution/FPS is reduced or preview work is suspended before allowing unbounded frame queues or sacrificing gesture responsiveness |
 
 ## Alcance
 
@@ -164,7 +174,6 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 
 Open:
 
-- Runtime performance budgets.
 - Exact HTTP/WebSocket message schema plus MJPEG preview quality/resolution/FPS tuning.
 - Exact compatible dependency versions and packaging strategy.
 

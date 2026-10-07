@@ -32,6 +32,9 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - HTTP MJPEG is the selected v2 preview transport: Python serves the latest preview frames directly over the authenticated loopback HTTP endpoint and the webview consumes the stream without routing frame bytes through control IPC. This adopts the same data-plane separation pattern demonstrated by FaceRay while keeping Hand-D's own control protocol.
 - FaceRay is now an explicit architecture inspiration for Tauri + Python/MediaPipe sidecar separation. Hand-D borrows the direct loopback MJPEG preview pattern, not FaceRay's exact stdio control protocol.
 - MJPEG is performance-tuned on Tiger Lake/CachyOS and Apple Silicon M4 rather than re-litigated against WebSocket as a co-equal default. A dedicated binary WebSocket JPEG stream remains contingency only if MJPEG later fails an explicit supported-target budget; WebRTC is not a milestone baseline because current Linux WebKitGTK 2.54 disables WebRTC during its backend transition.
+- Runtime performance budgets are now explicit: preferred p95 post-landmarker gesture-response latency <50 ms, hard ceiling <100 ms; preview uses the camera's real source cadence up to 60 FPS when sustainable, with 30 FPS baseline and 24 FPS normal floor; inference targets source cadence up to 60 Hz, prefers >=30 updates/s on capable hardware, and treats sustained <20 Hz as degraded.
+- Camera, inference, preview, and frontend rendering are decoupled. The canvas may render at 60 Hz from latest state while MediaPipe runs at its actual cadence; Hand-D never fabricates duplicate camera/inference frames to advertise a higher rate.
+- Degradation protects interaction first: reduce MJPEG quality/resolution, then preview FPS or disable hidden preview work before accepting stale-frame queues or large gesture latency.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:
@@ -54,11 +57,11 @@ Source observations from the repository:
 
 ## Delivery boundary
 
-The October 13 milestone is a v2 vertical slice, not a complete rewrite. It should establish the new App/Studio architecture, correct the real-time runtime path, improve collection and dataset review/purge, establish reproducible training/evaluation outside the GUI, document the system, and validate the new UI direction without forcing a production desktop-shell decision prematurely.
+The October 13 milestone is a v2 vertical slice, not a complete rewrite. It should establish the new App/Studio architecture, correct the real-time runtime path, improve collection and dataset review/purge, establish reproducible training/evaluation outside the GUI, document the system, and validate the selected Tauri + Python-sidecar UI/runtime direction.
 
 Training and evaluation from the Studio GUI are explicitly outside this milestone. The underlying training/evaluation workflow should still become reproducible and documented.
 
-Implementation beyond planning/documentation is deferred until the current grill phase is complete. The desktop-shell choice, IPC mechanism, dataset/session model, training/evaluation protocol, and v2 UX remain open decisions.
+Implementation beyond planning/documentation is deferred until the current grill phase is complete. The remaining runtime work is protocol/detail validation, dependency/platform compatibility, and v2 UX shaping rather than re-opening already-settled App/Studio, data, training, Tauri-sidecar, or MJPEG architecture decisions.
 
 ## Evaluation direction
 
@@ -115,6 +118,5 @@ Implementation beyond planning/documentation is deferred until the current grill
 ## Open decisions
 
 - Exact HTTP/WebSocket protocol schema, reconnection behavior, and MJPEG quality/resolution/FPS tuning.
-- Real-time performance budgets for gesture latency, capture FPS, CPU/GPU use, and startup.
 - Exact release/platform matrix for the October milestone.
 - Migration/version policy for MediaPipe, PyTorch, Python, and packaging.

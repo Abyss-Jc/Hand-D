@@ -82,6 +82,16 @@ Camera capture -> latest-frame boundary -> MediaPipe LIVE_STREAM -> latest landm
 
 Every boundary that can accumulate live work must remain bounded/freshness-oriented rather than becoming an unbounded FIFO. Preview rendering is a separate consumer of the latest camera frame and is never upstream of inference.
 
+The real-time system has three independent cadences:
+
+- **Camera/source cadence**: whatever the selected camera mode actually delivers, probed at runtime rather than assumed.
+- **Inference cadence**: MediaPipe/gesture updates, targeting source cadence up to 60 Hz when feasible, with >=30 Hz preferred on capable supported hardware and sustained <20 Hz treated as degraded.
+- **Frontend render cadence**: normally 60 Hz on the milestone displays, consuming the latest gesture/tracking state independently from inference frequency.
+
+Hand-D never duplicates camera frames merely to claim 60 FPS and never treats a 60 Hz canvas loop as evidence of 60 Hz inference.
+
+The post-landmarker gesture-response budget is p95 <50 ms preferred and p95 <100 ms as the milestone hard ceiling, measured from a usable MediaPipe result entering Feature Transform through model inference, temporal state, IPC, and frontend state delivery. Camera/sensor latency is recorded separately when reliable capture timestamps are available.
+
 ### Tauri + Python sidecar
 
 Tauri/Rust owns the Python sidecar as a long-lived child process. Rust is responsible for spawn, readiness/health, crash/exit observation, log capture, restart policy, and orderly shutdown. Frontend components use application-level commands/events and do not directly own process creation.
@@ -101,6 +111,8 @@ Preview is deliberately independent from control/inference IPC. Python owns the 
 The selected v2 preview path is HTTP MJPEG served directly by the Python sidecar on its authenticated loopback endpoint. The Tauri webview consumes this as an image stream, so frame bytes do not traverse Tauri command/event IPC and do not require application-level JavaScript decoding/reassembly. Preview never shares a backpressure queue with gesture/control events.
 
 MJPEG is tuned/measured on Tiger Lake/CachyOS and Apple Silicon M4. Priority is ordered as gesture latency, tracking/inference stability, visual preview smoothness, then preview resolution/FPS. A dedicated binary WebSocket JPEG stream is retained only as contingency if direct MJPEG later fails an explicit supported-target budget.
+
+Preview cadence is source/capability-driven. If a camera exposes a stable 60 FPS mode and the machine can preserve the gesture-response budget, Hand-D may stream preview at up to 60 FPS. Otherwise the baseline target is a stable 30 FPS and the normal visible-preview floor is 24 FPS. Under load the runtime reduces JPEG quality/resolution first, then preview FPS, and can suspend hidden/minimized preview encoding before compromising gesture freshness.
 
 WebRTC is not the baseline transport for the milestone because Hand-D needs consistent behavior across Tauri's platform webviews and current WebKitGTK 2.54 disables WebRTC while transitioning backends. Codec/MSE/WebCodecs pipelines may become relevant later if high-resolution preview efficiency becomes more important than the simplicity and portability of MJPEG.
 
