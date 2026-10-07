@@ -161,7 +161,7 @@ Studio is intentionally secondary to the Whiteboard so normal users are not forc
 
 ### Easy Mode
 
-Easy Mode is a presentation policy over the same product/domain model, not a separate application mode with separate storage or behavior. It may:
+Easy Mode is disabled by default in v2. It is a presentation policy over the same product/domain model, not a separate application mode with separate storage or behavior. It may:
 
 - prefer human-readable model/workspace labels over artifact IDs;
 - hide low-level metrics/IDs/configuration until requested;
@@ -320,11 +320,26 @@ The milestone Python runtime is **Python 3.13**. This is a project/runtime const
 Packaging does not define Hand-D's data lifecycle. There are two independent locations:
 
 1. **Installed application/resources** — Tauri shell, packaged Python sidecar, static UI assets, MediaPipe task resources, and optionally a read-only default/fallback Model Artifact.
-2. **Project Workspace** — writable project state: canonical SQLite dataset, snapshots, generated Model Artifacts, reports, and other mutable ML/data outputs.
+2. **Project Workspace** — portable writable project state: canonical SQLite dataset, snapshots, generated Model Artifacts, reports, workspace configuration, and other mutable ML/data outputs.
 
-The Project Workspace is never placed inside the installed app bundle. Studio opens/selects it explicitly so collection and curation remain compatible with the team's sequential Git ownership workflow. Development-from-source and installed builds can point at the same workspace when intentionally configured to do so.
+The Project Workspace is never placed inside the installed app bundle. Studio opens/selects it explicitly so collection and curation remain compatible with the team's sequential Git ownership workflow. Workspace-internal references use relative paths so the directory can be moved/copied/cloned and can itself be a Git working tree. Development-from-source and installed builds can point at the same workspace when intentionally configured to do so.
+
+Conceptually:
+
+```text
+my-hand-d-workspace/
+├── handd.workspace.json
+├── handd.sqlite
+├── models/
+├── snapshots/
+└── reports/
+```
+
+The exact filenames may evolve during implementation, but the portability/relative-reference contract is fixed.
 
 Retraining therefore produces a new workspace Model Artifact rather than modifying packaged resources. Runtime resolves the active model from compatible workspace artifacts, with the packaged model available as a fallback/bootstrap artifact where appropriate.
+
+Each workspace stores an **Active Model** reference. Whiteboard uses that compatible workspace model whenever the workspace is open; without a workspace, the packaged/default compatible model is used. Model selection remains subject to the Model Artifact compatibility contract.
 
 Normal preferences/cache/logs may use the platform application-data directories, but those are distinct from the project dataset/workspace. Tauri's writable app-data paths are appropriate for application-owned state; the canonical team dataset remains an explicit project/workspace concern.
 

@@ -13,10 +13,10 @@ The advanced project/data workspace inside the same Hand-D desktop application. 
 _Avoid_: Dataset App, admin app
 
 **Project Workspace**:
-A user-selected writable Hand-D project directory that owns the canonical SQLite dataset plus project-scoped snapshots, generated Model Artifacts, reports, and workspace configuration. It is separate from the installed application bundle and can be opened by both source and packaged Hand-D builds.
+A user-selected portable writable Hand-D project directory that owns the canonical SQLite dataset plus project-scoped snapshots, generated Model Artifacts, reports, and workspace configuration. Workspace-internal references use relative paths so the directory can be moved, copied, cloned, or used directly as a Git repository without changing its logical structure. It is separate from the installed application bundle and can be opened by both source and packaged Hand-D builds.
 
 **Easy Mode**:
-A progressive-disclosure UI mode that reduces technical density and exposes safer/high-level controls without changing the underlying workspace, data model, runtime contracts, or artifact compatibility. Advanced controls remain available by switching presentation mode rather than through a different application.
+A progressive-disclosure UI mode, disabled by default, that reduces technical density and exposes safer/high-level controls without changing the underlying workspace, data model, runtime contracts, or artifact compatibility. Advanced controls remain available by switching presentation mode rather than through a different application.
 
 **Drawing Hand**:
 The hand whose gesture directly controls drawing and erasing actions.

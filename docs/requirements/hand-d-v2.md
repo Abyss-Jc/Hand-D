@@ -90,6 +90,9 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Studio is secondary navigation rather than the dominant product surface. It contains workspace/model selection, collection, curation, dataset/project inspection, and advanced configuration without forcing those concepts into the normal Whiteboard UI.
 - Studio is not treated as developer-only. Both technical and non-technical users may access it; progressive disclosure controls how much implementation/model detail is shown.
 - Hand-D provides an Easy Mode presentation that reduces technical density and exposes high-level/safe controls while preserving the same underlying workspace, SQLite data, Model Artifacts, and runtime behavior. Switching Easy Mode does not create a different data format or feature implementation.
+- A Project Workspace is a portable directory, not an opaque app-owned database location. Workspace configuration references SQLite, Model Artifacts, snapshots, and reports by workspace-relative paths so the directory may be moved/cloned/copied or used directly in Git without rewriting its logical relationships.
+- Each Project Workspace owns an **Active Model** selection. When a workspace is open, Whiteboard uses that compatible workspace Model Artifact; when no workspace is open, Whiteboard uses the packaged/default compatible model. Studio is the normal place to inspect/change the workspace's Active Model.
+- Easy Mode is disabled by default for v2. Enabling it hides nonessential technical density and advanced tuning in both Whiteboard and Studio through progressive disclosure; it does not disable capabilities, mutate data differently, or bypass safety/compatibility checks.
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
@@ -187,6 +190,9 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-087 | A normal user launches Hand-D | The desktop shell opens | Whiteboard is the primary/default destination and runtime prepares in the background without requiring workspace/model/database setup first |
 | V2-088 | A user opens Studio | Advanced project controls are needed | Workspace/model configuration, collection, curation, and project inspection are available inside the same installed application rather than a second executable |
 | V2-089 | Easy Mode is enabled | The user navigates Whiteboard or Studio | Technical density and advanced controls are reduced through progressive disclosure without changing the underlying Project Workspace, dataset, Model Artifact compatibility, or runtime semantics |
+| V2-090 | A Project Workspace directory is moved/copied/cloned intact | Hand-D opens it from the new location | Workspace-relative references still resolve its SQLite database, Model Artifacts, snapshots, reports, and configuration without requiring path rewriting |
+| V2-091 | A compatible Project Workspace is open | Whiteboard runtime selects its model | The workspace's Active Model is preferred; if no workspace is open, the packaged/default compatible model is used |
+| V2-092 | Hand-D is installed/launched for the first time | Easy Mode preference is read | Easy Mode is OFF by default; enabling it changes presentation/disclosure only, not underlying capabilities or data semantics |
 
 ## Alcance
 
