@@ -72,6 +72,40 @@ The runtime owns camera access, MediaPipe processing, shared feature transformat
 
 For the App path, freshness is more important than exhausting every camera frame.
 
+Live camera processing uses MediaPipe Hand Landmarker LIVE_STREAM mode and detect_async with monotonic timestamps. Unlike the current IMAGE/detect loop, the live-stream API is asynchronous and is allowed to ignore incoming frames while the landmarker is busy. This bounded/freshness behavior is intentional: Hand-D must prefer the latest usable gesture state over building a backlog of stale camera frames.
+
+VIDEO mode remains available for decoded/recorded video workloads; it is not the primary webcam runtime because detect_for_video is synchronous. IMAGE mode remains for isolated images/tests.
+
+Conceptually the live path is:
+
+Camera capture -> latest-frame boundary -> MediaPipe LIVE_STREAM -> latest landmark result -> Feature Transform -> gesture inference -> temporal state -> frontend result/events.
+
+Every boundary that can accumulate live work must remain bounded/freshness-oriented rather than becoming an unbounded FIFO. Preview rendering is a separate consumer of the latest camera frame and is never upstream of inference.
+
+### Tauri + Python sidecar
+
+Tauri/Rust owns the Python sidecar as a long-lived child process. Rust is responsible for spawn, readiness/health, crash/exit observation, log capture, restart policy, and orderly shutdown. Frontend components use application-level commands/events and do not directly own process creation.
+
+The milestone IPC direction is a loopback HTTP + WebSocket service hosted by Python. HTTP is suitable for request/response operations such as health/configuration and WebSocket carries low-latency runtime events and interactive commands. The service binds only to loopback; the prototype must define dynamic port discovery, per-launch trust/authentication, Tauri capability/CSP scopes, reconnect semantics, protocol versioning, and shutdown behavior.
+
+Endpoint discovery uses OS allocation rather than a fixed port. Python binds to 127.0.0.1:0, reads back the assigned port, and reports it to Tauri/Rust in the sidecar readiness handshake. Tauri/Rust supplies a fresh random launch token to the sidecar and exposes connection information only to the Hand-D frontend/runtime bridge. Restarting the sidecar creates a new endpoint/session rather than assuming that a previous port remains valid.
+
+This localhost service is the Python sidecar API; it is distinct from Tauri's optional localhost plugin for serving frontend assets.
+
+### Camera preview
+
+Both App and Studio may display live camera preview, preserving the current camera-visible/dark-mode product behavior. Studio uses preview as collection feedback; App treats it as an optional presentation mode.
+
+Preview is deliberately independent from control/inference IPC. Python owns the camera once and can fan the latest frame out to MediaPipe and to an optional preview encoder/stream. When no surface subscribes to preview, frame encoding/transport work should stop.
+
+The selected v2 preview path is HTTP MJPEG served directly by the Python sidecar on its authenticated loopback endpoint. The Tauri webview consumes this as an image stream, so frame bytes do not traverse Tauri command/event IPC and do not require application-level JavaScript decoding/reassembly. Preview never shares a backpressure queue with gesture/control events.
+
+MJPEG is tuned/measured on Tiger Lake/CachyOS and Apple Silicon M4. Priority is ordered as gesture latency, tracking/inference stability, visual preview smoothness, then preview resolution/FPS. A dedicated binary WebSocket JPEG stream is retained only as contingency if direct MJPEG later fails an explicit supported-target budget.
+
+WebRTC is not the baseline transport for the milestone because Hand-D needs consistent behavior across Tauri's platform webviews and current WebKitGTK 2.54 disables WebRTC while transitioning backends. Codec/MSE/WebCodecs pipelines may become relevant later if high-resolution preview efficiency becomes more important than the simplicity and portability of MJPEG.
+
+The existing project inspirations in README.md — BaranDev/virtual-whiteboard and the dark-mode hand-tracking demo — remain qualitative interaction references. FaceRay is an explicit architecture inspiration: its Tauri 2 + Python/MediaPipe design keeps CV/video in the Python data plane and serves loopback MJPEG directly to the webview so heavy frame bytes do not cross the control IPC boundary. Hand-D adopts that data-plane separation, while retaining its own HTTP/WebSocket control protocol and model/runtime requirements.
+
 ### Hand-D Studio
 
 Studio is a developer-facing surface for:
@@ -233,7 +267,7 @@ SQLite is the canonical mutable working store. A snapshot freezes the exact trai
 - Legacy CSV data may be used for training, but cannot prove unseen-participant generalization.
 - A third genuinely new participant is the preferred held-out final test participant.
 - The primary collection path may use each participant's selected main hand; a smaller opposite-hand verification set checks the left/right normalization assumption.
-- The desktop shell remains deliberately undecided until prototype evidence exists.
+- Tauri is the selected v2 desktop-shell direction. Python owns ML/runtime work as a packaged sidecar supervised by Tauri/Rust. Loopback HTTP + WebSocket is the selected control/result IPC direction, and authenticated loopback MJPEG is the selected preview transport. Exact protocol schema, reconnect behavior, and MJPEG quality/resolution/FPS remain implementation/performance-tuning details.
 
 ## Fuentes y verificación
 
@@ -248,3 +282,6 @@ SQLite is the canonical mutable working store. A snapshot freezes the exact trai
 | Curator drops a row in memory, then concatenates the original file back during save | `dataset_extraction_tools/data_view_3d.py:181-204` | 2026-10-05 | Verificado por source |
 | Training script is currently four-class and row-random-split | `model_training/gesture_classifier.py:43-86` | 2026-10-05 | Verificado por source |
 | Target App/Studio/data boundaries | `docs/changes/hand-d-v2-modernization.md` | 2026-10-05 | Decisión aprobada, aún no implementada |
+| MediaPipe Hand Landmarker LIVE_STREAM/detect_async() is designed for camera input, returns asynchronously, and may drop input images to reduce latency | https://ai.google.dev/edge/api/mediapipe/python/mp/tasks/vision/HandLandmarker | 2026-10-06 | Verificado en documentación oficial |
+| FaceRay uses Tauri 2 + a Python/MediaPipe sidecar and serves loopback MJPEG directly to the webview so frame bytes do not cross Rust/TypeScript control IPC | https://github.com/aarontran321/FaceRay | 2026-10-06 | Precedente arquitectónico externo |
+| WebKitGTK 2.54 disables WebRTC while its backend transitions from GStreamer WebRTC to LibWebRTC | https://webkitgtk.org/2026/09/16/webkitgtk-2.54-highlights.html | 2026-10-06 | Verificado en documentación oficial |

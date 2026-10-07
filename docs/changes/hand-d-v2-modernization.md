@@ -22,7 +22,16 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - Difficult-but-valid samples must be preserved. Low model confidence or disagreement is evidence that a sample may be informative, not evidence that it is bad data.
 - Collection provenance is local dataset metadata, not remote product analytics. Studio generates a persistent anonymous device ID automatically and records platform, camera, relevant dependency versions, participant, and capture/session identifiers without requiring the operator to tag the host manually.
 - The frontend consumes processed results. Camera capture, MediaPipe tracking, feature extraction, gesture inference, and temporal gesture state belong behind the runtime seam.
-- Tkinter is not a constraint for v2. Tauri, Electron, or another desktop shell must earn the choice through a prototype and measured behavior rather than being selected up front.
+- Tkinter is not a constraint for v2. Tauri is the selected v2 desktop-shell direction, with Python packaged/launched as the ML/runtime sidecar. Prototype evidence is still required before treating the sidecar integration as production-ready.
+- Tauri/Rust owns sidecar lifecycle; the web frontend does not directly spawn/supervise Python.
+- The selected IPC direction is a Python-hosted loopback HTTP + WebSocket service. This changes the transport, not lifecycle ownership: Tauri still starts, monitors, and shuts down the sidecar.
+- Sidecar discovery uses 127.0.0.1 with an OS-assigned dynamic port plus a fresh per-launch token. Python reports the assigned endpoint during readiness; no fixed localhost port is part of the v2 contract.
+- Live webcam inference migrates from the current default IMAGE + blocking detect loop to MediaPipe LIVE_STREAM + detect_async. Freshness is intentional: when processing is busy, stale camera inputs may be dropped rather than queued.
+- VIDEO mode is reserved for recorded/decoded video workloads. Live App and Studio camera paths use the live-stream mode so MediaPipe tracking can be reused without blocking the camera/UI loop.
+- Both App and Studio retain optional camera preview. Studio uses it for collection feedback and App may preserve its current camera/dark-mode toggle. Preview encoding/transport is a separate path and never determines inference cadence.
+- HTTP MJPEG is the selected v2 preview transport: Python serves the latest preview frames directly over the authenticated loopback HTTP endpoint and the webview consumes the stream without routing frame bytes through control IPC. This adopts the same data-plane separation pattern demonstrated by FaceRay while keeping Hand-D's own control protocol.
+- FaceRay is now an explicit architecture inspiration for Tauri + Python/MediaPipe sidecar separation. Hand-D borrows the direct loopback MJPEG preview pattern, not FaceRay's exact stdio control protocol.
+- MJPEG is performance-tuned on Tiger Lake/CachyOS and Apple Silicon M4 rather than re-litigated against WebSocket as a co-equal default. A dedicated binary WebSocket JPEG stream remains contingency only if MJPEG later fails an explicit supported-target budget; WebRTC is not a milestone baseline because current Linux WebKitGTK 2.54 disables WebRTC during its backend transition.
 - CPU is the fallback on every supported platform.
 - macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
 - GPU acceleration is capability-driven:
@@ -105,7 +114,7 @@ Implementation beyond planning/documentation is deferred until the current grill
 
 ## Open decisions
 
-- Frontend delivery model first; transport/IPC is a dependent decision. A browser-hosted web UI may use HTTP/WebSocket/SSE to a local Python process and need no desktop shell, while a packaged Tauri/Electron direction introduces shell lifecycle/packaging concerns and may use shell IPC or another local transport.
+- Exact HTTP/WebSocket protocol schema, reconnection behavior, and MJPEG quality/resolution/FPS tuning.
 - Real-time performance budgets for gesture latency, capture FPS, CPU/GPU use, and startup.
 - Exact release/platform matrix for the October milestone.
 - Migration/version policy for MediaPipe, PyTorch, Python, and packaging.

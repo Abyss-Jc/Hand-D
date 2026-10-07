@@ -52,7 +52,18 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Snapshot and Model Artifact builders never overwrite an existing version. Any materially different dataset view, transform materialization, training run, or model output receives a newly allocated artifact version/ID.
 - CPU is a functional fallback on every supported platform. GPU acceleration is optional and capability-driven.
 - macOS Apple Silicon is a first-class validation target. NVIDIA CUDA, Apple MPS, AMD ROCm, and Intel XPU are only enabled where the selected runtime stack and hardware are actually supported.
-- The desktop shell is not selected by assumption. Tauri, Electron, or another candidate must be validated through a focused prototype before becoming a durable architecture decision.
+- Hand-D v2 targets Tauri as the desktop shell with the Python ML/runtime packaged and launched as a sidecar. A focused prototype must still validate sidecar packaging, lifecycle, IPC/event flow, startup/shutdown behavior, and platform-specific constraints before the integration is treated as production-ready.
+- Tauri/Rust owns the Python-sidecar process lifecycle. The frontend does not directly spawn or supervise Python; Rust starts the sidecar, tracks readiness/health/exit, captures logs, and performs orderly shutdown/restart behavior.
+- The milestone IPC direction is a loopback HTTP + WebSocket service hosted by the long-lived Python sidecar. Tauri/Rust remains the process supervisor while the frontend consumes a narrow local API/event contract. The service binds only to loopback and the prototype must validate dynamic-port discovery/authentication and Tauri capability/CSP constraints.
+- Sidecar endpoint discovery uses an OS-assigned dynamic loopback port rather than a fixed port. The Python service binds to 127.0.0.1 with port 0, reports the assigned port through the startup readiness handshake, and uses a per-launch random token supplied by Tauri/Rust so stale or unrelated local clients cannot reuse a prior session endpoint.
+- Live webcam processing uses MediaPipe Hand Landmarker LIVE_STREAM mode with detect_async and monotonically increasing timestamps rather than the current IMAGE + blocking detect loop. Runtime prioritizes freshness: MediaPipe may discard input frames while busy instead of allowing stale frame work to accumulate.
+- VIDEO mode is reserved for decoded/recorded video processing; IMAGE mode remains appropriate for isolated images/tests. Live App and Studio camera paths share the asynchronous live-stream runtime behavior.
+- Camera preview remains available in both Hand-D App and Hand-D Studio, preserving the current camera/dark-mode behavior where useful. Preview transport is decoupled from inference/control traffic: hiding preview must stop preview encoding/transport work without stopping camera tracking/inference.
+- Studio enables preview during collection by default so the operator can verify hand detection, framing, hand identity, and capture state. App may expose preview as an optional user mode rather than making video transport a prerequisite for gesture operation.
+- Hand-D v2 adopts HTTP MJPEG as the preview transport. The Python sidecar serves the latest preview frames directly over its authenticated loopback HTTP endpoint and the Tauri webview consumes the stream natively. Heavy frame bytes therefore stay outside Tauri command/event IPC and outside application-level JSON/WebSocket control traffic.
+- The architecture follows the same proven data-plane/control-plane separation used by FaceRay (Tauri 2 + Python/MediaPipe sidecar): video stays in the Python-side data plane and the webview pulls a loopback MJPEG stream directly. Hand-D keeps its own HTTP/WebSocket control contract rather than copying FaceRay's stdio control protocol.
+- MJPEG quality/resolution/FPS remains performance-tuned on the CachyOS Tiger Lake development laptop and Apple Silicon M4, but the transport itself is now the selected v2 architecture. A dedicated binary WebSocket preview is contingency/future work only if MJPEG later fails an explicit supported-target budget.
+- Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 
 ## Criterios de aceptación
@@ -69,7 +80,7 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-008 | A genuinely new third participant is available | Final participant-level evaluation runs | That participant is held out from train/validation and used as the preferred unseen-participant test |
 | V2-009 | Only two participants are available by the milestone | Evaluation is reported | Results explicitly distinguish session-level validation from limited participant-level experiments and do not overclaim generalization |
 | V2-010 | Primary-hand data has been collected | Handedness invariance is evaluated | A smaller opposite-hand verification set tests whether canonicalization actually generalizes across hands |
-| V2-011 | A desktop-shell candidate is proposed | It becomes the production direction | A focused prototype has first validated sidecar lifecycle, IPC/event flow, startup/shutdown behavior, and relevant packaging constraints |
+| V2-011 | The Tauri + Python-sidecar integration is proposed for the v2 runtime | It becomes production-ready | A focused prototype has validated sidecar packaging, lifecycle, IPC/event flow, startup/shutdown behavior, and relevant platform constraints |
 | V2-012 | Dependencies are updated | The migration is accepted | The selected Python, MediaPipe, PyTorch, packaging, and acceleration combination is documented and verified on the available target environments |
 | V2-013 | A capture is running | The participant maintains the target gesture | Moderate natural motion/position/orientation variation is retained rather than requiring a single idealized pose |
 | V2-014 | A frame has no usable hand detection or fails technical landmark checks | The Collector considers the frame | It is skipped and does not consume the capture quota |
@@ -115,6 +126,15 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 | V2-054 | Training produces a candidate model | The candidate is persisted | A versioned Model Artifact stores weights, manifest metadata, and evaluation evidence linking it to its Feature Transform and source snapshot |
 | V2-055 | Runtime loads a Model Artifact | The artifact's feature count/transform/label contract conflicts with runtime | Loading fails explicitly instead of attempting inference with a silent semantic mismatch |
 | V2-056 | A snapshot or Model Artifact version already exists | Tooling produces a materially different artifact | The existing artifact is preserved and a new version/ID is created; milestone tooling does not overwrite immutable artifacts in place |
+| V2-057 | Hand-D launches its Python ML/runtime | The desktop application starts | Tauri/Rust owns sidecar spawn, readiness, health/exit supervision, logs, and shutdown; frontend code does not independently spawn the process |
+| V2-058 | Frontend and sidecar exchange runtime commands/results | The v2 IPC prototype runs | A loopback HTTP + WebSocket contract is used while the sidecar remains supervised by Tauri/Rust; the endpoint is not exposed on non-loopback interfaces |
+| V2-058A | The Python sidecar starts | It binds its local API | It binds to 127.0.0.1 on an OS-assigned dynamic port, reports that endpoint through the readiness handshake, and authenticates the launch with a per-launch token supplied by Tauri/Rust |
+| V2-059 | Live camera frames arrive faster than Hand Landmarker can process them | MediaPipe is busy | LIVE_STREAM/detect_async keeps the caller non-blocking and stale inputs may be dropped rather than queued into growing latency |
+| V2-060 | Camera preview is hidden in App or Studio | Gesture runtime continues | Preview encoding/transport stops or idles independently while camera tracking, Feature Transform, model inference, and temporal gesture state continue |
+| V2-061 | Studio performs live collection | The operator is collecting Samples | A live preview is available for framing/tracking feedback without requiring preview rendering to determine ML processing cadence |
+| V2-062 | The v2 live preview is enabled | The Tauri webview renders camera feedback | The Python sidecar serves MJPEG directly over its authenticated loopback HTTP endpoint and the webview consumes the stream without routing frame bytes through Tauri command/event IPC or JSON/WebSocket control messages |
+| V2-063 | Preview rendering becomes slow, hidden, or minimized | Runtime remains active | Gesture/control events remain responsive and preview frames may be throttled/dropped independently rather than backpressuring inference/control |
+| V2-064 | Direct MJPEG preview later fails an explicit supported-target performance budget | Preview transport is reconsidered | A dedicated binary WebSocket JPEG path may be prototyped as a fallback using the same latest-frame/drop semantics rather than replacing the control WebSocket with video traffic |
 
 ## Alcance
 
@@ -126,7 +146,7 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Confidence/model-assessment data sufficient for Suggested for Review.
 - Freshest-result real-time inference path.
 - Cross-platform backend selection with universal CPU fallback.
-- Desktop-shell prototype and UI/UX direction.
+- Tauri + Python-sidecar prototype and UI/UX direction.
 - Dependency modernization.
 - Tests and canonical documentation required to support the above.
 
@@ -137,7 +157,7 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 - Storing collection photos or video in the canonical dataset.
 - Promising unsupported GPU families merely because a vendor SDK exists.
 - Recollecting the full legacy dataset from scratch.
-- Selecting Tauri or Electron before the prototype evidence exists.
+- Treating the Tauri + Python-sidecar integration as production-ready before prototype evidence exists.
 - A complete production-quality v2 rewrite by October 13.
 
 ## Preguntas abiertas y aprobación
@@ -145,7 +165,7 @@ The October 13 milestone is not a complete rewrite. It is a vertical slice that 
 Open:
 
 - Runtime performance budgets.
-- Frontend delivery model (browser-hosted web UI vs packaged desktop shell) and, only after that choice, the transport/IPC mechanism between frontend and Python runtime.
+- Exact HTTP/WebSocket message schema plus MJPEG preview quality/resolution/FPS tuning.
 - Exact compatible dependency versions and packaging strategy.
 
 Confirmed direction is tracked in `docs/changes/hand-d-v2-modernization.md`. This document should be updated when an open product requirement becomes a confirmed decision.

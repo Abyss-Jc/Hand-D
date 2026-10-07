@@ -90,6 +90,7 @@ This project was inspired by:
 
 - [BaranDev/virtual-whiteboard](https://github.com/BaranDev/virtual-whiteboard) - Computer vision virtual whiteboard
 - [test28.html demo](https://smm.axtarget.xyz/test28.html) - Black background hand tracking demo
+- [aarontran321/FaceRay](https://github.com/aarontran321/FaceRay) - Tauri 2 + Python/MediaPipe sidecar architecture; especially the separation between lightweight control IPC and direct loopback MJPEG camera preview
 
 ## Tech Stack
 
@@ -114,3 +115,4 @@ MIT
 - MediaPipe team for hand tracking solutions.
 - BaranDev for the virtual whiteboard inspiration.
 - smm.axtarget.xyz for the dark mode demo inspiration.
+- FaceRay for the Tauri/Python sidecar and loopback-preview architecture reference.
