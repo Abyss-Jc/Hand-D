@@ -219,6 +219,32 @@ Dataset analytics are likewise action-oriented rather than dashboard-heavy. The 
 
 Coverage matrices and a small number of balance/progress charts support those questions. Exploratory embeddings/dimensionality-reduction visualizations are deferred from the default v2 Studio UX.
 
+### Snapshot Readiness
+
+Before Snapshot Builder creates an immutable Development Snapshot, Studio presents a compact readiness result with two severities:
+
+- **Blocker** — the snapshot would violate an integrity/reproducibility/contract invariant and must not be built yet.
+- **Warning** — the snapshot is technically valid, but the data/evaluation coverage deserves attention before committing to the experiment.
+
+Typical blockers include:
+
+- no eligible accepted Samples;
+- malformed or incomplete landmark observations;
+- invalid participant/session/capture references;
+- unavailable required Feature Transform;
+- incompatible label/transform contract;
+- accidental overlap between development membership and sealed final-test membership.
+
+Typical warnings include:
+
+- a gesture/class is underrepresented;
+- a primary participant has fewer independent Sessions than intended;
+- opposite-hand verification is small;
+- unreviewed Samples remain;
+- meaningful class/session/hand imbalance or another analytics-derived collection gap exists.
+
+The readiness layer does not turn collection heuristics into false scientific laws. For example, the current ~100-usable-Sample target may trigger a warning, but snapshot creation is not blocked solely because a class contains fewer observations. Learning-curve evidence remains the mechanism for deciding whether more data is actually needed.
+
 Workspace uses the desktop operating system's native directory chooser through Tauri for Open/Create operations. A new workspace asks only for a name and target location; Hand-D initializes the config, SQLite store, and expected project directories itself.
 
 ### Easy Mode

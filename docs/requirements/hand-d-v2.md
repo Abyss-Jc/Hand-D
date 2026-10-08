@@ -119,6 +119,9 @@ The October 13 milestone is not the whole Hand-D v2 product. Hand-D v2 keeps the
 - Studio -> Models -> Evaluation presents compact product-facing model evidence rather than exposing every metric at once. The primary view emphasizes Macro F1, per-class health, confusion matrix, learning curve, and runtime performance; cross-validation folds, training history, artifact/configuration details, and uncertainty diagnostics remain available through progressive disclosure.
 - Model score terminology distinguishes raw model scores from calibrated probability. Advanced views expose top-1 score, runner-up score, and top-two margin explicitly. Simplified UI may use confidence-oriented language only when copy makes clear that an uncalibrated softmax score is not a guaranteed probability of correctness.
 - Studio -> Dataset includes lightweight analytics focused on collection/review decisions: gesture/class balance, participant/session/hand coverage, Review/Lifecycle counts, collection progress, and gaps. Analytics must remain compact and actionable; exploratory visualizations such as PCA/t-SNE/UMAP are not part of the default v2 Studio surface.
+- Studio exposes Snapshot Readiness before building an immutable Development Snapshot. Readiness separates hard blockers from warnings: hard blockers are integrity/contract problems that would make the snapshot invalid or unreproducible, while warnings cover quality/coverage concerns that should inform the user without imposing arbitrary scientific thresholds.
+- Snapshot Readiness hard blockers include conditions such as no eligible accepted Samples, malformed/incomplete landmark rows, invalid participant/session/capture references, unavailable required Feature Transform, incompatible label/transform contracts, or development/final-test membership conflicts.
+- Snapshot Readiness warnings may include underrepresented gestures, too few independent Sessions, small opposite-hand verification coverage, remaining unreviewed Samples, class imbalance, or other collection gaps. Collection targets such as roughly 100 usable Samples are guidance informed by learning curves, not universal build blockers.
 
 ## Criterios de aceptación
 
@@ -237,6 +240,8 @@ The table below describes the Hand-D v2 target contract. It is intentionally bro
 | V2-107 | A user opens Studio -> Models -> Evaluation | A Model Artifact has evaluation evidence | The default view prioritizes Macro F1, per-class health, confusion matrix, learning curve, and runtime performance, with folds/history/configuration/uncertainty details available through drill-down rather than all visible at once |
 | V2-108 | Studio displays classifier uncertainty | Raw model scores are available | Advanced UI labels top-1 score, runner-up score, and top-two margin explicitly; Hand-D does not present an uncalibrated softmax score as a guaranteed correctness probability |
 | V2-109 | A user opens Studio -> Dataset analytics | Collection/review planning is needed | Studio shows compact balance/coverage/progress information and highlights actionable collection gaps without turning the default Dataset surface into a dense ML dashboard |
+| V2-110 | A user prepares to build a Development Snapshot | Studio evaluates Snapshot Readiness | Integrity/contract failures block creation, while coverage/quality concerns are shown as warnings that may be reviewed or explicitly accepted before continuing |
+| V2-111 | A collection target is below the preferred sample count | Snapshot integrity is otherwise valid | Studio warns about the coverage gap but does not reject snapshot creation solely because an arbitrary sample-count threshold was not reached |
 
 ## Alcance
 
