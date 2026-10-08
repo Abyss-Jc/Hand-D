@@ -81,6 +81,8 @@ Evolve the semester project into one maintained desktop product with two spaces:
 - Snapshot identity stays lightweight: Hand-D allocates the immutable ID automatically and supports only an optional human-readable name/note.
 - Compatible legacy data is frozen as a separate Development Snapshot partition when available; individual experiments choose whether to consume it so legacy/no-legacy comparisons share the same v2 folds.
 - Snapshot creation never starts training automatically. An explicit Prepare Training transition opens the reproducible Training & Evaluation workflow.
+- Training consumes snapshots strictly read-only; correcting data means curate -> new snapshot -> new training rather than mutating prior experiment inputs.
+- Newly trained Model Artifacts are candidates by default and do not replace an existing Active Model automatically. The user explicitly selects a replacement; only a workspace with no prior Active Model may bootstrap to its first compatible trained model.
 
 ## Current evidence
 

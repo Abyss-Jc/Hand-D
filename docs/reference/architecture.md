@@ -264,6 +264,8 @@ Compatible legacy data may be materialized as a distinct frozen partition inside
 
 Snapshot creation and training execution are separate actions. After successful creation Studio may show `View Snapshot` and `Prepare Training`; Prepare Training navigates to Models -> Training & Evaluation with the snapshot/configuration preselected, but no training job starts merely because the snapshot exists.
 
+Training treats the selected snapshot as immutable input. It may create fold checkpoints, metrics, TensorBoard logs, reports, and final Model Artifacts, but it never rewrites the snapshot manifest/NPZ or changes canonical SQLite membership. If data or membership needs correction, the workflow returns to Dataset/curation, creates a new snapshot, and starts a new experiment.
+
 Normal eligibility is the conjunction of two independent states:
 
 ```text
@@ -493,6 +495,8 @@ The exact filenames may evolve during implementation, but the portability/relati
 Retraining therefore produces a new workspace Model Artifact rather than modifying packaged resources. Runtime resolves the active model from compatible workspace artifacts, with the packaged model available as a fallback/bootstrap artifact where appropriate.
 
 Each workspace stores an **Active Model** reference. Whiteboard uses that compatible workspace model whenever the workspace is open; without a workspace, the packaged/default compatible model is used. Model selection remains subject to the Model Artifact compatibility contract.
+
+Producing a new Model Artifact does not implicitly change that Active Model reference. The existing model remains active until the user explicitly selects another compatible artifact in Studio. The only bootstrap exception is a workspace with no Active Model yet: the first successfully produced compatible model may become its initial Active Model automatically.
 
 Normal preferences/cache/logs may use the platform application-data directories, but those are distinct from the project dataset/workspace. Tauri's writable app-data paths are appropriate for application-owned state; the canonical team dataset remains an explicit project/workspace concern.
 

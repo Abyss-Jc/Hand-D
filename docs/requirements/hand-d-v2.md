@@ -128,6 +128,8 @@ The October 13 milestone is not the whole Hand-D v2 product. Hand-D v2 keeps the
 - Snapshot IDs are generated automatically and remain stable/immutable. Studio may attach an optional human-readable name or note for context, but users do not manually manage artifact identity.
 - A Development Snapshot may freeze the compatible legacy partition alongside v2 development data. Whether legacy participates in a given training experiment is experiment configuration, not a casual snapshot-creation toggle; paired legacy/no-legacy comparisons therefore share the same frozen v2 evidence/folds.
 - Creating a snapshot never launches training automatically. Studio presents the completed snapshot and an explicit Prepare Training action that opens Models -> Training & Evaluation with reproducible configuration derived from the snapshot.
+- Training/evaluation consumes snapshots strictly read-only. Training may emit fold checkpoints, metrics, TensorBoard logs, reports, and Model Artifacts, but it never mutates the source snapshot manifest/NPZ or canonical SQLite membership. Data corrections require curation plus a new snapshot and a new training run.
+- A newly trained compatible Model Artifact does not replace the workspace Active Model automatically. The existing Active Model remains selected until the user explicitly chooses another compatible artifact. If a workspace has no Active Model yet, its first successfully produced compatible model may become the initial Active Model by default.
 
 ## Criterios de aceptación
 
@@ -254,6 +256,9 @@ The table below describes the Hand-D v2 target contract. It is intentionally bro
 | V2-115 | Snapshot Builder creates a new snapshot | Artifact identity is allocated | Hand-D generates a stable automatic snapshot ID and may store an optional human-readable name/note without making users manage IDs manually |
 | V2-116 | A Development Snapshot includes compatible legacy data | Training variants are prepared | The legacy partition is frozen with the snapshot, while each experiment explicitly chooses legacy=false/true against the same v2 folds/evidence |
 | V2-117 | Snapshot creation completes | The user wants to proceed toward training | Studio does not train automatically; it offers an explicit Prepare Training action that derives a reproducible training configuration from the immutable snapshot |
+| V2-118 | Training/evaluation runs from an immutable snapshot | Outputs are produced | Training reads the snapshot without modifying its manifest/materialization or SQLite membership and writes only new experiment/model/report artifacts |
+| V2-119 | Training produces a new compatible Model Artifact | A workspace already has an Active Model | The previous Active Model remains active until the user explicitly selects/promotes the new artifact |
+| V2-120 | Training produces the first compatible Model Artifact for a workspace | No Active Model exists | Hand-D may select that first compatible artifact as the workspace's initial Active Model without replacing any prior model choice |
 
 ## Alcance
 
