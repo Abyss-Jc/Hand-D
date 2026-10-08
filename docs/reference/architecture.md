@@ -16,7 +16,7 @@ This reference separates **verified current architecture** from the **target v2 
 - MediaPipe Hand Landmarker creation;
 - per-frame synchronous `detect(...)`;
 - handedness correction and drawing/modifier role assignment;
-- landmark canonicalization;
+- landmark canonicalization, now delegated to the shared `handd_core.feature_transform` v1 module (extracted 2026-10-08);
 - PyTorch gesture inference;
 - delivery of `GestureResult` to the UI.
 
@@ -27,6 +27,8 @@ The current classifier is a 69 → 128 → 64 → 5 MLP. Its runtime backend is 
 `dataset_extraction_tools/data_extractor.py` captures webcam frames, processes every configured stride, canonicalizes a detected hand, and appends feature rows to a CSV. The CSV stores 69 features plus handedness and label.
 
 The collector currently contains inconsistent handedness semantics: filtering compares the requested hand to MediaPipe's raw label, while the feature function separately computes the actual hand as the opposite label after mirror correction.
+
+The standalone CSV/plotting collector is still a **legacy** path and has not yet migrated to the shared Feature Transform. The v2 collection core must import the shared module rather than copying this normalization logic.
 
 ### Dataset curation
 

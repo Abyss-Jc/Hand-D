@@ -29,6 +29,17 @@ The v2 workflow should prefer `uv run ...`/`uv sync` instead of requiring shell 
 
 Exact dependency groups/commands remain `No verificado` until the new `pyproject.toml` and lockfile are created and synced successfully. The current requirements files remain legacy migration inputs, not the future dependency source of truth.
 
+### Transitional contract tests (verified 2026-10-08)
+
+Before the `uv` migration, no-camera checks run using the preexisting project-local `venv`:
+
+```bash
+venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+venv/bin/python -m compileall -q handd_core visualizer_app/gesture_engine.py tests/test_feature_transform.py
+```
+
+Verified result: **10 tests passed** for shared Feature Transform v1 and existing GestureEngine checks, including a subprocess import from the legacy source-script working directory. A separate valid-input comparison with the pre-refactor canonicalizer was exact for float32/float64 and Left/Right fixtures. This does not verify `uv sync`, camera operation, or the new data pipeline.
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:

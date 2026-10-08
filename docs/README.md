@@ -7,6 +7,8 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | Question | Canonical document |
 |---|---|
 | What must Hand-D v2 do? | [Requirements](requirements/hand-d-v2.md) |
+| What exactly must the October 13 tracer prove? | [Tracer specification](spec/hand-d-v2-oct13-tracer.md) |
+| Which tickets are executed next and how are they verified? | [Execution tickets](changes/hand-d-v2-tickets.md) |
 | What should approved Whiteboard/Studio UX look and behave like? | [v2 UX Shape](design/hand-d-v2-ux-shape.md) |
 | How is Hand-D structured today and what boundaries are we moving toward? | [Architecture reference](reference/architecture.md) |
 | What are we changing for the October 13 milestone, and in what order? | [v2 roadmap](changes/hand-d-v2-roadmap.md) |

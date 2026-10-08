@@ -19,6 +19,7 @@ Output classes (Josué's label encoding order):
 """
 
 import time
+import sys
 import urllib.request
 from pathlib import Path
 from threading import Thread
@@ -29,6 +30,15 @@ import mediapipe as mp
 import numpy as np
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+
+# Transitional support for direct source-script launch before uv installs
+# handd_core as a project package. Remove once all entrypoints use uv run/-m.
+if not __package__:
+  project_root = str(Path(__file__).resolve().parents[1])
+  if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from handd_core.feature_transform import canonicalize_world_landmarks as canonicalize
 
 # Torch is optional until the real model arrives — stub kicks in if missing
 try:
@@ -83,70 +93,8 @@ INDEX_TIP = 8  # landmark index for fingertip used in drawing
 
 
 # ---------------------------------------------------------------------------
-# Feature canonicalization  (mirrors data_extractor.py exactly)
+# Shared Feature Transform v1; data/ML/runtime callers share one implementation.
 # ---------------------------------------------------------------------------
-
-
-def canonicalize(landmarks_3d: np.ndarray, raw_mp_handedness: str) -> np.ndarray | None:
-  """
-  Takes raw hand_world_landmarks (21x3 array) and MediaPipe's raw handedness
-  string ("Left" or "Right" — mirrored), returns a 69-float feature vector
-  identical to what was used at training time.
-
-  Returns None if the hand orientation is unstable / degenerate.
-  """
-  wrist = landmarks_3d[0]
-  pts = landmarks_3d - wrist
-
-  # Mirror correction: MediaPipe flips left/right in selfie mode
-  if raw_mp_handedness == 'Left':
-    pts[:, 0] = -pts[:, 0]
-
-  # Scale by mean wrist→MCP distance
-  mcps = pts[[5, 9, 13, 17]]
-  scale = np.mean(np.linalg.norm(mcps - pts[0], axis=1))
-  if scale < 1e-3:
-    return None
-  pts = pts / scale
-
-  # Build canonical frame from palm plane
-  p_wrist = pts[0]
-  p_index_mcp = pts[5]
-  p_pinky_mcp = pts[17]
-  p_middle_mcp = pts[9]
-
-  global_y = p_middle_mcp - p_wrist
-  norm_y = np.linalg.norm(global_y)
-  if norm_y < 1e-3:
-    return None
-  global_y = global_y / norm_y
-
-  vec1 = p_index_mcp - p_wrist
-  vec2 = p_pinky_mcp - p_wrist
-  cross = np.cross(vec1, vec2)
-  if np.linalg.norm(cross) < 1e-3:
-    return None
-  global_z = cross / np.linalg.norm(cross)
-
-  global_x = np.cross(global_y, global_z)
-  norm_x = np.linalg.norm(global_x)
-  if norm_x < 1e-3:
-    return None
-  global_x = global_x / norm_x
-
-  global_y = np.cross(global_z, global_x)
-  global_y = global_y / np.linalg.norm(global_y)
-
-  rotation_matrix = np.stack([global_x, global_y, global_z], axis=1)
-  canonical = np.dot(pts, rotation_matrix)
-
-  if np.any(np.abs(canonical) > 4.0):
-    return None
-
-  # Note: handedness_binary is NOT included — Josué's model was trained on
-  # 63 (canonical coords) + 3 (global_y) + 3 (global_z) = 69 features only.
-  features = np.concatenate([canonical.flatten(), global_y, global_z])
-  return features.astype(np.float32)  # shape (69,)
 
 
 # ---------------------------------------------------------------------------
