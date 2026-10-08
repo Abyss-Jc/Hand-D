@@ -2,7 +2,9 @@
 
 ## Objetivo
 
-Deliver a technically credible Hand-D v2 vertical slice by October 13 without pretending the whole rewrite is complete. The milestone should establish reliable data/model contracts, a corrected real-time runtime path, a usable Studio collection/curation slice, reproducible evaluation, refreshed dependencies, documentation, and evidence for the future desktop UI architecture.
+Deliver a technically credible Hand-D v2 tracer/vertical slice by October 13 without pretending the whole target product is complete. The milestone should prove the central path end-to-end: canonical collection -> SQLite/review -> immutable snapshot -> reproducible training/evaluation -> Model Artifact -> fresh real-time inference -> minimal Tauri integration.
+
+The broader Hand-D v2 architecture remains intentionally larger than this milestone. Confirmed features such as the complete Studio information architecture, Easy Mode polish, extensible gesture UX, release/CD polish, and Tier-1 validation on every desktop OS may continue after October 13 without being considered architectural reversals.
 
 ## No-objetivo
 
@@ -11,7 +13,21 @@ Deliver a technically credible Hand-D v2 vertical slice by October 13 without pr
 - Recollect the complete legacy dataset.
 - Promise every GPU family.
 - Merge directly into `main` during implementation.
-- Select Tauri/Electron before a measured prototype.
+- Finish every confirmed Studio/product/release feature before the tracer path works.
+- Treat Windows as Tier-1 hardware-validated merely because CI builds it.
+- Force MediaPipe 1.1.x or ONNX Runtime if their compatibility spikes fail.
+
+## Milestone cut line
+
+| Area | October 13 gate | Broader v2 target, not required to be fully polished by October 13 |
+|---|---|---|
+| Data | Canonical Sample/landmarks/provenance + separate Review/Lifecycle state in SQLite | Full Studio browse/filter/analytics polish |
+| Collection | One working Participant -> Session -> Capture path | Complete gesture-checklist UX and extensible-gesture authoring polish |
+| Curation | Accept/Reject/Drop semantics + snapshot eligibility + minimal review path | Full Suggested-for-Review UI, dashboards, convenience workflows |
+| ML | Immutable Development Snapshot, grouped CV, OOF assessments, metrics, final-refit protocol, Model Artifact | Full Studio-owned training UI / MLflow-scale experiment management |
+| Runtime | LIVE_STREAM freshness path, normalized runtime result contract, working model inference | Exhaustive provider optimization across every accelerator |
+| Desktop | Minimal Tauri shell + Python sidecar lifecycle + HTTP/WS + MJPEG proof | Final packaging/CD/updater and complete Impeccable-polished Studio |
+| Platforms | Linux Tier-1 evidence; macOS Tier-1 evidence when lab access exists; Windows native CI/build contract | Windows Tier-1 camera/runtime claim before real hardware evidence |
 
 ## Archivos y componentes afectados
 
@@ -35,10 +51,10 @@ Do not begin with the new UI shell. First stabilize the contracts the UI will co
 ```text
 data contract
   → shared transforms / handedness
-  → reproducible evaluation
-  → Studio workflow
+  → snapshot / reproducible evaluation
+  → minimal collection + review workflow
   → runtime result contract
-  → desktop-shell prototype
+  → Tauri-sidecar vertical integration
   → integration / hardening
 ```
 
@@ -61,10 +77,12 @@ Gate:
 
 Deliverables:
 
-- establish a project-local reproducible Python environment;
-- choose and verify the initial compatible Python / MediaPipe / PyTorch dependency set on the Linux development machine;
+- establish a project-local Python 3.13 environment managed by `uv` with `pyproject.toml` + `uv.lock`;
+- separate runtime/training/dev dependency groups and remove duplicate/conflicting OpenCV distributions;
+- freeze current MediaPipe contract tests before testing 1.1.x as a candidate rather than a mandatory migration;
+- prototype PyTorch-vs-ONNX Runtime deployment only after the canonical model contract is executable;
 - centralize handedness conversion and landmark/feature canonicalization behind one tested implementation;
-- define canonical sample/provenance/review-state schema;
+- define canonical sample/provenance schema with independent Review Status and Sample Lifecycle Status;
 - define legacy import boundary without rewriting legacy history.
 
 Verification focus:
@@ -98,15 +116,17 @@ Deliverables:
 
 - reversible accepted/rejected workflow;
 - dataset generation excludes rejected samples without deleting source observations;
-- model-assessment contract for class scores/confidence;
-- initial Suggested for Review signals such as model disagreement and tracking/geometry problems;
+- model-assessment contract for class scores/margin plus training-membership/out-of-sample context;
+- out-of-fold assessments from session-held-out CV for authoritative development Suggested for Review evidence;
+- initial Suggested for Review signals are disagreement and uncertainty; geometry hooks remain deferred until justified by observed data;
 - confidence threshold remains configurable/experimental rather than an invented fixed truth.
 
 Verification focus:
 
 - rejected samples cannot silently reappear in generated training data;
+- dropped samples retain their prior Review Status and remain canonically restorable;
 - difficult-but-valid samples can remain accepted;
-- changing model version does not overwrite historical sample truth.
+- changing model version does not overwrite historical sample truth or historical Model Assessments.
 
 ### October 9 — training and evaluation repair
 
@@ -117,6 +137,8 @@ Deliverables:
 - legacy dataset allowed for training but not authoritative final testing;
 - metrics beyond raw accuracy: confusion matrix and per-class precision/recall/F1;
 - model artifact metadata records label order and feature-transform compatibility.
+- out-of-fold predictions/score margins are materialized for the development Samples;
+- after development choices freeze, the selected configuration is refit on all eligible P001/P002 development data before any P003 final evaluation.
 
 Preferred evaluation:
 
@@ -129,15 +151,18 @@ Verification focus:
 - no row-level random leakage across grouped splits;
 - validation loader actually reads validation data;
 - repeated run with the same seed/config reproduces the split.
+- every development Sample's authoritative review assessment comes from a fold that excluded its Collection Session from training;
+- P003 is consulted only after final refit and is not fed back into the milestone model.
 
 ### October 10 — real-time runtime v2
 
 Deliverables:
 
-- benchmark MediaPipe IMAGE/current behavior against VIDEO/LIVE_STREAM candidates as applicable;
+- migrate the webcam path to the already-selected MediaPipe LIVE_STREAM/detect_async contract after compatibility tests pass;
 - implement the freshest-result policy for the App path;
 - prediction contract returns label plus scores/confidence;
-- backend resolver supports CPU universally and optional validated acceleration;
+- runtime result sends normalized tracking coordinates; frontend owns canvas mapping/smoothing/drawing state;
+- provider resolver supports CPU universally and optional acceleration only when benchmark evidence is positive;
 - correct engine pause/stop/lifecycle behavior.
 
 Verification focus:
@@ -151,10 +176,10 @@ Verification focus:
 
 Deliverables:
 
-- define the App and Studio primary flows using UI/UX analysis principles;
-- prototype the minimum runtime-to-frontend contract with leading shell candidate(s);
+- continue defining App and Studio primary flows before Impeccable Shape;
+- prototype the minimum runtime-to-frontend contract with the selected Tauri shell;
 - validate Python sidecar/process lifecycle, IPC/event flow, startup, shutdown, crash behavior, and packaging constraints;
-- choose a shell only if the evidence is sufficient; otherwise keep the decision open.
+- validate direct MJPEG preview independently from HTTP/WebSocket control/result traffic.
 
 The prototype is disposable. It must not force production architecture merely because it exists.
 
@@ -163,8 +188,9 @@ The prototype is disposable. It must not force production architecture merely be
 Deliverables:
 
 - integrate the vertical slice;
-- Linux CPU baseline test;
-- Apple Silicon/MPS validation if lab access is available;
+- Linux end-to-end Tier-1 test, including CPU fallback and any candidate runtime provider;
+- Apple Silicon Tier-1 validation if lab access is available, including MPS training and runtime-provider comparison;
+- Windows native CI/build/startup/model-load contract validation without claiming camera Tier-1 status;
 - run opposite-hand verification collection;
 - update runbook with commands that were actually executed;
 - close or explicitly defer open milestone blockers.
@@ -201,23 +227,26 @@ No direct `main` work is part of this roadmap. Merge/release is a separate revie
 
 Required categories by milestone:
 
-- unit: canonicalization, handedness, schema, backend selection, model metadata;
-- data: curation reversibility, grouped split integrity, legacy import;
-- ML: reproducible split, confusion matrix, per-class metrics, held-out evaluation where possible;
+- unit: canonicalization, handedness, schema, runtime/provider selection, model metadata;
+- data: curation/lifecycle reversibility, grouped split integrity, legacy import;
+- ML: reproducible split, OOF assessments, confusion matrix, per-class metrics, final refit, held-out evaluation where possible;
 - runtime: newest-result behavior, lifecycle, error states;
 - integration: collector → dataset → training → model artifact → runtime;
-- platform: Linux CPU required; M4/MPS when physically available; optional GPU paths only where hardware exists.
+- platform: Linux Tier-1 required; M4 Tier-1 when physically available; Windows native build/contract Tier-2; acceleration only where hardware/provider evidence exists.
 
 ## Definición de terminado
 
 The October 13 vertical slice is complete when:
 
 - canonical docs match the implemented architecture;
-- CPU operation is verified;
+- `uv` can recreate the documented Python project environment and dependency groups;
+- CPU fallback operation is verified;
 - collection and reversible curation use the new data contract;
 - training/evaluation is reproducible and five-class;
 - grouped evaluation avoids known row-level leakage;
+- Suggested-for-Review evidence has an out-of-fold path rather than relying on in-sample confidence;
+- the final-training protocol explicitly refits on all development data before a one-time P003 evaluation when P003 exists;
 - the App runtime follows the newest-result policy;
 - dependency choices are documented and tested on available hardware;
-- UI shell direction has prototype evidence rather than assumption;
+- Tauri + sidecar + HTTP/WS + MJPEG has vertical-slice prototype evidence;
 - limitations around participants/platforms are reported explicitly.

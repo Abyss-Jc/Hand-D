@@ -18,14 +18,14 @@ Hand-D is developed and tested across machines that may expose different acceler
 
 ## Decisión
 
-CPU is a supported fallback everywhere. Hand-D may prefer CUDA, MPS, ROCm, or PyTorch XPU only when the selected software stack reports support and the target combination has been validated. A vendor SDK existing on a machine is not sufficient evidence by itself.
+CPU is a supported fallback everywhere. Training prefers validated PyTorch acceleration such as CUDA/MPS/ROCm/XPU where it materially helps. Packaged runtime also prefers a validated accelerated provider when it meets or improves the interaction budget, but provider/hardware benchmarks make that selection because availability alone does not guarantee a net win for the small gesture MLP. A vendor SDK or execution provider existing on a machine is not sufficient evidence by itself.
 
 ## Consecuencias
 
-- Backend selection becomes a tested runtime concern.
+- Training-backend selection and deployment-runtime provider selection are related but distinct tested concerns.
 - Platform-specific acceleration dependencies may need separate installation/packaging paths.
 - Performance claims must name the backend/hardware actually tested.
-- The current Tiger Lake/Iris Xe development laptop remains CPU-first unless a supported acceleration path is demonstrated.
+- The current Tiger Lake/Iris Xe development laptop remains CPU-fallback capable; an accelerated runtime path is used only if benchmark evidence shows a benefit.
 
 ## Sustituye o es sustituido por
 

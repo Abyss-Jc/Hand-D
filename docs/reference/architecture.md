@@ -64,7 +64,7 @@ flowchart LR
 
 ### Hand-D App
 
-The App is the product surface. It consumes processed runtime results and owns the drawing document/canvas state. Strokes, erasures, color/thickness, undo/redo, and current-document state are frontend/application concerns; they do not live inside the Python sidecar. The App should not own ML training, dataset curation, or direct knowledge of training storage.
+The App is the product surface. It consumes processed runtime results and owns the drawing document/canvas state. Strokes, erasures, color/thickness, undo/redo, current-document state, canvas-coordinate mapping, and pointer smoothing/interpolation are frontend/application concerns; they do not live inside the Python sidecar. The App should not own ML training, dataset curation, or direct knowledge of training storage.
 
 Hand-D is one desktop application with two product spaces:
 
@@ -75,7 +75,7 @@ These are navigation/product boundaries, not separate executables. They share th
 
 ### Runtime Core
 
-The runtime owns camera access, MediaPipe processing, shared feature transformation, gesture inference, temporal gesture behavior, hardware backend selection, and lifecycle/error states. The App frontend consumes results from this boundary.
+The runtime owns camera access, MediaPipe processing, shared feature transformation, gesture inference, gesture/tracking stabilization, hardware backend/provider selection, and lifecycle/error states. The App frontend consumes normalized tracking coordinates plus transient gesture/runtime state from this boundary rather than camera-pixel drawing commands.
 
 For the App path, freshness is more important than exhausting every camera frame.
 
@@ -140,7 +140,7 @@ Preview cadence is source/capability-driven. If a camera exposes a stable 60 FPS
 
 WebRTC is not the baseline transport for the milestone because Hand-D needs consistent behavior across Tauri's platform webviews and current WebKitGTK 2.54 disables WebRTC while transitioning backends. Codec/MSE/WebCodecs pipelines may become relevant later if high-resolution preview efficiency becomes more important than the simplicity and portability of MJPEG.
 
-The existing project inspirations in README.md — BaranDev/virtual-whiteboard and the dark-mode hand-tracking demo — remain qualitative interaction references. FaceRay is an explicit architecture inspiration: its Tauri 2 + Python/MediaPipe design keeps CV/video in the Python data plane and serves loopback MJPEG directly to the webview so heavy frame bytes do not cross the control IPC boundary. Hand-D adopts that data-plane separation, while retaining its own HTTP/WebSocket control protocol and model/runtime requirements.
+The existing project inspirations in README.md — BaranDev/virtual-whiteboard and the dark-mode hand-tracking demo — remain qualitative interaction references. FaceRay is an explicit preview/data-plane architecture inspiration: its Tauri 2 + Python/MediaPipe design keeps CV/video in the Python data plane and serves loopback MJPEG directly to the webview so heavy frame bytes do not cross the control IPC boundary. Hand-D adopts that separation, but FaceRay is not the authority for Hand-D's drawing-state ownership or control protocol; Hand-D retains frontend-owned drawing state and its own HTTP/WebSocket runtime contract.
 
 ### Hand-D Studio
 
@@ -152,7 +152,7 @@ Studio is an advanced project/data surface for:
 - collection sessions/captures;
 - dataset inspection;
 - Suggested for Review;
-- accepted/rejected/dropped curation;
+- accepted/rejected curation plus independent Sample lifecycle/drop management;
 - dataset export/preparation.
 
 Training/evaluation should be invokable reproducibly from tooling/CLI for the milestone, but is not required inside the Studio GUI.
@@ -210,18 +210,26 @@ Easy Mode is disabled by default in v2. It is a presentation policy over the sam
 
 Easy Mode must not silently mutate data, bypass Model Artifact compatibility checks, create a different workspace format, or make destructive curation actions less explicit.
 
+The non-Easy default must still be usable by a non-technical user. Easy Mode is a stronger progressive-disclosure layer for people who want fewer metrics, IDs, and tuning controls; it is not a substitute for sound default information architecture.
+
+Whiteboard itself must remain understandable to a non-technical end user without requiring Easy Mode. Easy Mode primarily reduces technical density in Studio and advanced/runtime panels; technical users can leave it disabled to retain direct access to ML/runtime details.
+
 ### Dataset Core
 
 The canonical observation is raw landmark data plus provenance and human labeling/review state. The canonical working store is SQLite so Studio can query, curate, and update this state transactionally. A versioned transform produces the feature representation used by a specific model.
 
-Review Status has four milestone values:
+Review Status has three values:
 
 - **unreviewed** — no human curation decision yet;
 - **accepted** — eligible for future snapshot membership, subject to snapshot rules;
-- **rejected** — reviewed and intentionally excluded because the Sample is unsuitable for training;
+- **rejected** — reviewed and intentionally excluded because the Sample is unsuitable for training.
+
+Sample Lifecycle Status is independent:
+
+- **active** — participates in normal dataset views and may be snapshot-eligible if Review Status is accepted;
 - **dropped** — reversible soft delete; hidden from normal active views and excluded from future snapshots while remaining canonical/auditable.
 
-Reject and Drop are intentionally different semantics. Neither physically removes the Sample or its landmarks. A Drop is represented through the same append-only Review Event history so it can be restored later without loss of provenance.
+Reject and Drop are intentionally different semantics. Reject changes the human quality decision; Drop changes lifecycle/visibility while preserving that quality decision. Neither physically removes the Sample or its landmarks. Review transitions append Review Events; lifecycle transitions append Lifecycle Events.
 
 Conceptual relationships:
 
@@ -232,6 +240,7 @@ flowchart TD
     S --> C[Capture]
     C --> O[Sample / Observation]
     O --> R[Human Review State]
+    O --> L[Sample Lifecycle State]
     O --> F[Versioned Feature Transform]
     F --> SB[Snapshot Builder]
     SB --> SNAP[Immutable Snapshot: manifest + NPZ]
@@ -274,7 +283,7 @@ Snapshots reference the Feature Transform contract used to materialize model inp
 
 ### Snapshot Builder
 
-Snapshot Builder is the boundary between mutable Dataset Core state and reproducible ML execution. It reads an approved historical view from SQLite, applies the selected Feature Transform exactly once during materialization, and emits an immutable snapshot. Training/evaluation does not query SQLite directly after the snapshot exists.
+Snapshot Builder is the boundary between mutable Dataset Core state and reproducible ML execution. It reads an approved historical view from SQLite, selecting active + accepted Samples according to the snapshot policy, applies the selected Feature Transform exactly once during materialization, and emits an immutable snapshot. Training/evaluation does not query SQLite directly after the snapshot exists.
 
 The milestone snapshot consists conceptually of a manifest.json plus dataset.npz.
 
@@ -286,7 +295,9 @@ The Development Snapshot is shared across the P001/P002 development protocol. It
 
 This guarantees that with-legacy and without-legacy comparisons change the intended variable instead of silently changing validation membership.
 
-P003 is never materialized into the Development Snapshot. Once all development/model-selection decisions are frozen, Snapshot Builder may create a separate Final Test Snapshot for P003 and that snapshot is used for the single held-out final evaluation.
+Each session-held-out fold may persist its trained fold model/checkpoint with a stable identity so OOF Model Assessments can name the exact model that produced them. Fold models are evaluation artifacts, not Active Model candidates. Once transform/model/legacy/threshold choices are frozen, training performs one final refit over all eligible P001/P002 development Samples (plus legacy only when selected); that final-refit Model Artifact is the promotable runtime candidate.
+
+P003 is never materialized into the Development Snapshot. Once all development/model-selection decisions are frozen, the selected configuration is refit once using all eligible P001/P002 development Samples (plus legacy only if selected by development evidence). Snapshot Builder then creates a separate Final Test Snapshot for P003 and that final candidate is evaluated against it once. P003 does not feed back into milestone training/tuning.
 
 An existing snapshot is self-contained for ML execution. Later SQLite review changes or Feature Transform implementation changes do not alter its manifest or materialized NPZ. New canonical decisions require a new snapshot.
 
@@ -294,11 +305,21 @@ Immutability is enforced by creation semantics rather than filesystem permission
 
 ### Model Artifact
 
-Training output is a versioned bundle rather than an unqualified weights file. The milestone bundle consists conceptually of weights.pth, manifest.json, and metrics.json.
+Training output is a versioned bundle rather than an unqualified weights file. PyTorch remains the training baseline, so the canonical training output retains weights.pth. The bundle may also contain a derived deployment representation such as model.onnx when a deployment-runtime prototype accepts it. Conceptually:
+
+```text
+model-<id>/
+├── weights.pth
+├── model.onnx        # optional until ONNX Runtime is selected
+├── manifest.json
+└── metrics.json
+```
 
 The model manifest declares, at minimum:
 
 - model identity and architecture/version;
+- artifact role, at minimum distinguishing cross-validation/fold evidence from a final-refit promotable candidate;
+- available runtime/deployment format(s) and their compatibility/equivalence evidence;
 - Feature Transform identity/version and expected output contract;
 - expected input dtype/feature count;
 - label mapping/order;
@@ -307,17 +328,21 @@ The model manifest declares, at minimum:
 - legacy inclusion policy and relevant experiment configuration;
 - compatibility/runtime metadata.
 
-The metrics document carries the evaluation evidence associated with the artifact, including aggregate session-cross-validation Macro F1, accuracy, per-class precision/recall/F1, confusion-matrix data, learning-curve summary, and other promotion evidence produced by the finalized protocol.
+The metrics document carries evidence appropriate to the artifact role. Fold artifacts record their held-out Session/fold metrics and OOF-assessment context. The final-refit candidate may reference the aggregate development CV/learning-curve evidence used to select its configuration plus the one-time sealed final-test result when that evaluation is performed.
 
 Runtime treats the model manifest as a compatibility contract. It validates the expected Feature Transform/input and label mapping before loading the model for inference. A dimensionally compatible but semantically incompatible model must not be allowed to run merely because its tensor shape happens to match.
 
 Model Artifact creation follows the same rule: an existing model version is never replaced in place. A new training output receives a new model ID/version.
 
+The packaged inference runtime is selected by executable evidence rather than by assuming that training and deployment must use the same library. A focused prototype compares native PyTorch inference with PyTorch-exported ONNX executed by ONNX Runtime, covering numerical equivalence, p95 inference latency/cadence, startup time, packaged footprint, and provider availability/behavior on Linux x86-64, macOS arm64, and Windows x86-64. PyTorch remains the training framework even if ONNX Runtime is selected for deployment.
+
 ### Model Assessment
 
 Prediction confidence and class scores belong to the pair **sample + model version**, not permanently to the sample itself. Model disagreement or low confidence can prioritize review, but does not imply invalid data.
 
-Each assessment references the exact Model Artifact that produced it. Studio may designate one model version as the current review model for a curation pass, but historical assessments from prior models remain immutable and queryable.
+Each assessment references the exact Model Artifact that produced it and records whether the assessed Sample was inside that model's training membership plus any relevant fold/snapshot context. Studio may designate one model version as the current review model for a curation pass, but historical assessments from prior models remain immutable and queryable.
+
+Suggested for Review prefers out-of-sample evidence. During Development Snapshot cross-validation, every P001/P002 Sample receives its authoritative development assessment from the fold where its complete Collection Session was held out. A previously trained Active Model may also provide valid review evidence for newly collected Samples that were never part of that model's training membership. In-sample assessments can remain queryable for diagnostics, but they are not the authoritative uncertainty/disagreement signal.
 
 The first uncertainty ranking uses the margin between the top two class scores. A low margin indicates that the model's decision is ambiguous relative to its nearest competing class; the threshold is calibrated from development-validation behavior rather than treated as a universal probability claim.
 
@@ -325,11 +350,11 @@ Suggested for Review is exposed as a ranked queue: explicit model disagreement r
 
 ### Curation state
 
-Human curation is represented by an append-only Review Event history plus an efficiently queryable current Review Status. Automatic signals may prioritize a Sample in Suggested for Review but do not mutate its human review state.
+Human curation is represented by an append-only Review Event history plus an efficiently queryable current Review Status. Sample lifecycle/soft deletion is represented separately by Lifecycle Status + Lifecycle Events. Automatic signals may prioritize a Sample in Suggested for Review but do not mutate either state.
 
 Rejection annotation is optional. Studio exposes a small default tag vocabulary for common causes and permits custom tags when new failure modes appear. Tags are review context rather than Sample truth, and an optional free-form note may accompany them.
 
-Rejected and Dropped Samples remain part of the canonical historical dataset and are filtered out when eligible snapshot membership is materialized. Physical deletion is reserved for the previously defined explicit discard path for incomplete, snapshot-unreferenced Captures.
+Rejected and Dropped Samples remain part of the canonical historical dataset and are filtered out when eligible snapshot membership is materialized for different reasons: rejection is a quality decision; drop is lifecycle/visibility. Physical deletion is reserved for the previously defined explicit discard path for incomplete, snapshot-unreferenced Captures.
 
 Review changes never rewrite an existing immutable snapshot. They affect eligibility only when a later snapshot is created.
 
@@ -337,24 +362,26 @@ Review changes never rewrite an existing immutable snapshot. They affect eligibi
 
 CPU is always a valid fallback.
 
-Preferred acceleration is capability-driven:
+Training prefers validated hardware acceleration where available because training work benefits materially from larger tensor workloads:
 
 - NVIDIA: CUDA where supported;
 - Apple Silicon: MPS where supported;
 - AMD: ROCm only on supported hardware/OS/runtime combinations;
 - Intel: PyTorch XPU only on validated hardware/runtime combinations.
 
-Vendor SDK support alone is not enough to claim that Hand-D supports a PyTorch backend on a given machine.
+Runtime acceleration is provider/benchmark-driven rather than assumed from training support. The current MLP has only 17,541 parameters, so CPU may beat a GPU/provider once transfer/startup overhead is included. If ONNX Runtime is selected, provider choice is validated independently (for example CPU, CUDA, CoreML/OpenVINO/DirectML where supported by the selected package/platform). Hand-D prefers a validated accelerated provider when it measurably improves the runtime budget and otherwise falls back to CPU.
+
+Vendor SDK/provider availability alone is not enough to claim Hand-D support on a machine.
 
 ### Platform/runtime matrix
 
 The intended v2 desktop matrix is:
 
-- **Linux x86-64** — first-priority development/validation target; CPU baseline on the current Tiger Lake/CachyOS host, with optional acceleration only when a supported PyTorch backend is actually present.
-- **macOS arm64** — first-priority lab target; Apple Silicon CPU + MPS validation on the M4 lab machines.
-- **Windows x86-64** — supported v2 target, but validated after Linux/macOS because no equivalent always-available Windows test host is part of the primary development loop.
+- **Linux x86-64** — Tier 1 milestone target; end-to-end validation on the current Tiger Lake/CachyOS host.
+- **macOS arm64** — Tier 1 milestone target; end-to-end validation on Apple Silicon M4 lab hardware, including MPS for training and runtime-provider benchmarking.
+- **Windows x86-64** — Tier 2 milestone target until a real Windows camera/runtime smoke test is available; native CI/build/contract validation still runs.
 
-Tauri external sidecars are target-specific binaries, so each supported target receives its own packaged Python executable and native Tauri build. PyInstaller is not treated as a cross-compiler: Windows artifacts are built on Windows, macOS artifacts on macOS, and Linux artifacts on Linux.
+Tauri external sidecars are target-specific binaries, so each supported target receives its own packaged Python executable and native Tauri build. PyInstaller is not treated as a cross-compiler: Linux artifacts are built on Linux, Windows artifacts on Windows, and macOS artifacts on macOS. The Linux development host can build Linux locally; Windows is practically built on a Windows CI runner/host for the milestone, and macOS on the lab/CI macOS environment.
 
 Native CI follows the same rule using standard GitHub Actions runners for Linux, macOS, and Windows. CI validates buildability, tests, sidecar startup/READY behavior, and packaging per operating system. Camera/device behavior remains a hardware smoke-test concern and is not falsely inferred from CI alone.
 
@@ -392,30 +419,34 @@ Each workspace stores an **Active Model** reference. Whiteboard uses that compat
 
 Normal preferences/cache/logs may use the platform application-data directories, but those are distinct from the project dataset/workspace. Tauri's writable app-data paths are appropriate for application-owned state; the canonical team dataset remains an explicit project/workspace concern.
 
-### MediaPipe migration gate
+### Dependency/runtime compatibility gates
 
-The move from the current MediaPipe 0.10.x dependency to 1.1.x follows TDD:
+MediaPipe 1.1.x is a candidate rather than a predetermined upgrade. Its October 6, 2026 PyPI release provides the platform wheels Hand-D needs but is currently classified Alpha, so adoption follows TDD:
 
 1. Freeze executable contract tests against the currently relied-on behavior.
 2. Verify task-model loading and LIVE_STREAM/detect_async callback semantics.
 3. Assert 21 normalized image landmarks and 21 world landmarks for valid detections.
 4. Assert handedness conversion semantics and monotonic timestamp handling.
 5. Assert that shared Feature Transform v1 still produces the expected float32[69] contract for compatible fixtures.
-6. Upgrade MediaPipe/runtime integration.
+6. Test the MediaPipe 1.1.x candidate integration.
 7. Make the same tests pass without weakening assertions merely to accommodate the upgrade.
 8. Run Linux x86-64 and macOS arm64 smoke/performance checks first, then Windows x86-64 packaging/smoke validation.
 
-The dependency version is pinned only after this compatibility gate succeeds. A failed gate is evidence to remain temporarily on the current compatible line rather than forcing a migration for novelty.
+The dependency version is pinned only after this compatibility gate succeeds. A failed gate is evidence to remain temporarily on the current compatible 0.10.x line rather than forcing a migration for novelty.
+
+Python project/environment management moves to `pyproject.toml` + `uv.lock` with `uv` providing lock/sync/run behavior. Runtime, training, and development/test dependencies are separated deliberately rather than maintained as duplicated requirement snapshots. The environment installs exactly one OpenCV distribution because the OpenCV wheel variants share the same `cv2` namespace.
+
+A separate deployment-runtime spike exports the current PyTorch MLP to ONNX and compares it with native PyTorch. ONNX Runtime is adopted only if numerical equivalence, package/startup cost, performance budgets, and supported-provider behavior are satisfactory on the target matrix.
 
 ## Interfaces y datos
 
 Target interfaces are conceptual until implementation begins:
 
-- **Runtime result**: gesture labels, confidence/scores when available, hand identity/role, landmarks/tracking position, timing/health state, and optional preview data.
-- **Canonical sample**: raw MediaPipe landmarks, target gesture, participant ID, hand, session/capture IDs, local provenance, timestamp/frame index, human review state.
+- **Runtime result**: gesture labels, scores/margin when available, hand identity/role, normalized tracking position, timing/health state, and optional preview metadata. Canvas-coordinate mapping/smoothing remains frontend-owned.
+- **Canonical sample**: raw MediaPipe landmarks, target gesture, participant ID, hand, session/capture IDs, local provenance, timestamp/frame index, human Review Status, and independent Lifecycle Status.
 - **Derived feature sample**: source sample ID, transform/version ID, model-compatible feature vector.
-- **Model assessment**: source sample ID, model version, predicted label, confidence/class scores, evaluation timestamp.
-- **Model artifact**: versioned weights plus manifest and metrics, including label order, input feature contract, Feature Transform version, architecture/version, source snapshot, experiment configuration, and compatibility information.
+- **Model assessment**: source sample ID, model version, predicted label, class scores/top-two margin, evaluation timestamp, training-membership/out-of-sample context, and fold/snapshot context where relevant.
+- **Model artifact**: versioned canonical training weights plus manifest/metrics and optional validated deployment representation(s), including label order, input feature contract, Feature Transform version, architecture/version, source snapshot, experiment configuration, runtime format/provider compatibility, and evaluation evidence.
 - **Development snapshot**: immutable manifest + NPZ materialization for P001/P002 development and compatible legacy data, with fixed session-validation folds, feature/label contracts, seed/configuration, and integrity/version information.
 - **Final test snapshot**: separate immutable manifest + NPZ materialization for the sealed P003 evaluation after development choices are frozen.
 
@@ -428,7 +459,7 @@ SQLite is the canonical mutable working store. A snapshot freezes the exact trai
 - Legacy CSV data may be used for training, but cannot prove unseen-participant generalization.
 - A third genuinely new participant is the preferred held-out final test participant.
 - The primary collection path may use each participant's selected main hand; a smaller opposite-hand verification set checks the left/right normalization assumption.
-- Tauri is the selected v2 desktop-shell direction. Python owns ML/runtime work as a packaged sidecar supervised by Tauri/Rust. Loopback HTTP + WebSocket is the selected control/result IPC direction, and authenticated loopback MJPEG is the selected preview transport. Exact protocol schema, reconnect behavior, and MJPEG quality/resolution/FPS remain implementation/performance-tuning details.
+- Tauri is the selected v2 desktop-shell direction. Python owns ML/runtime work as a packaged sidecar supervised by Tauri/Rust. Loopback HTTP + WebSocket is the selected control/result IPC direction, and authenticated loopback MJPEG is the selected preview transport. Runtime-session restart/resynchronization semantics are already decided; exact message schema plus MJPEG quality/resolution/FPS remain implementation/performance-tuning details.
 
 ## Fuentes y verificación
 
@@ -446,3 +477,9 @@ SQLite is the canonical mutable working store. A snapshot freezes the exact trai
 | MediaPipe Hand Landmarker LIVE_STREAM/detect_async() is designed for camera input, returns asynchronously, and may drop input images to reduce latency | https://ai.google.dev/edge/api/mediapipe/python/mp/tasks/vision/HandLandmarker | 2026-10-06 | Verificado en documentación oficial |
 | FaceRay uses Tauri 2 + a Python/MediaPipe sidecar and serves loopback MJPEG directly to the webview so frame bytes do not cross Rust/TypeScript control IPC | https://github.com/aarontran321/FaceRay | 2026-10-06 | Precedente arquitectónico externo |
 | WebKitGTK 2.54 disables WebRTC while its backend transitions from GStreamer WebRTC to LibWebRTC | https://webkitgtk.org/2026/09/16/webkitgtk-2.54-highlights.html | 2026-10-06 | Verificado en documentación oficial |
+| MediaPipe 1.1.0 is currently classified Alpha and publishes wheels for Linux x86-64, macOS arm64, Windows x86-64, and Python 3.13/3.14 | https://pypi.org/project/mediapipe/1.1.0/ | 2026-10-08 | Verificado en PyPI |
+| uv uses pyproject metadata plus a cross-platform uv.lock and supports lock/sync plus dependency groups | https://docs.astral.sh/uv/concepts/projects/sync/ | 2026-10-08 | Verificado en documentación oficial |
+| ONNX Runtime exposes multiple execution providers including CPU, CUDA, OpenVINO, and CoreML | https://onnxruntime.ai/docs/execution-providers/ | 2026-10-08 | Verificado en documentación oficial |
+| ONNX Runtime's macOS CoreML EP can use CPU, GPU, and Apple Neural Engine compute units | https://onnxruntime.ai/docs/execution-providers/CoreML-ExecutionProvider.html | 2026-10-08 | Verificado en documentación oficial |
+| PyInstaller is not a cross-compiler; platform binaries are built on their target OS | https://www.pyinstaller.org/en/stable/ | 2026-10-08 | Verificado en documentación oficial |
+| OpenCV Python wheel variants share the cv2 namespace and should not be installed together in one environment | https://pypi.org/project/opencv-python/ | 2026-10-08 | Verificado en documentación del paquete |

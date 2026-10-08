@@ -10,7 +10,7 @@
 
 ## Objective
 
-Evolve the semester project into two maintained surfaces: the **Hand-D App** for real-time gesture drawing and **Hand-D Studio** for the ML/data lifecycle. Preserve CPU as the universal fallback while validating optional hardware acceleration per supported platform.
+Evolve the semester project into one maintained desktop product with two spaces: the **Whiteboard/App** for real-time gesture drawing and **Hand-D Studio** for the advanced ML/data lifecycle. Preserve CPU as the universal fallback while validating hardware acceleration/providers where they measurably help.
 
 ## Confirmed direction
 
@@ -40,13 +40,13 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - Runtime health is component-specific. Camera/permission failures degrade camera-dependent features without collapsing the whole application; model, IPC, sidecar, and camera failures are surfaced as distinct states.
 - The v2 release matrix includes Linux x86-64, macOS arm64, and Windows x86-64. Linux and Apple Silicon are the first validation priority because they are the available development/lab environments; Windows remains an intended supported target and receives its own native build/smoke pass before support is claimed.
 - The sidecar runtime standardizes on project-managed Python 3.13 for the milestone. The developer host's system Python is not the runtime contract.
-- MediaPipe 1.1.x adoption is TDD/prototype-gated: first freeze contract tests for landmark shape/semantics, LIVE_STREAM callbacks/timestamps, handedness, and Feature Transform v1 compatibility; then upgrade and make those same tests pass, followed by Linux/macOS and Windows target validation.
+- MediaPipe 1.1.x is a TDD/prototype candidate, not a predetermined upgrade: first freeze contract tests for landmark shape/semantics, LIVE_STREAM callbacks/timestamps, handedness, and Feature Transform v1 compatibility; then test the candidate without weakening those assertions. Remaining temporarily on the compatible 0.10.x line is a valid spike result.
 - Packaging is optional for development and required only as the polished distribution path. Hand-D remains runnable from the terminal/project environment.
 - Installed binaries/resources are separated from a writable Project Workspace. SQLite collection/curation state, immutable snapshots, and newly generated Model Artifacts live outside the app bundle, so collecting more data or retraining does not require reinstalling/rebuilding Hand-D.
 - A packaged release may include a read-only fallback model, while compatible workspace Model Artifacts can be promoted/selected later through the same manifest compatibility contract.
 - CI uses standard native GitHub Actions runners for Linux, macOS, and Windows; paid/larger runners are not required by the milestone plan.
-- Windows milestone support requires its own native CI/package/startup/model-load checks rather than being inferred from Linux/macOS success. Real camera/MJPEG/gesture validation is added on Windows hardware when available.
-- Drawing/canvas document state is frontend-owned. Python provides transient gesture/tracking/runtime signals, so a sidecar restart does not erase strokes, undo/redo history, color/thickness, or the active document.
+- Linux x86-64 and macOS arm64 are Tier-1 milestone validation targets. Windows x86-64 is Tier 2 until real camera/runtime hardware validation exists; it still receives native CI/package/startup/model-load checks rather than inheriting support claims from Linux/macOS.
+- Drawing/canvas document state is frontend-owned. Python provides normalized transient gesture/tracking/runtime signals; the frontend owns canvas mapping, smoothing/interpolation, strokes, undo/redo, color/thickness, and the active document, so sidecar restart does not erase drawing state.
 - Every restarted sidecar creates a fresh Runtime Session with a new ID/endpoint/token. The frontend performs state resynchronization after READY, subscribes to the new session, and drops delayed events from old sessions rather than replaying stale gestures.
 - Application releases use Semantic Versioning + Git tags + CI-produced GitHub Releases. App versioning remains separate from workspace/database/snapshot/model versions, and the milestone does not add silent automatic updates.
 - Hand-D App and Studio are two spaces inside one desktop application, not separate executables. Whiteboard is the default startup/product surface; Studio is secondary navigation for workspace/model configuration, collection, curation, and project inspection.
@@ -55,23 +55,22 @@ Evolve the semester project into two maintained surfaces: the **Hand-D App** for
 - Project Workspaces are portable directories with workspace-relative references, suitable for move/copy/clone and direct Git use.
 - Each workspace owns an Active Model selection; Whiteboard uses it when that workspace is open and otherwise falls back to the packaged compatible model.
 - Easy Mode is OFF by default for v2 and affects both Whiteboard and Studio only through progressive disclosure.
+- The normal non-Easy UI must still be approachable for non-technical users; Easy Mode further reduces technical density instead of rescuing an otherwise expert-only interface.
 - Studio's v2 primary navigation is Overview, Collect, Dataset, Models, and Workspace.
 - Collect follows Participant -> Collection Session -> Capture, with the user selecting participant/gesture/hand/quota and provenance generated automatically. Canonical persistence remains 21 image + world landmark points per Sample; the 69-value baseline is a later Feature Transform output.
-- Dataset combines Browse + Review. Ordinary “deletion” becomes Drop, a reversible soft-delete Review Status that preserves canonical SQLite truth and Review Event history while excluding the Sample from normal active views and future snapshots.
+- Dataset combines Browse + Review. Review Status remains unreviewed/accepted/rejected. Ordinary “deletion” becomes Drop through a separate reversible Sample Lifecycle Status, preserving the prior review decision and canonical SQLite truth while excluding the Sample from normal active views and future snapshots until restored.
 - Models contains a Training & Evaluation subsection even though training execution is still CLI/tooling-owned for this milestone; the UI exposes the reproducible snapshot/config/command and then surfaces resulting Model Artifacts.
+- Session-held-out fold models/checkpoints are retained as evaluation evidence for OOF assessments but are not promoted as the Active Model. After choices freeze, one all-development final-refit Model Artifact becomes the promotable candidate before sealed P003 evaluation.
 - Overview is an operational Studio dashboard: workspace/model/runtime status, dataset/review counts, recent Sessions, pending review, and next actions.
 - Workspace Open/Create uses native OS directory dialogs through Tauri; new workspace initialization is generated by Hand-D rather than manually assembled by the user.
 - Participants remain inside Collect. An active Collection Session exposes a gesture/Capture checklist so multiple gestures can be collected without repeating participant/session setup.
 - Gesture definitions are extensible for collection. A newly added gesture enters Studio/data immediately, while Whiteboard recognition/action requires a later compatible model label plus explicit runtime mapping.
-- CPU is the fallback on every supported platform.
-- macOS Apple Silicon is a first-class target because the project must be testable on the lab's M-series Macs.
-- GPU acceleration is capability-driven:
-  - NVIDIA: CUDA when available and validated.
-  - Apple Silicon: PyTorch MPS when available and validated.
-  - AMD: ROCm only on hardware/OS combinations supported by the selected PyTorch/ROCm versions; otherwise CPU.
-  - Intel: PyTorch XPU only on validated hardware when available; otherwise CPU. oneAPI support by itself does not imply that Hand-D can use PyTorch XPU on that device.
-- Intel Iris Xe / Tiger Lake on the current Linux development laptop is treated as CPU-first unless a later benchmark proves a supported acceleration path.
-- Project dependencies will be refreshed as part of v2, but only as a tested compatibility migration. MediaPipe, PyTorch, Python, packaging, and platform-specific acceleration versions must be selected as a mutually compatible set rather than upgraded independently.
+- Suggested for Review uses out-of-sample evidence where possible. Development Samples receive authoritative assessments from the CV fold where their complete Collection Session was held out; in-sample assessments remain diagnostic only.
+- After model-selection choices are frozen, the final configuration is refit once on all eligible P001/P002 development data (plus legacy only if selected) and evaluated once on sealed P003. P003 is not fed back into that milestone model.
+- PyTorch remains the training framework baseline. ONNX Runtime is a deployment candidate only after a TDD/benchmark spike proves numerical equivalence, acceptable latency/cadence, smaller/cleaner packaging, and suitable providers across the target platforms.
+- Training prefers validated acceleration such as CUDA/MPS. Packaged runtime likewise prefers a validated accelerated provider when it meets or improves latency/cadence; benchmarking selects the provider and retains CPU only as the universal fallback when acceleration would regress the experience.
+- Python project/dependency management moves to `uv` with `pyproject.toml` + `uv.lock`; runtime/training/dev dependency groups replace duplicated requirements snapshots, and an environment installs only one OpenCV distribution.
+- Hand-D structured snapshots/manifests/metrics remain the ML source of truth. TensorBoard is optional training/debugging telemetry; Matplotlib/Tkinter remain legacy/report tools; Studio/Tauri renders product-facing charts from structured evidence. MLflow is deferred unless it later replaces rather than duplicates this tracking model.
 
 ## Current evidence
 
@@ -85,11 +84,11 @@ Source observations from the repository:
 
 ## Delivery boundary
 
-The October 13 milestone is a v2 vertical slice, not a complete rewrite. It should establish the new App/Studio architecture, correct the real-time runtime path, improve collection and dataset review/purge, establish reproducible training/evaluation outside the GUI, document the system, and validate the selected Tauri + Python-sidecar UI/runtime direction.
+The October 13 milestone is a tracer/vertical slice through the target architecture, not a requirement to finish every confirmed v2 capability. It must prove the data/model/runtime boundaries end-to-end and validate Tauri + Python integration while allowing broader Studio UX, release/CD polish, extensible gestures, full three-platform hardware validation, and other confirmed target features to continue after the milestone.
 
 Training and evaluation from the Studio GUI are explicitly outside this milestone. The underlying training/evaluation workflow should still become reproducible and documented.
 
-Implementation beyond planning/documentation is deferred until the current grill phase is complete. The remaining runtime work is protocol/detail validation, dependency/platform compatibility, and v2 UX shaping rather than re-opening already-settled App/Studio, data, training, Tauri-sidecar, or MJPEG architecture decisions.
+Implementation beyond planning/documentation is deferred until the current grill/domain phase is complete. The remaining design work should sharpen Studio/data UX and prototype-gated technical choices rather than re-opening already-settled App/Studio, SQLite/snapshot, Tauri-sidecar, LIVE_STREAM, or MJPEG directions without new evidence.
 
 ## Evaluation direction
 
@@ -108,9 +107,11 @@ Implementation beyond planning/documentation is deferred until the current grill
 - Legacy usefulness is tested through two otherwise comparable training candidates: new-v2-only and new-v2-plus-legacy. Both are compared against the same fixed, reproducible v2 session-validation folds; P003 is not repeatedly consulted during that choice.
 - Macro F1 is the primary promotion metric, accompanied by accuracy, per-class precision/recall/F1, and confusion-matrix review. A material failure on a product-critical class can prevent promotion even when overall accuracy is higher.
 - Development validation uses leave-one-Collection-Session-out cross-validation across P001/P002. Each fold holds out one whole Session and trains on the remaining development Sessions, then metrics are aggregated across folds. This avoids privileging one arbitrary Session and prevents temporally adjacent Samples from leaking across train/validation.
+- The same folds produce authoritative out-of-fold Model Assessments for Suggested for Review: a P001/P002 Sample's development prediction/score evidence comes from the fold where its whole Collection Session was outside training. In-sample predictions may be retained for diagnostics but are not authoritative uncertainty evidence.
 - The legacy experiment is paired fold-by-fold: each with-legacy candidate and its without-legacy counterpart use the same v2 Session membership, transform, evaluation path, and seed policy; compatible legacy rows are added only to training. P003 remains sealed throughout this comparison.
 - Learning curves use increasing fractions of each fold's training data (initially 25%, 50%, 75%, 100%) and the same session-grouped validation protocol. If Macro F1 is still materially rising at full data, collect more Samples rather than assuming the initial ~100 accepted Samples per gesture/session are sufficient.
-- P003 remains sealed during model development. Feature-transform choice, legacy augmentation, model architecture/hyperparameters, thresholds, and promotion criteria are frozen using only the P001/P002 development protocol; the final selected candidate is then evaluated against P003 once for the milestone report.
+- P003 remains sealed during model development. Feature-transform choice, legacy augmentation, model architecture/hyperparameters, thresholds, and promotion criteria are frozen using only the P001/P002 development protocol. The selected configuration is then refit once on all eligible P001/P002 development Samples (plus legacy only if the development comparison selected it), and that refit is evaluated against P003 once for the milestone report.
+- P003 is not used to improve that milestone model after the final evaluation. If it later becomes training/tuning data, a future genuinely unseen participant is required for a new final generalization claim.
 - If only two participants are available, the project should report session-level validation and an explicitly limited participant-level experiment rather than overstating generalization.
 - New data collection should use at least two independent collection sessions for the primary participants. A session means a separate capture run with the camera/collector restarted and the participant repositioned; it does not require a different day.
 - Within each capture, the participant keeps the intended gesture while introducing moderate natural variation in hand position, distance, and orientation. The milestone does not require exaggerated/extreme motion conditions.
@@ -121,9 +122,10 @@ Implementation beyond planning/documentation is deferred until the current grill
 - New samples begin unreviewed. The Curator prioritizes Suggested for Review observations and supports a deliberate batch-accept action for the remaining group so curation does not require inspecting every sample individually.
 - Suggested for Review combines explainable model signals (disagreement/uncertainty) with non-fatal geometry/tracking signals. These signals only prioritize human review and never mutate the Sample automatically.
 - Before batch-accepting the apparently clean remainder, Studio presents a small random quality-control subset so systematic capture issues can still be noticed without returning to one-by-one review.
-- Review decisions are auditable through immutable Review Events. Rejected Samples are excluded from training/snapshot eligibility but remain canonically stored and traceable; rejection is not deletion.
+- Review decisions are auditable through immutable Review Events. Review Status is unreviewed/accepted/rejected. Rejected Samples are excluded from training/snapshot eligibility but remain canonically stored and traceable; rejection is not deletion.
+- Soft deletion is a separate lifecycle axis: active/dropped transitions append Lifecycle Events. Dropping preserves the Sample's Review Status, hides it from normal active views, and excludes it from future snapshots until restored.
 - Review changes are prospective for snapshot generation: an existing immutable snapshot is never rewritten when a Sample's later Review Status changes.
-- Model-assisted review is versioned: every Model Assessment references the exact model artifact/version that produced its prediction and scores. Studio may choose a current review model for a curation pass, but older assessments are preserved rather than overwritten.
+- Model-assisted review is versioned: every Model Assessment references the exact model artifact/version that produced its prediction and scores and records training-membership/out-of-sample context. Studio may choose a current review model for newly collected Samples that model has not seen, while older assessments are preserved rather than overwritten.
 - Initial uncertainty ranking uses top-two class-score margin, with thresholds derived from development-validation evidence. This is used to prioritize ambiguous Samples, not to claim calibrated real-world probability.
 - The milestone starts Suggested for Review with model disagreement and uncertainty only. Geometry/tracking anomaly heuristics remain an extension point and are added only when observed data justifies a specific rule.
 - Suggested for Review is a ranked queue: disagreement first, then lower top-two score margin. Validation can inform how much of that ranking to review, but the system stores the underlying assessment scores rather than hard-coding one universal cutoff.
@@ -145,5 +147,7 @@ Implementation beyond planning/documentation is deferred until the current grill
 
 ## Open decisions
 
-- Exact HTTP/WebSocket protocol schema, reconnection behavior, and MJPEG quality/resolution/FPS tuning.
-- Exact dependency pins after the compatibility spike and per-platform packaging/build automation details.
+- Exact HTTP/WebSocket message schema and MJPEG quality/resolution/FPS tuning. Reconnection semantics are already decided.
+- Exact dependency pins after the MediaPipe candidate and PyTorch-vs-ONNX Runtime compatibility/benchmark spikes.
+- Final packaged inference runtime/provider matrix (PyTorch vs ONNX Runtime) after prototype evidence.
+- Final per-platform release packaging/build automation details after the milestone path is working from source.

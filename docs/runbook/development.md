@@ -5,11 +5,12 @@
 - Work from the Hand-D repository.
 - For the v2 modernization, use `feature/hand-d-v2-modernization`.
 - Do not make direct v2 implementation commits on `main`.
-- Use a project-local Python virtual environment.
+- Use the project-managed Python environment; the v2 target is `uv` + `pyproject.toml` + `uv.lock` with Python 3.13.
 
 Current environment note:
 
 - The CachyOS development host reported Python 3.14.7.
+- `uv 0.12.23` is installed on the CachyOS host (`uv --version`, verified 2026-10-08).
 - The global environment did not contain PyTorch when the v2 audit started.
 - The dependency set is scheduled for compatibility migration; the old README install sequence is therefore not yet considered a verified v2 setup.
 
@@ -19,14 +20,14 @@ Current environment note:
 1. git fetch origin
 2. git switch feature/hand-d-v2-modernization
 3. git status
-4. python --version
-5. python -m venv .venv
-6. source .venv/bin/activate.fish   # Fish shell on the current development host
+4. uv --version
+5. uv python install 3.13           # target command; execute/verify when pyproject migration begins
+6. uv sync                          # target command; valid only after pyproject.toml/uv.lock exist
 ```
 
-For POSIX shells other than Fish, use the activation script appropriate for that shell. Do not install project dependencies globally.
+The v2 workflow should prefer `uv run ...`/`uv sync` instead of requiring shell activation. Do not install project dependencies globally.
 
-Dependency installation commands will be added here only after the v2 compatibility set has been selected and actually verified.
+Exact dependency groups/commands remain `No verificado` until the new `pyproject.toml` and lockfile are created and synced successfully. The current requirements files remain legacy migration inputs, not the future dependency source of truth.
 
 ### Canonical dataset collaboration
 
@@ -59,6 +60,7 @@ git rev-list --left-right --count origin/main...HEAD
 Not yet verified for v2:
 
 - clean dependency installation from scratch;
+- project Python 3.13 provisioning + `uv sync` from the future lockfile;
 - full unit/integration test suite in the new environment;
 - Apple Silicon/MPS execution;
 - CUDA/ROCm/XPU execution;

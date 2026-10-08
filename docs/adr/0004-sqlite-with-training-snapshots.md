@@ -13,9 +13,9 @@ For the milestone, snapshot/model integrity is enforced operationally through im
 
 The P001/P002 development protocol uses one Development Snapshot as the common evidence base for session-cross-validation, legacy/no-legacy comparison, and learning curves. Compatible legacy rows are a distinct materialized partition inside that development snapshot. Fold choice, legacy inclusion, and learning-curve fraction are experiment configuration over the same frozen evidence base rather than independently-created datasets.
 
-P003 is intentionally absent from the Development Snapshot. After development/model-selection choices are frozen, P003 is materialized separately into a Final Test Snapshot for the single held-out unseen-participant evaluation.
+P003 is intentionally absent from the Development Snapshot. After development/model-selection choices are frozen, the selected configuration is refit on all eligible development data and P003 is materialized separately into a Final Test Snapshot for the single held-out unseen-participant evaluation.
 
-Training outputs a versioned Model Artifact rather than a bare weights file. The artifact contains weights plus a manifest declaring the architecture, Feature Transform/input contract, label order, source snapshot, training configuration, and runtime compatibility information, together with evaluation metrics. Runtime validates this manifest before inference.
+Training outputs versioned Model Artifacts rather than bare weights files. Cross-validation fold artifacts/checkpoints are retained as evaluation evidence for exact OOF assessments and are not promoted as the Active Model. After development choices freeze, one final-refit Model Artifact is trained on all eligible development data and becomes the promotable runtime candidate. Artifacts retain canonical training weights plus a manifest declaring artifact role, architecture, Feature Transform/input contract, label order, source snapshot, training configuration, runtime/deployment formats, and compatibility information, together with role-appropriate evaluation metrics. A validated derived deployment representation such as ONNX may live beside the PyTorch weights without replacing the artifact's provenance contract. Runtime validates this manifest before inference.
 
 This design keeps three responsibilities separate:
 

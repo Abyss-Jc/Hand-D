@@ -1,6 +1,6 @@
 # Hand-D
 
-Hand-D is a gesture-driven drawing system composed of a user-facing application and developer tooling for collecting, inspecting, training, and evaluating gesture data.
+Hand-D is a gesture-driven drawing system composed of a user-facing whiteboard and an advanced Studio for collecting, inspecting, curating, evaluating, and managing gesture data/models.
 
 ## Language
 
@@ -34,10 +34,16 @@ A single frame-based hand observation stored as raw MediaPipe landmarks plus pro
 A Sample whose human review state determines whether it may be used for training. Machine-generated quality signals may place samples into a Suggested for Review queue, but they do not reject or relabel samples automatically.
 
 **Review Status**:
-The human curation state of a Sample: unreviewed, accepted, rejected, or dropped. New samples begin unreviewed; Studio may batch-accept reviewed groups so curation does not require approving every observation individually. Rejected means a reviewed Sample is unsuitable for training. Dropped is a reversible soft-delete state that removes a Sample from normal active views/training eligibility while preserving it as canonical history.
+The human quality/curation decision for a Sample: unreviewed, accepted, or rejected. New samples begin unreviewed; Studio may batch-accept reviewed groups so curation does not require approving every observation individually. Rejected means a reviewer determined that the Sample is unsuitable for training.
+
+**Sample Lifecycle Status**:
+Whether a Sample participates in normal active dataset views: active or dropped. Dropped is a reversible soft-delete state that preserves the canonical Sample/provenance and its review decision while excluding it from normal active views and future snapshot eligibility until restored.
 
 **Review Event**:
-An immutable audit record of a human curation transition for a Sample, such as unreviewed → accepted, accepted → rejected, or accepted → dropped, including when the decision occurred and optional review context/reason.
+An immutable audit record of a human Review Status transition for a Sample, such as unreviewed → accepted or accepted → rejected, including when the decision occurred and optional review context/reason.
+
+**Lifecycle Event**:
+An immutable audit record of a Sample Lifecycle Status transition, such as active → dropped or dropped → active.
 
 **Feature Transform**:
 A versioned transformation contract that converts a canonical raw Sample into the model-ready feature representation expected by a compatible model. Callers depend on the transform's identity and output contract, not on its internal normalization/rotation/scaling implementation.
@@ -49,7 +55,10 @@ An immutable, self-contained ML view of the accepted P001/P002 development data 
 An immutable snapshot created for the sealed P003 unseen-participant evaluation after development choices are frozen. P003 is not included in the Development Snapshot.
 
 **Model Artifact**:
-A versioned model bundle containing trained weights plus metadata that declares the model architecture, input/Feature Transform contract, label order, source snapshot, training configuration, and evaluation evidence. Runtime validates this contract before using the weights.
+A versioned model bundle containing the trained model plus metadata that declares architecture, runtime format(s), input/Feature Transform contract, label order, source snapshot, training configuration, and evaluation evidence. Runtime validates this contract before using a compatible deployment representation.
+
+**Model Assessment**:
+A versioned prediction/score record for one Sample produced by one explicit Model Artifact, including whether the Sample was outside that model's training membership. Out-of-sample assessments are preferred for Suggested for Review evidence.
 
 **Collection Provenance**:
 Local metadata describing where and how a Sample was collected, including an anonymous device identifier, platform, camera, relevant software versions, participant, and capture/session identifiers. It is stored with the dataset and is not remote analytics telemetry.
