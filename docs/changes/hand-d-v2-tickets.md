@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | HD-01 | P0 | TODO | — | `pyproject.toml`, `uv.lock`, supported Python/one OpenCV wheel, runtime/train/dev dependency split; `uv sync` + baseline tests pass without global installs |
 | HD-02 | P0 | DONE | — | Single importable **Feature Transform v1** implementation; deterministic golden 69-feature fixtures, left/right semantics, shape/finite/degenerate tests; runtime delegates to it with no valid-input regression |
-| HD-03 | P0 | TODO | HD-02 | SQLite canonical participant/session/capture/sample schema + Review/Lifecycle event logs; transaction, provenance and state round-trip tests |
+| HD-03 | P0 | DONE | HD-02 | SQLite canonical participant/session/capture/sample schema + Review/Lifecycle event logs; transaction, provenance and state round-trip tests |
 | HD-04 | P0 | TODO | HD-03 | Collection core accepts real 21×3 image/world landmark observations with time-based sampling and auto provenance, no image/video; interrupted-capture tests |
 | HD-05 | P0 | TODO | HD-03 | Human Accept/Reject/Drop/Restore and eligibility query; audit independence, never auto-reject, snapshot Readiness blocker/warning tests |
 | HD-06 | P0 | TODO | HD-02, HD-03, HD-05 | Immutable Development Snapshot/NPZ+manifest and compatible legacy partition; content hash, deterministic membership, rejected/unreviewed exclusion, overwrite refusal tests |
@@ -37,5 +37,6 @@
 - 2026-10-08: existing `venv/bin/python` can import NumPy 2.4.4, MediaPipe 0.10.33 and Torch 2.14.1+cpu; `uv 0.12.23` installed, no v2 pyproject/lock yet.
 - HD-02 (2026-10-08): RED was ModuleNotFoundError for the missing shared core; a second RED proved a direct legacy source-launch import regression. GREEN implemented `handd_core/feature_transform.py`, delegated `visualizer_app/gesture_engine.py`, and added 8 focused tests. `venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v` passed **10/10** total; compileall and diff checks passed. An explicit comparison with the previous runtime implementation produced identical vectors for Left/Right and float32/float64 fixture inputs.
 - Legacy limitation: the standalone CSV/plotting collector still has a separate transform; migrate or retire it under HD-04. All new v2 collection/training callers must use the shared transform.
+- HD-03 (2026-10-08): RED established missing `handd_core.dataset_store`; second RED established that direct SQLite state mutation must not bypass review auditing. GREEN added canonical participant/session/capture/sample persistence, 21x3 image/world landmarks, schema version and FK validation, immutable Sample observations, Review/Lifecycle transitions and append-only event triggers. Suite now **20/20 passing** (10 dataset-store and 10 legacy/transform), `compileall` and diff checks pass. Later HD-04 adds camera sampling, capture-generated IDs/device metadata; snapshot materialization is HD-06.
 
-Next action: HD-01 (`uv` project setup) and HD-03 (canonical SQLite schema). Avoid initiating new discovery/grill rounds.
+Next action: HD-01 (`uv` project setup), then HD-04/HD-05 (collector and review integration). Avoid initiating new discovery/grill rounds.

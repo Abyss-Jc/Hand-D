@@ -30,6 +30,8 @@ The collector currently contains inconsistent handedness semantics: filtering co
 
 The standalone CSV/plotting collector is still a **legacy** path and has not yet migrated to the shared Feature Transform. The v2 collection core must import the shared module rather than copying this normalization logic.
 
+The new `handd_core.dataset_store` implements the first v2 SQLite domain boundary (2026-10-08): Participant → Collection Session → Capture → raw image/world landmark Sample; independent Review Status and Lifecycle Status with database-enforced observation/event immutability and audit triggers. It is implemented but not yet connected to a camera collector, Snapshot Builder, or Studio UI. Schema v1 refuses unknown newer database versions; forward migration from older deployed v2 schemas is not yet implemented, since this is the first v2 schema.
+
 ### Dataset curation
 
 `dataset_extraction_tools/data_view_3d.py` is an interactive Matplotlib viewer/purger over the CSV representation. Its current save path is not a durable curation model; v2 will replace destructive row editing with review-state-driven dataset generation.

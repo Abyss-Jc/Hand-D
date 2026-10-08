@@ -40,6 +40,8 @@ venv/bin/python -m compileall -q handd_core visualizer_app/gesture_engine.py tes
 
 Verified result: **10 tests passed** for shared Feature Transform v1 and existing GestureEngine checks, including a subprocess import from the legacy source-script working directory. A separate valid-input comparison with the pre-refactor canonicalizer was exact for float32/float64 and Left/Right fixtures. This does not verify `uv sync`, camera operation, or the new data pipeline.
 
+HD-03 adds the no-camera SQLite dataset-store tests. Verified on 2026-10-08: `venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v` passed **20/20**. These tests use temporary SQLite databases and do not alter the team's canonical workspace or legacy CSV data.
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:
