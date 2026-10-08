@@ -25,6 +25,7 @@
 ```
 
 - Camera-on drawing overlay is default. An obvious toggle switches to a clean/dark canvas **without modifying strokes or stopping inference**; hiding MJPEG stops unnecessary preview encoding.
+- **Ampliar visualizador** opens a near-full-window immersive **in-app modal** with the *same canvas/document and active camera/runtime session*. It is not OS/browser fullscreen. Only the canvas and essential controls (Draw, Erase, Camera/Clean, Save, Undo/Redo, Close) remain prominent; surrounding Whiteboard/Studio chrome is dimmed/inert. The modal closes with the visible **Cerrar** control or **Esc**, restores keyboard focus, and must not reset document strokes, undo history, model connection, or tracking. MJPEG transport continuity when moving between layouts needs implementation validation.
 - File actions: New / Open / **Save native editable document** / Save As; **Export is separate** (SVG now, other formats later). Avoid the browser term Download for ordinary persistence.
 - Tools and core editing also work with mouse/keyboard, including familiar undo/redo shortcuts. Undo history is per session; crash recovery in app-data is separate from a saved drawing.
 - Compact, legible status: current stable gesture/action, selected Drawing Hand, active model, camera/sidecar health. Do not crowd the canvas with diagnostic telemetry.
@@ -87,6 +88,7 @@ Create/Open/Recent workspaces via native directory picker; show project health/p
 | Journey | Pass condition |
 |---|---|
 | Launch and draw | Whiteboard defaults to camera overlay; camera toggle leaves strokes intact; editable Save is separate from Export |
+| Expand visualizer | An in-app modal expands the *same* canvas; Escape/Close restores normal layout without losing strokes or changing gesture/camera runtime |
 | Capture | Participant/Session persists through gesture checklist with visible capture progress |
 | Curate and freeze | Human-reviewed accepted+active samples build an immutable snapshot; quality gaps warn but integrity failures block |
 | Train and select | Prepare Training provides exact command; resulting Candidate does not displace existing Active Model |

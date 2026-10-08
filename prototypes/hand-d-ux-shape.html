@@ -10,6 +10,16 @@
 @media(max-width:1100px){.canvas-shell{grid-template-columns:1fr}.guide{display:flex;gap:22px;align-items:center}.guide h3{max-width:220px}.steps{display:flex;gap:14px;flex:1}.steps li{flex:1;border-top:0;border-left:2px solid var(--ink);padding:2px 12px}.guide .hint{display:none}}
 @media(max-width:700px){.demo-marker{display:none}.bar{padding:13px}.view{padding:16px}.wb-header{align-items:flex-start}.canvas-area{min-height:470px;aspect-ratio:auto}.guide{display:block}.steps{display:block}.steps li{border-left:0;border-top:2px solid var(--ink);padding:12px 0}.studio-wrap{grid-template-columns:1fr}.studio-sidebar{display:flex;gap:4px;overflow-x:auto;box-shadow:none;padding:5px}.studio-sidebar .eyebrow{display:none}.studio-sidebar button{white-space:nowrap;width:auto;font-size:12px;padding:10px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.nav button{padding:10px}.toolstrip{left:15px;right:auto}.hand-status{right:10px;top:10px;font-size:12px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Immersive visualizer is an in-app modal, not operating-system fullscreen. */
+.visualizer-modal{position:fixed;inset:0;z-index:30;background:#121816d9;padding:clamp(10px,2vw,30px);display:flex;align-items:center;justify-content:center}
+.visualizer-modal-panel{background:var(--paper);border:4px solid var(--ink);box-shadow:10px 10px 0 var(--lime);width:100%;max-width:1700px;height:min(94dvh,1050px);min-height:0;display:flex;flex-direction:column}
+.visualizer-modal-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:3px solid var(--ink);background:var(--lime)}
+.visualizer-modal-head h2{font-size:clamp(16px,2vw,24px);letter-spacing:-.045em}
+.visualizer-modal-content{padding:12px;min-height:0;flex:1;display:flex}
+.visualizer-modal-content .canvas-area{flex:1;min-width:0;min-height:0;width:100%;height:100%;aspect-ratio:auto}
+.visualizer-modal-content .toolstrip{bottom:16px;right:16px;left:auto;flex-wrap:wrap;justify-content:end;max-width:calc(100% - 24px)}
+.overlay{z-index:50}
+@media(max-width:700px){.visualizer-modal{padding:6px}.visualizer-modal-panel{height:98dvh;box-shadow:none}.visualizer-modal-content{padding:5px}.visualizer-modal-content .toolstrip{left:8px;right:8px;bottom:8px;max-width:none}.visualizer-modal-content .toolstrip button{font-size:12px;padding:8px}}
 </style>
 </head>
 <body>
@@ -18,7 +28,7 @@
 <main>
 <section id="wb" class="view" aria-label="Whiteboard">
 <div class="wb-header"><div><div class="eyebrow">01 / ESPACIO DE DIBUJO</div><h1>Tu mano.<br>Tu lienzo.</h1><p>Apunta, dibuja y crea. Sin menús complicados.</p></div><div class="actions"><button class="btn" id="newdoc">+ Nuevo</button><button class="btn" id="openfile">Abrir</button><button class="btn primary" id="savefile">Guardar ↗</button><button class="btn" id="exportfile">Exportar SVG</button><button class="btn" id="undo">↶</button><button class="btn" id="redo">↷</button></div></div>
-<div class="canvas-shell"><div><div class="canvas-area camera" id="canvas-area"><svg class="camera-schematic" viewBox="0 0 1000 600" aria-hidden="true"><path d="M385 510 Q350 425 320 290 Q305 260 325 250 Q350 244 365 283 L392 348 379 160 Q375 121 401 122 Q423 125 426 157 L445 318 442 90 Q440 51 467 52 Q490 51 492 86 L508 312 530 130 Q535 96 560 103 Q580 110 576 143 L564 319 Q650 228 671 244 Q704 265 675 304 Q625 372 592 455 Q565 523 506 545 Z" fill="#ffffff" stroke="#ffffff" stroke-width="16"/></svg><span class="cv-label" id="cv-mode">CÁMARA / VISTA DEMO</span><div class="hand-status">MANO PRINCIPAL<br><span style="font-size:18px">DERECHA</span><br><span style="color:#4b6052;font-size:11px">SIN TRACKING REAL</span></div><svg id="draw" viewBox="0 0 1000 600" preserveAspectRatio="none" role="img" aria-label="Lienzo de demostración interactivo. Dibuja con mouse o tacto."></svg><div class="toolstrip"><button id="pen" class="active">✎ Dibujar</button><button id="erase">⌫ Borrar</button><button id="togglecamera" aria-pressed="true">◉ Lienzo limpio</button></div><div class="cv-watermark">SIN FEED REAL · DEMO INTERACTIVA</div></div><div class="bottom-bar"><span><b>●</b> LIENZO DISPONIBLE</span><span>MODELO: DEMO</span><span>INDEX → DIBUJAR · FIST → BORRAR</span><span id="stroke-count">0 TRAZOS</span></div></div>
+<div class="canvas-shell"><div><div class="canvas-area camera" id="canvas-area"><svg class="camera-schematic" viewBox="0 0 1000 600" aria-hidden="true"><path d="M385 510 Q350 425 320 290 Q305 260 325 250 Q350 244 365 283 L392 348 379 160 Q375 121 401 122 Q423 125 426 157 L445 318 442 90 Q440 51 467 52 Q490 51 492 86 L508 312 530 130 Q535 96 560 103 Q580 110 576 143 L564 319 Q650 228 671 244 Q704 265 675 304 Q625 372 592 455 Q565 523 506 545 Z" fill="#ffffff" stroke="#ffffff" stroke-width="16"/></svg><span class="cv-label" id="cv-mode">CÁMARA / VISTA DEMO</span><div class="hand-status">MANO PRINCIPAL<br><span style="font-size:18px">DERECHA</span><br><span style="color:#4b6052;font-size:11px">SIN TRACKING REAL</span></div><svg id="draw" viewBox="0 0 1000 600" preserveAspectRatio="none" role="img" aria-label="Lienzo de demostración interactivo. Dibuja con mouse o tacto."></svg><div class="toolstrip"><button id="pen" class="active">✎ Dibujar</button><button id="erase">⌫ Borrar</button><button id="togglecamera" aria-pressed="true">◉ Lienzo limpio</button><button id="fullscreen" aria-pressed="false" title="Ampliar solo el visualizador; Esc para salir">⛶ Pantalla completa</button></div><div class="cv-watermark">SIN FEED REAL · DEMO INTERACTIVA</div></div><div class="bottom-bar"><span><b>●</b> LIENZO DISPONIBLE</span><span>MODELO: DEMO</span><span>INDEX → DIBUJAR · FIST → BORRAR</span><span id="stroke-count">0 TRAZOS</span></div></div>
 <aside class="guide"><div><div class="guide-title">EMPIEZA AQUÍ ↘</div><h3>No necesitas un manual.</h3></div><ol class="steps"><li><span class="num">1</span><span>Coloca tu mano delante de la cámara.</span></li><li><span class="num">2</span><span><b>Índice:</b> dibuja.<br><b>Puño:</b> borra.</span></li><li><span class="num">3</span><span>Pulsa <b>Guardar</b> para conservar tu dibujo editable.</span></li></ol><p class="hint"><b>Esta maqueta:</b> arrastra con mouse o dedo para dibujar. La cámara y los gestos reales se conectan en la implementación.</p></aside>
 </div>
 </section>
@@ -35,6 +45,12 @@
 <footer class="footer"><span>HAND—D / UX SHAPE · NEO-BRUTALISMO FUNCIONAL</span><span>NO ES UNA IMPLEMENTACIÓN DE CÁMARA, ML, SQLITE NI TAURI</span></footer>
 </div>
 <div class="toast hide" id="toast" role="status" aria-live="polite"></div>
+<div class="visualizer-modal hidden" id="visualizer-modal" role="dialog" aria-modal="true" aria-labelledby="visualizer-title">
+ <div class="visualizer-modal-panel">
+  <header class="visualizer-modal-head"><h2 id="visualizer-title">VISUALIZADOR AMPLIADO <span class="mini">/ sin salir de Hand-D</span></h2><div class="actions"><button id="visualizer-undo" class="btn small" type="button">↶ Deshacer</button><button id="visualizer-redo" class="btn small" type="button">↷ Rehacer</button><button id="visualizer-save" class="btn small primary" type="button">Guardar</button><button id="visualizer-close" class="btn small" type="button">✕ Cerrar · Esc</button></div></header>
+  <div class="visualizer-modal-content" id="visualizer-modal-slot"></div>
+ </div>
+</div>
 <div class="overlay hide" id="overlay" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div class="dialog"><div class="eyebrow">PROTOTIPO VISUAL</div><h2 id="dialog-title">Acción de demostración</h2><p id="dialog-body"></p><button id="dialog-close" class="btn primary">Entendido</button></div></div>
 <input id="pickfile" class="hidden" type="file" accept=".handd,.json,application/json">
 <script>
@@ -61,6 +77,43 @@ svg.addEventListener('pointerup',finish);svg.addEventListener('pointercancel',fi
 function setTool(t){tool=t;q('#pen').classList.toggle('active',t==='pen');q('#erase').classList.toggle('active',t==='erase');toast(t==='pen'?'Modo dibujar (demo con mouse/touch)':'Modo borrar (demo con mouse/touch)');}
 q('#pen').onclick=()=>setTool('pen');q('#erase').onclick=()=>setTool('erase');
 q('#togglecamera').onclick=()=>{camera=!camera;area.classList.toggle('camera',camera);q('#cv-mode').textContent=camera?'CÁMARA / VISTA DEMO':'LIENZO LIMPIO';q('#togglecamera').textContent=camera?'◉ Lienzo limpio':'◉ Mostrar cámara';q('#togglecamera').setAttribute('aria-pressed',String(camera));};
+// Move the SAME canvas element into a modal: strokes, gestures and undo/redo are not reset.
+const visualizerAnchor=document.createComment('visualizer position');
+area.parentNode.insertBefore(visualizerAnchor,area);
+const visualizerModal=q('#visualizer-modal');
+let modalOpen=false,previousBodyOverflow='';
+function updateFullscreenButton(){const button=q('#fullscreen');button.setAttribute('aria-pressed',String(modalOpen));button.textContent=modalOpen?'⤢ Salir de vista ampliada':'⛶ Ampliar visualizador';}
+function openVisualizerModal(){
+  if(modalOpen)return;
+  previousBodyOverflow=document.body.style.overflow;
+  q('#visualizer-modal-slot').append(area);
+  visualizerModal.classList.remove('hidden');
+  q('.app').inert=true;
+  document.body.style.overflow='hidden';
+  modalOpen=true;updateFullscreenButton();
+  q('#visualizer-close').focus();
+}
+function closeVisualizerModal(){
+  if(!modalOpen)return;
+  visualizerAnchor.parentNode.insertBefore(area,visualizerAnchor);
+  visualizerModal.classList.add('hidden');
+  q('.app').inert=false;
+  document.body.style.overflow=previousBodyOverflow;
+  modalOpen=false;updateFullscreenButton();
+  q('#fullscreen').focus();
+}
+q('#fullscreen').onclick=()=>{modalOpen?closeVisualizerModal():openVisualizerModal()};
+q('#visualizer-close').onclick=closeVisualizerModal;
+q('#visualizer-undo').onclick=()=>q('#undo').click();
+q('#visualizer-redo').onclick=()=>q('#redo').click();
+q('#visualizer-save').onclick=()=>q('#savefile').click();
+visualizerModal.addEventListener('keydown',e=>{
+  if(e.key!=='Tab')return;
+  const focusables=qa('#visualizer-modal button:not(:disabled)');
+  const first=focusables[0],last=focusables[focusables.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+});
 q('#undo').onclick=()=>{if(!strokes.length)return;redo.push(strokes.pop());dirty=true;redraw()};
 q('#redo').onclick=()=>{if(!redo.length)return;strokes.push(redo.pop());dirty=true;redraw()};
 q('#newdoc').onclick=()=>{if(dirty&&!confirm('¿Crear lienzo nuevo? Se descartan los trazos no guardados del prototipo.'))return;strokes=[];redo=[];dirty=false;redraw();toast('Lienzo nuevo (prototipo)')};
@@ -75,8 +128,8 @@ q('#snapshot').onclick=()=>dialog('Snapshot — demo','En la implementación com
 q('#activate').onclick=()=>dialog('Modelo activo — demo','La implementación permitirá seleccionar un candidato compatible. Aquí no se carga ni sustituye ningún modelo.');
 q('#mapping').onclick=()=>dialog('Gestos configurables — demo','La implementación ofrecerá acciones integradas filtradas por mano: dibujar, borrar, regla, ajustar herramientas y ninguna acción.');
 q('#openworkspace').onclick=()=>dialog('Workspace — demo','En la aplicación se abrirá el selector de carpeta del sistema. No hay acceso a archivos del workspace desde esta maqueta.');
-window.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();q(e.shiftKey?'#redo':'#undo').click();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();q('#redo').click()}});
-redraw();
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!q('#overlay').classList.contains('hide'))closeDialog();else if(modalOpen)closeVisualizerModal()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();q(e.shiftKey?'#redo':'#undo').click();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();q('#redo').click()}});
+redraw();updateFullscreenButton();
 </script>
 </body>
 </html>
