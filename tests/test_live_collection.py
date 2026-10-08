@@ -72,6 +72,23 @@ class LatestCaptureResultsTests(unittest.TestCase):
         self.assertIsNone(bridge.drain_to(self.sampler))
         self.assertEqual(self.store.count_samples(), 0)
 
+    def test_live_diagnostics_distinguish_no_hand_from_filtered_capture(self):
+        bridge = LatestCaptureResults()
+        bridge.register_frame(10, 100)
+        bridge.on_result(mock_result([]), None, 100)
+        bridge.drain_to(self.sampler)
+        first = bridge.statistics()
+        self.assertEqual(first['registered_callbacks'], 1)
+        self.assertEqual(first['callbacks_with_hands'], 0)
+        self.assertEqual(first['samples_saved'], 0)
+        bridge.register_frame(11, 200)
+        bridge.on_result(mock_result(['Left']), None, 200)
+        bridge.drain_to(self.sampler)
+        second = bridge.statistics()
+        self.assertEqual(second['registered_callbacks'], 2)
+        self.assertEqual(second['callbacks_with_hands'], 1)
+        self.assertEqual(second['samples_saved'], 1)
+
     def test_collection_cli_help_is_available_without_starting_camera(self):
         result = subprocess.run(
             [sys.executable, '-m', 'handd_core.collect_cli', '--help'],
@@ -81,6 +98,7 @@ class LatestCaptureResultsTests(unittest.TestCase):
         self.assertIn('--workspace', result.stdout)
         self.assertIn('--participant', result.stdout)
         self.assertIn('--gesture', result.stdout)
+        self.assertIn('--max-seconds', result.stdout)
 
 
 if __name__ == '__main__':

@@ -114,6 +114,22 @@ Interpretation: the camera, MediaPipe task, Feature Transform and legacy MLP wor
 
 `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` now passes **38/38** (includes 3 no-camera legacy-model smoke-contract tests).
 
+### HD-04 guided physical-hand mapping + temporary real SQLite Capture (verified 2026-10-08)
+
+The live calibration GUI requests **PHYSICAL RIGHT**, then **PHYSICAL LEFT** while processing only raw MediaPipe hand labels. It does not save any frames, video, landmarks, samples or identifiers. Use only one clearly visible hand at a time:
+
+```bash
+uv run --frozen python -m handd_core.hand_mapping --camera 0 --hold-seconds 8
+```
+
+Executed on the laptop webcam with mirrored frames: **866 frames and 866 MediaPipe callbacks**. During the on-screen RIGHT phase, raw MP Left=238 and Right=0 (100%); during the LEFT phase, raw MP Right=188 and Left=30 (86.2%); 18 ambiguous/empty batches in the Left phase were ignored. Aggregate result: `mapping=inverted`, supporting the existing `CaptureSampler` raw-to-physical inversion (`Left` → physical Right, `Right` → physical Left). This is **conditional on the human holding the indicated physical hand**; it cannot independently identify the operator's hand identity, so ask the operator to verify they followed both prompts before treating the mapping as final ground truth. No OpenCV Qt Wayland-native support claim is made.
+
+A separate real `collect_cli` smoke used an **ephemeral temporary workspace** with deliberately non-training gesture label `CameraSmoke_DoNotTrain`, `--hand Any`, `--quota 25`, `--interval-ms 120`, `--max-seconds 12`. The first run saved 0 Samples; the instrumented second run recorded **355 callbacks, 3 hand-containing callbacks, and 1 actual Sample** with raw MediaPipe Right and 21×3 image/world landmarks, persisting `review=unreviewed`, `lifecycle=active` in canonical SQLite. The temporary SQLite/workspace was inspected and then deleted by a shell trap; **no real training workspace changed and no video/photos were written**. This confirms end-to-end camera→LIVE_STREAM→Sampler→SQLite plumbing, but not trained gesture labeling or detection recall.
+
+To repeat a bounded collection smoke in a disposable directory, create a temporary workspace outside the canonical project (avoid using the real Project Workspace), pass `--max-seconds 12`, and inspect/delete that temporary SQLite afterwards. Do not accept or train on samples labeled `CameraSmoke_DoNotTrain`. `LatestCaptureResults.statistics()` reports `registered_callbacks`, `callbacks_with_hands`, `samples_saved`, and `superseded_callbacks` to distinguish absent detections from persistence failures.
+
+TDD evidence: RED→GREEN for `tests.test_hand_mapping` and callback diagnostics; `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` passed **62/62**, plus compiled new code. Model quality, P003 final-test accuracy and Studio integration remain **No verificado**.
+
 ### HD-06 immutable Development Snapshot (verified 2026-10-08)
 
 The Snapshot Builder reads **accepted + active** rows from `handd.sqlite`, restricted to P001/P002 Development Sessions. It never includes P003 in a Development Snapshot, even if that participant's Session is explicitly listed. It creates a new `snapshots/dev-*/` directory containing `manifest.json` and `dataset.npz` with exact model-ready 69-feature inputs, Sample/Participant/Session IDs, fixed label order, session holdout folds and SHA256 integrity checks. Existing Snapshot versions are never overwritten; revising human Review creates a new Snapshot. Creation does **not** start training.
@@ -197,7 +213,7 @@ Verified for v2 on CachyOS Linux x86-64 (2026-10-08):
 Still **No verificado**:
 
 - reproducibility on a different clean machine and supported non-Linux platforms;
-- camera collection, LIVE_STREAM inference, Tauri HTTP/WS/MJPEG integration;
+- production-grade Studio collection, trained-v2 LIVE_STREAM inference, and Tauri HTTP/WS/MJPEG integration; the Linux camera + legacy classifier and one temporary SQLite capture were verified separately above;
 - Apple Silicon/MPS execution;
 - CUDA/ROCm/XPU execution;
 - production desktop-shell packaging.

@@ -21,6 +21,15 @@ class LatestCaptureResults:
         self._lock = Lock()
         self._latest: Queue[tuple[int, object, int]] = Queue(maxsize=1)
         self._max_inflight = max_inflight
+        self._diagnostics = {
+            'registered_callbacks': 0, 'callbacks_with_hands': 0,
+            'samples_saved': 0, 'superseded_callbacks': 0,
+        }
+
+    def statistics(self) -> dict[str, int]:
+        """Read-only aggregate callback/collection counts (no image contents)."""
+        with self._lock:
+            return dict(self._diagnostics)
 
     def register_frame(self, frame_index: int, timestamp_ms: int) -> None:
         with self._lock:
@@ -31,12 +40,16 @@ class LatestCaptureResults:
     def on_result(self, result: object, output_image: object, timestamp_ms: int) -> None:
         """Thread-safe MediaPipe result_callback; never writes SQLite."""
         with self._lock:
+            self._diagnostics['registered_callbacks'] += 1
+            self._diagnostics['callbacks_with_hands'] += int(bool(result.hand_landmarks))
             frame_index = self._frames.pop(timestamp_ms, None)
         if frame_index is None:
             return
         try:
             self._latest.put_nowait((frame_index, result, timestamp_ms))
         except Full:
+            with self._lock:
+                self._diagnostics['superseded_callbacks'] += 1
             try:
                 self._latest.get_nowait()
             except Empty:
@@ -66,5 +79,7 @@ class LatestCaptureResults:
                 world_landmarks=to_array(world_points),
             )
             if sample_id is not None:
+                with self._lock:
+                    self._diagnostics['samples_saved'] += 1
                 return sample_id
         return None

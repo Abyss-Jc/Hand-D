@@ -39,6 +39,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--camera", type=int, default=0)
     p.add_argument("--quota", type=int, default=120)
     p.add_argument("--interval-ms", type=int, default=100)
+    p.add_argument("--max-seconds", type=float, default=None,
+                   help="Optional bounded collection window for a safe camera smoke test")
     p.add_argument("--model", type=Path, default=Path(__file__).resolve().parents[1]
                    / "models" / "hand_landmarker.task")
     return p
@@ -48,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if args.quota <= 0 or args.interval_ms <= 0:
         parser().error("quota and interval-ms must be positive")
+    if args.max_seconds is not None and args.max_seconds <= 0:
+        parser().error("max-seconds must be positive")
     if not args.model.is_file():
         parser().error(f"MediaPipe Hand Landmarker task not found: {args.model}")
 
@@ -93,7 +97,11 @@ def main(argv: list[str] | None = None) -> int:
             print("Controls: q=finish early, p=pause/resume, Ctrl+C=finish early")
             frame_index = 0
             last_timestamp_ms = -1
+            start_time = time.monotonic()
             while not sampler.finished:
+                if args.max_seconds is not None and time.monotonic() - start_time >= args.max_seconds:
+                    print("Timed collection window reached; existing Samples remain durable.")
+                    break
                 ret, frame = cap.read()
                 if not ret:
                     print("Camera frame not available; ending this Capture.")
@@ -124,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
                 if key == ord("p"):
                     sampler.resume() if sampler.paused else sampler.pause()
             print(f"Capture stored: {sampler.count}/{args.quota} unreviewed Samples")
+            print(f"LIVE_CALLBACK_DIAGNOSTICS {bridge.statistics()}")
             return 0
     except KeyboardInterrupt:
         print("Capture interrupted; all stored Samples remain durable and unreviewed.")
