@@ -78,6 +78,9 @@ Evolve the semester project into one maintained desktop product with two spaces:
 - Snapshot Builder keeps normal configuration minimal and derives transform/labels/folds/reproducibility defaults from workspace/protocol state, exposing detailed controls only through Advanced inspection.
 - Existing snapshots are never edited or overwritten; any membership/configuration/materialization change creates a new snapshot identity.
 - Normal snapshot membership is accepted + active only. Unreviewed Samples are excluded and raise a readiness warning until human review; rejected and dropped Samples remain excluded for independent quality/lifecycle reasons.
+- Snapshot identity stays lightweight: Hand-D allocates the immutable ID automatically and supports only an optional human-readable name/note.
+- Compatible legacy data is frozen as a separate Development Snapshot partition when available; individual experiments choose whether to consume it so legacy/no-legacy comparisons share the same v2 folds.
+- Snapshot creation never starts training automatically. An explicit Prepare Training transition opens the reproducible Training & Evaluation workflow.
 
 ## Current evidence
 

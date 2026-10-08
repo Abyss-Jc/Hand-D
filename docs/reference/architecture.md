@@ -258,6 +258,12 @@ Feature Transform identity, label order, fixed fold definitions, seed/reproducib
 
 Snapshot creation is append-only. Once a snapshot ID is allocated and its manifest/materialization is written, Studio never mutates it in place. A revised experiment creates a new snapshot, even when it is conceptually based on an older one.
 
+Snapshot identity is deliberately simple: the builder allocates a stable automatic ID (for example a sequential/project-scoped development snapshot identifier), while an optional display name/note provides human context. Artifact identity is machine-managed; users should not have to invent/version IDs manually.
+
+Compatible legacy data may be materialized as a distinct frozen partition inside the Development Snapshot. Snapshot creation does not decide the winner of legacy inclusion. Training experiments select legacy=false or legacy=true over the same immutable v2 membership/folds so the comparison changes only the intended variable.
+
+Snapshot creation and training execution are separate actions. After successful creation Studio may show `View Snapshot` and `Prepare Training`; Prepare Training navigates to Models -> Training & Evaluation with the snapshot/configuration preselected, but no training job starts merely because the snapshot exists.
+
 Normal eligibility is the conjunction of two independent states:
 
 ```text

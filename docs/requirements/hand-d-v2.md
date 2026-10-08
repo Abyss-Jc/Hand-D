@@ -125,6 +125,9 @@ The October 13 milestone is not the whole Hand-D v2 product. Hand-D v2 keeps the
 - Snapshot Builder keeps the normal creation surface minimal and derives as much configuration as possible from the active Project Workspace and established protocol. The normal flow exposes only the snapshot identity/description, selected participant/session scope where intentional, legacy inclusion policy when applicable, and Snapshot Readiness summary. Transform identity, label order, fold definitions, seed/policies, and exact exclusions are inspectable through Advanced details and are recorded in the manifest.
 - Snapshots are immutable after creation. Studio never edits an existing snapshot's membership, transform, folds, labels, or materialized arrays. Any desired change produces a new snapshot identity, optionally by using an existing snapshot as a starting reference.
 - Default snapshot eligibility requires both Review Status = accepted and Sample Lifecycle Status = active. Unreviewed Samples never enter a normal Development Snapshot; they remain excluded and generate a readiness warning until a human review decision is recorded. Rejected or dropped Samples remain excluded for their respective quality/lifecycle reasons.
+- Snapshot IDs are generated automatically and remain stable/immutable. Studio may attach an optional human-readable name or note for context, but users do not manually manage artifact identity.
+- A Development Snapshot may freeze the compatible legacy partition alongside v2 development data. Whether legacy participates in a given training experiment is experiment configuration, not a casual snapshot-creation toggle; paired legacy/no-legacy comparisons therefore share the same frozen v2 evidence/folds.
+- Creating a snapshot never launches training automatically. Studio presents the completed snapshot and an explicit Prepare Training action that opens Models -> Training & Evaluation with reproducible configuration derived from the snapshot.
 
 ## Criterios de aceptación
 
@@ -248,6 +251,9 @@ The table below describes the Hand-D v2 target contract. It is intentionally bro
 | V2-112 | A user opens Snapshot Builder | Normal snapshot creation begins | Studio derives protocol/transform/fold/label defaults from the workspace and exposes only the small set of decisions the user must intentionally make, with technical details available through Advanced inspection |
 | V2-113 | An immutable snapshot already exists | Membership/configuration needs to change | Studio creates a new snapshot identity rather than modifying or overwriting the existing snapshot |
 | V2-114 | Snapshot Builder evaluates Sample eligibility | A Sample is unreviewed, rejected, dropped, or accepted/active | Only accepted + active Samples are eligible by default; unreviewed Samples are excluded with a readiness warning, while rejected/dropped Samples remain excluded according to their independent states |
+| V2-115 | Snapshot Builder creates a new snapshot | Artifact identity is allocated | Hand-D generates a stable automatic snapshot ID and may store an optional human-readable name/note without making users manage IDs manually |
+| V2-116 | A Development Snapshot includes compatible legacy data | Training variants are prepared | The legacy partition is frozen with the snapshot, while each experiment explicitly chooses legacy=false/true against the same v2 folds/evidence |
+| V2-117 | Snapshot creation completes | The user wants to proceed toward training | Studio does not train automatically; it offers an explicit Prepare Training action that derives a reproducible training configuration from the immutable snapshot |
 
 ## Alcance
 
