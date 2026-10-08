@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 REVIEW_STATUSES = frozenset({'unreviewed', 'accepted', 'rejected'})
 LIFECYCLE_STATUSES = frozenset({'active', 'dropped'})
 
@@ -103,6 +103,37 @@ class DatasetStore:
                 reason TEXT,
                 created_at TEXT NOT NULL
             );
+            -- Historical 69-feature rows CANNOT become canonical Samples:
+            -- they lack original landmarks and Session provenance.
+            CREATE TABLE IF NOT EXISTS legacy_sources (
+                source_id TEXT PRIMARY KEY,
+                source_filename TEXT NOT NULL,
+                source_sha256 TEXT NOT NULL UNIQUE,
+                feature_contract TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('compatible','quarantined')),
+                row_count INTEGER NOT NULL CHECK(row_count >= 1),
+                imported_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS legacy_rows (
+                source_id TEXT NOT NULL REFERENCES legacy_sources(source_id),
+                row_number INTEGER NOT NULL CHECK(row_number >= 2),
+                features_f32_le BLOB NOT NULL CHECK(length(features_f32_le)=276),
+                original_label TEXT NOT NULL,
+                handedness_binary INTEGER NOT NULL CHECK(handedness_binary IN (0,1)),
+                PRIMARY KEY (source_id, row_number)
+            );
+            CREATE TRIGGER IF NOT EXISTS legacy_sources_no_update
+            BEFORE UPDATE ON legacy_sources
+            BEGIN SELECT RAISE(ABORT, 'legacy source is immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS legacy_sources_no_delete
+            BEFORE DELETE ON legacy_sources
+            BEGIN SELECT RAISE(ABORT, 'legacy source is immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS legacy_rows_no_update
+            BEFORE UPDATE ON legacy_rows
+            BEGIN SELECT RAISE(ABORT, 'legacy row is immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS legacy_rows_no_delete
+            BEFORE DELETE ON legacy_rows
+            BEGIN SELECT RAISE(ABORT, 'legacy row is immutable'); END;
             CREATE INDEX IF NOT EXISTS samples_capture_idx ON samples(capture_id);
             CREATE INDEX IF NOT EXISTS samples_eligibility_idx
                 ON samples(review_status, lifecycle_status);

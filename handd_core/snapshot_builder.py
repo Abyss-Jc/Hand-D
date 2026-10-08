@@ -19,6 +19,7 @@ import numpy as np
 
 from handd_core.dataset_store import DatasetStore, SCHEMA_VERSION
 from handd_core.feature_transform import FEATURE_TRANSFORM_ID, FEATURE_COUNT, canonicalize_world_landmarks
+from handd_core.legacy_import import load_legacy_source
 from handd_core.snapshot_readiness import assess_snapshot_readiness
 
 SNAPSHOT_FORMAT_VERSION = 1
@@ -81,6 +82,22 @@ def _checksum(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _freeze_legacy_store(store: DatasetStore, source_id: str) -> tuple[bytes, list[str], str, int]:
+    features, labels, handedness, row_ids = load_legacy_source(store, source_id)
+    if not set(labels).issubset(BASE_LABEL_ORDER):
+        raise SnapshotBlocked('quarantined legacy labels are not compatible')
+    label_to_index = {label: i for i, label in enumerate(BASE_LABEL_ORDER)}
+    stream = BytesIO()
+    np.savez_compressed(
+        stream, features=features,
+        labels=np.asarray(labels, dtype=np.str_),
+        handedness=handedness,
+        label_indices=np.asarray([label_to_index[name] for name in labels], dtype=np.int64),
+        row_ids=np.asarray(row_ids, dtype=np.str_),
+    )
+    return stream.getvalue(), labels, source_id, len(labels)
+
+
 def _folds(session_ids: list[str]) -> list[dict]:
     sessions = sorted(set(session_ids))
     if len(sessions) < 2:
@@ -100,6 +117,7 @@ def build_development_snapshot(
     seed: int = 42,
     snapshot_id: str | None = None,
     legacy_csv: Path | None = None,
+    legacy_source_id: str | None = None,
 ) -> DevelopmentSnapshot:
     """Freeze accepted + active development inputs, fail without partial artifacts.
 
@@ -110,6 +128,16 @@ def build_development_snapshot(
         raise ValueError("seed must be an integer")
     if note is not None and not isinstance(note, str):
         raise ValueError("note must be text")
+    if legacy_csv is not None and legacy_source_id is not None:
+        raise ValueError("choose either legacy_csv or legacy_source_id, not both")
+    if legacy_source_id is not None:
+        source = store.conn.execute(
+            'SELECT status FROM legacy_sources WHERE source_id=?', (legacy_source_id,),
+        ).fetchone()
+        if source is None:
+            raise KeyError(f'unknown legacy source {legacy_source_id}')
+        if source['status'] != 'compatible':
+            raise SnapshotBlocked('quarantined legacy source cannot enter Development')
     final = set(final_test_session_ids or ())
     selected = set(development_session_ids) if development_session_ids is not None else None
     if selected is not None and selected & final:
@@ -153,6 +181,10 @@ def build_development_snapshot(
     if legacy_csv is not None:
         legacy_payload, legacy_labels, legacy_source_sha, legacy_count = _freeze_legacy_csv(
             Path(legacy_csv)
+        )
+    elif legacy_source_id is not None:
+        legacy_payload, legacy_labels, legacy_source_sha, legacy_count = _freeze_legacy_store(
+            store, legacy_source_id,
         )
     labels = tuple(dict.fromkeys(
         (*BASE_LABEL_ORDER, *sorted({sample["gesture"] for sample in samples}))
@@ -210,6 +242,7 @@ def build_development_snapshot(
                    "data_sha256": _checksum(legacy_payload)
                    if legacy_payload is not None else None,
                    "source_sha256": legacy_source_sha,
+                   "source_id": legacy_source_id,
                    "provenance_quality": "legacy_unverified_no_session_groups"
                    if legacy_payload is not None else None},
     }

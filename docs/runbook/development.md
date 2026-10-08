@@ -152,6 +152,25 @@ Optional legacy CSV must exactly contain columns `feat_0` through `feat_68`, `ha
 
 Evidence: RED→GREEN tests for membership, excluded unreviewed/rejected/dropped rows, no P003 leakage, protected prior versions, deterministic materialization, tampered content/manifest, legacy compatibility, and explicit build/verify CLI. `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` passed **49/49**, with no real camera required. A separate temporary-workspace smoke successfully froze all **5,400** rows of the repository's historical `datasets/gesture_dataset.csv` alongside one synthetic accepted v2 Sample and passed `verify_snapshot`, without mutating the dataset or workspaces. This does NOT prove real camera collection, training performance, sealed P003 evaluation, or cross-platform packaging.
 
+### HD-06L legacy CSV migration into SQLite (2026-10-08)
+
+The existing CSV files store **69 derived model-input features**, a binary handedness code and a label; they do NOT store original 21×3 image/world landmarks, Participant IDs, or Collection Sessions. Import never invents these missing facts. SQLite schema **v2** creates separate immutable legacy tables and upgrades a v1 database additively without modifying canonical Samples. Imports are atomic and idempotent using SHA-256 of the original CSV bytes.
+
+```bash
+# Run from the repository root, targeting your intentional workspace:
+uv run --frozen python -m handd_core.legacy_cli --workspace /path/to/Hand-D-workspace import datasets/gesture_dataset.csv
+uv run --frozen python -m handd_core.legacy_cli --workspace /path/to/Hand-D-workspace import datasets/gesture_dataset_old.csv
+uv run --frozen python -m handd_core.legacy_cli --workspace /path/to/Hand-D-workspace list
+
+# Pass SOURCE_ID from the preceding list command when freezing a NEW Snapshot.
+# A Development Snapshot still requires at least one accepted P001/P002 v2 Sample.
+uv run --frozen python -m handd_core.snapshot_cli --workspace /path/to/Hand-D-workspace build --legacy-source SOURCE_ID
+```
+
+The first CSV has **5,400** rows and labels compatible with the current five-class catalog. The older CSV has **4,336** rows and an old label `Ruler_Gesture`, so the importer preserves it as **quarantined**, not automatically renamed to `Ruler` or silently inserted into training. These represent 9,736 historical records, **not necessarily 9,736 independent observations**; overlap between CSVs or with future v2 Samples is unknown. Compatible imports can contribute only to the separately flagged legacy TRAIN partition when selected. They are never P001/P002 heldout validation or sealed P003 test membership. Existing immutable Snapshots remain unchanged; build a new one for updated selection.
+
+Verified with TDD and an ephemeral SQLite database: both complete CSVs imported, re-import no-ops, quarantine enforced, 9,736 legacy rows plus zero canonical raw Samples. Tests cover malformed-input rollback, source/row immutability, schema-v1 preservation and snapshot creation **after the original CSV is removed**. No real workspace was modified and no evaluation claim was made.
+
 ### HD-07 grouped Development training and Model Artifact (verified 2026-10-08)
 
 Training requires a frozen Development Snapshot with **at least two independent Collection Sessions**. It never queries current SQLite, trains on a P003/final-test Snapshot, or activates the candidate automatically. On CachyOS Linux CPU:

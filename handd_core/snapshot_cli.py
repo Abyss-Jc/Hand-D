@@ -17,7 +17,9 @@ def parser() -> argparse.ArgumentParser:
     commands = p.add_subparsers(dest="command", required=True)
     build = commands.add_parser("build", help="Freeze eligible rows without training")
     build.add_argument("--note")
-    build.add_argument("--legacy-csv", type=Path)
+    legacy_input = build.add_mutually_exclusive_group()
+    legacy_input.add_argument("--legacy-csv", type=Path)
+    legacy_input.add_argument("--legacy-source", help="SHA-256 ID from legacy_cli list")
     build.add_argument("--development-session", action="append")
     build.add_argument("--final-test-session", action="append")
     build.add_argument("--seed", type=int, default=42)
@@ -46,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             built = build_development_snapshot(
                 store, workspace, note=args.note, legacy_csv=args.legacy_csv,
+                legacy_source_id=args.legacy_source,
                 development_session_ids=set(args.development_session)
                 if args.development_session else None,
                 final_test_session_ids=set(args.final_test_session or ()),
