@@ -539,6 +539,20 @@ Portable project state lives with the workspace: canonical dataset, snapshots, M
 
 Machine/user state lives in platform-local Hand-D configuration: preferred camera/device identifier, window/display preferences, Easy Mode, purely local UI preferences, and any explicit local runtime-provider override. Copying/cloning the workspace must not carry `/dev/video*`, Windows device IDs, FaceTime camera identifiers, or other machine-specific settings to another computer.
 
+### Whiteboard document lifecycle
+
+The frontend/application owns the editable drawing document. Whiteboard therefore distinguishes three storage concepts:
+
+1. **Native drawing document** — user-selected editable file containing the current drawing model (strokes, straight lines, color/width/tool-relevant state, and document/version metadata).
+2. **Recovery state** — local app-data checkpoint for unsaved/crash recovery; not a user document and not ML workspace state.
+3. **Export artifact** — explicit SVG/PNG/PDF-like output created only when the user chooses Export.
+
+Save/Open operate on the native editable document. Export is intentionally separate; a normal Save must not silently flatten the document or act like a browser-style Download. The first native representation may be a simple versioned JSON-based format rather than a custom binary/container until requirements justify more complexity.
+
+Undo/redo history is session-local in v2. Reopening a native document restores its editable current state, but Hand-D is not required to serialize the complete command history across launches.
+
+Drawing files are independent from Project Workspaces. A user may save a drawing inside a workspace directory if desired, but Whiteboard remains fully functional with documents stored anywhere the operating system file picker permits.
+
 Normal preferences/cache/logs may use the platform application-data directories, but those are distinct from the project dataset/workspace. Tauri's writable app-data paths are appropriate for application-owned state; the canonical team dataset remains an explicit project/workspace concern.
 
 ### Dependency/runtime compatibility gates

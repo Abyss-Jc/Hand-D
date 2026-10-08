@@ -86,6 +86,9 @@ Evolve the semester project into one maintained desktop product with two spaces:
 - Workspace format version and SQLite schema version evolve independently. Supported old workspaces migrate forward only with a recoverable backup/checkpoint, transactional migration, and validation; Hand-D never performs automatic downgrades or writes an incompatible newer workspace from an older app.
 - External Model Artifacts are validated and copied into the workspace model store before selection so portability does not depend on arbitrary absolute paths. Bare legacy weight files require an explicit migration/import contract.
 - Hardware/UI preferences are local per-device/user state; collaborative/project state such as Active Model, datasets, snapshots, gesture definitions, and training policy remains workspace-scoped.
+- Whiteboard gets a native editable document format with Save/Open semantics; Export is a separate explicit action for SVG/PNG/PDF-style outputs rather than an implicit “download”.
+- Unsaved Whiteboard work uses local crash-recovery state outside the Project Workspace. Undo/redo remains session-scoped even though the saved drawing itself is editable after reopening.
+- Drawing documents are user-selected files independent from ML Project Workspaces.
 
 ## Current evidence
 
