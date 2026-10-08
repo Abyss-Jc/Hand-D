@@ -197,6 +197,28 @@ Dataset contains **Browse** and **Review**. Browse exposes filters and summaries
 
 Models contains Active Model selection, available compatible artifacts, compatibility/provenance, and evaluation evidence. A **Training & Evaluation** subsection bridges to the reproducible external training workflow for the milestone: it can show the selected snapshot/configuration and produce/copy the exact command or launch aid, while actual training remains CLI/tool-owned. New Model Artifacts are discovered back into Models afterward. This preserves a stable UI location for training today and a natural home for a future GUI-owned training action.
 
+`Models -> Evaluation` renders structured Model Artifact evidence directly in Studio. The default hierarchy is intentionally compact:
+
+- Macro F1 and overall model health;
+- per-class precision/recall/F1 summaries;
+- confusion matrix;
+- learning curve;
+- runtime performance summary.
+
+Fold/session metrics, training history, uncertainty distributions, artifact/configuration details, and future calibration diagnostics remain drill-down/advanced material rather than occupying the primary screen.
+
+Raw classifier outputs are described as scores unless calibration evidence exists. Advanced evaluation/review surfaces expose the top-1 score, runner-up score, and top-two margin explicitly. A simplified “confidence” label may be used as UX copy only when it does not imply that raw softmax output is a calibrated probability.
+
+Dataset analytics are likewise action-oriented rather than dashboard-heavy. The default analytics answer:
+
+- which gestures/classes are underrepresented;
+- which participant/session/hand combinations are incomplete;
+- how many Samples are unreviewed/accepted/rejected/dropped;
+- which Capture/session targets are incomplete;
+- what collection/review action should happen next.
+
+Coverage matrices and a small number of balance/progress charts support those questions. Exploratory embeddings/dimensionality-reduction visualizations are deferred from the default v2 Studio UX.
+
 Workspace uses the desktop operating system's native directory chooser through Tauri for Open/Create operations. A new workspace asks only for a name and target location; Hand-D initializes the config, SQLite store, and expected project directories itself.
 
 ### Easy Mode

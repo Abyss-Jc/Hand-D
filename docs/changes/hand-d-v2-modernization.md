@@ -71,6 +71,9 @@ Evolve the semester project into one maintained desktop product with two spaces:
 - Training prefers validated acceleration such as CUDA/MPS. Packaged runtime likewise prefers a validated accelerated provider when it meets or improves latency/cadence; benchmarking selects the provider and retains CPU only as the universal fallback when acceleration would regress the experience.
 - Python project/dependency management moves to `uv` with `pyproject.toml` + `uv.lock`; runtime/training/dev dependency groups replace duplicated requirements snapshots, and an environment installs only one OpenCV distribution.
 - Hand-D structured snapshots/manifests/metrics remain the ML source of truth. TensorBoard is optional training/debugging telemetry; Matplotlib/Tkinter remain legacy/report tools; Studio/Tauri renders product-facing charts from structured evidence. MLflow is deferred unless it later replaces rather than duplicates this tracking model.
+- Models -> Evaluation is deliberately compact: Macro F1, per-class health, confusion matrix, learning curve, and runtime performance are primary; folds/history/artifact/uncertainty detail is progressively disclosed.
+- Advanced UI names top-1 score, runner-up score, and top-two margin directly rather than treating raw softmax output as a calibrated probability.
+- Dataset analytics focus on actionable balance/coverage/progress and collection gaps, not a bloated analytics dashboard; exploratory embedding plots are deferred.
 
 ## Current evidence
 

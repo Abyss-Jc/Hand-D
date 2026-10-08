@@ -116,6 +116,9 @@ The October 13 milestone is not the whole Hand-D v2 product. Hand-D v2 keeps the
 - Preview/control traffic remain isolated. Slow preview rendering or stream backpressure must never delay gesture/control events, and hiding/minimizing preview must stop or heavily throttle JPEG encoding/transport work.
 - Project dependencies must be refreshed as a tested compatibility set, not upgraded independently.
 - Hand-D structured snapshots/manifests/metrics remain the ML source of truth. TensorBoard may be emitted as optional training/debugging telemetry and Matplotlib/Tkinter visualizers may remain as legacy/report tools, while Studio renders product-facing evaluation charts from structured artifact data. MLflow is deferred unless experiment/run scale grows enough to justify replacing—not duplicating—the custom artifact tracking model.
+- Studio -> Models -> Evaluation presents compact product-facing model evidence rather than exposing every metric at once. The primary view emphasizes Macro F1, per-class health, confusion matrix, learning curve, and runtime performance; cross-validation folds, training history, artifact/configuration details, and uncertainty diagnostics remain available through progressive disclosure.
+- Model score terminology distinguishes raw model scores from calibrated probability. Advanced views expose top-1 score, runner-up score, and top-two margin explicitly. Simplified UI may use confidence-oriented language only when copy makes clear that an uncalibrated softmax score is not a guaranteed probability of correctness.
+- Studio -> Dataset includes lightweight analytics focused on collection/review decisions: gesture/class balance, participant/session/hand coverage, Review/Lifecycle counts, collection progress, and gaps. Analytics must remain compact and actionable; exploratory visualizations such as PCA/t-SNE/UMAP are not part of the default v2 Studio surface.
 
 ## Criterios de aceptación
 
@@ -231,6 +234,9 @@ The table below describes the Hand-D v2 target contract. It is intentionally bro
 | V2-104 | The deployment-runtime prototype runs | PyTorch and ONNX Runtime are compared | Predictions match within an explicit numerical tolerance and latency/cadence, startup, package footprint, and provider/platform evidence are recorded before choosing the packaged inference runtime |
 | V2-105 | Python dependencies are modernized | A developer or CI creates the project environment | pyproject.toml + uv.lock are the dependency source of truth, uv performs lock/sync, runtime/training/dev dependencies are separated, and only one OpenCV distribution is installed |
 | V2-106 | Python emits a drawing-hand tracking result | The frontend consumes it | Tracking coordinates use a normalized frame-independent contract and the frontend owns canvas mapping/smoothing/drawing-document state rather than receiving camera-pixel drawing commands |
+| V2-107 | A user opens Studio -> Models -> Evaluation | A Model Artifact has evaluation evidence | The default view prioritizes Macro F1, per-class health, confusion matrix, learning curve, and runtime performance, with folds/history/configuration/uncertainty details available through drill-down rather than all visible at once |
+| V2-108 | Studio displays classifier uncertainty | Raw model scores are available | Advanced UI labels top-1 score, runner-up score, and top-two margin explicitly; Hand-D does not present an uncalibrated softmax score as a guaranteed correctness probability |
+| V2-109 | A user opens Studio -> Dataset analytics | Collection/review planning is needed | Studio shows compact balance/coverage/progress information and highlights actionable collection gaps without turning the default Dataset surface into a dense ML dashboard |
 
 ## Alcance
 
