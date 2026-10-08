@@ -176,7 +176,7 @@ Verification focus:
 
 Deliverables:
 
-- continue defining App and Studio primary flows before Impeccable Shape;
+- use the completed UX Shape handoff and interactive static prototype for Whiteboard and Studio rather than continuing open-ended design questioning;
 - prototype the minimum runtime-to-frontend contract with the selected Tauri shell;
 - validate Python sidecar/process lifecycle, IPC/event flow, startup, shutdown, crash behavior, and packaging constraints;
 - validate direct MJPEG preview independently from HTTP/WebSocket control/result traffic.
