@@ -77,6 +77,8 @@ These are navigation/product boundaries, not separate executables. They share th
 
 The runtime owns camera access, MediaPipe processing, shared feature transformation, gesture inference, gesture/tracking stabilization, hardware backend/provider selection, and lifecycle/error states. The App frontend consumes normalized tracking coordinates plus transient gesture/runtime state from this boundary rather than camera-pixel drawing commands.
 
+Gesture stabilization is a narrow temporal-state/hysteresis boundary in Python: a single transient wrong-class frame must not switch into erasing, commit/break a stroke, or otherwise trigger unsafe tool churn. Tracking coordinates stay freshest-result and frontend-smoothed independently. Prototype tests establish delays/thresholds instead of assuming a fixed frame count. Configured Drawing Hand and Modifier Hand identities never swap automatically when one is lost; missing the Drawing Hand ends/pauses its drawing actions safely until it returns or roles are changed explicitly.
+
 For the App path, freshness is more important than exhausting every camera frame.
 
 Live camera processing uses MediaPipe Hand Landmarker LIVE_STREAM mode and detect_async with monotonic timestamps. Unlike the current IMAGE/detect loop, the live-stream API is asynchronous and is allowed to ignore incoming frames while the landmarker is busy. This bounded/freshness behavior is intentional: Hand-D must prefer the latest usable gesture state over building a backlog of stale camera frames.
@@ -128,7 +130,7 @@ This localhost service is the Python sidecar API; it is distinct from Tauri's op
 
 ### Camera preview
 
-Both App and Studio may display live camera preview, preserving the current camera-visible/dark-mode product behavior. Studio uses preview as collection feedback; App treats it as an optional presentation mode.
+Whiteboard is **Camera-first** by default: the live feed is its background and the editable drawing is layered over it, preserving the existing camera-overlay interaction. A visible toggle switches to a clean/dark canvas presentation without changing document state or stopping gesture tracking. Studio uses visible camera preview during collection by default. If camera/preview is unavailable, the canvas itself remains available even though gesture input may be degraded.
 
 Preview is deliberately independent from control/inference IPC. Python owns the camera once and can fan the latest frame out to MediaPipe and to an optional preview encoder/stream. When no surface subscribes to preview, frame encoding/transport work should stop.
 
@@ -189,7 +191,11 @@ The operator chooses only the participant, target gesture, hand, and target quot
 
 Participants are scoped inside Collect. A selected participant starts or resumes the human workflow context, while each new Collection Session remains a distinct provenance boundary. Within that active Session, Collect presents gestures as a Capture checklist so repeated participant/session setup is unnecessary.
 
-The gesture vocabulary is workspace-extensible for collection. A new gesture definition may be created and collected immediately, but the gesture is not a runtime capability merely because rows exist in SQLite. Runtime recognition requires a compatible Model Artifact whose label manifest includes the gesture; using that recognition to trigger a Whiteboard action additionally requires an explicit product/runtime mapping.
+The gesture vocabulary is workspace-extensible for collection **and actual Whiteboard use**. A new gesture definition can be created/collected immediately, and Studio exposes a simple role-aware Gesture -> Whiteboard Action mapping from supported actions. After training and selecting a compatible Model Artifact that recognizes the label, its mapped action works in Whiteboard without writing a per-gesture handler.
+
+Gesture recognition and action dispatch remain separate seams: Python emits a stable label/hand role/tracking result; the frontend resolves the workspace mapping into a drawing/modifier action and owns the resulting canvas state. The mapping is project/workspace configuration, not a mutation of an immutable Model Artifact. Studio can offer action assignment when defining the gesture or when selecting a model with a new label; it must visibly guide the user when assignments are missing. Unmapped recognized labels are safe/inert until mapped, rather than receiving arbitrary drawing or erasing behavior. An explicit No Action mapping remains valid.
+
+The current baseline is role-dependent, not a simplistic one-class-one-tool list: Index_Finger on the Drawing Hand draws; Fist erases; Ruler on the Modifier Hand changes drawing to a straight-line mode; Thumb_Up on the Modifier Hand adjusts thickness/eraser size; Idle takes no action. Future gesture labels may map onto supported role-aware actions without requiring a macro/scripting engine.
 
 Every accepted technical observation persists the canonical 21-point MediaPipe data: 21 normalized image-space x/y/z triples plus 21 world-space x/y/z triples. The 69-value legacy-compatible model input is not what Collect stores as source truth; it is materialized later through Feature Transform v1.
 

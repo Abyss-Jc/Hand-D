@@ -27,6 +27,9 @@ A progressive-disclosure UI mode, disabled by default, that reduces technical de
 **Drawing Hand**:
 The hand whose gesture directly controls drawing and erasing actions.
 
+**Gesture Action Mapping**:
+A workspace-scoped, role-aware association between a recognized gesture label and an existing Whiteboard drawing/modifier action. New gestures become usable after a compatible Model Artifact recognizing them is activated and an action is assigned. Model recognition alone never invents an action, and Model Artifacts are not mutated to store UI mapping.
+
 **Whiteboard Document**:
 A native editable Hand-D drawing file owned by the Whiteboard/frontend document model. Save/Open preserve editable drawing state; Export creates separate flattened/shareable formats only when explicitly requested. The document is not required to live in a Project Workspace.
 
