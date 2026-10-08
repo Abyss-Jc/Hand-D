@@ -136,6 +136,29 @@ Optional legacy CSV must exactly contain columns `feat_0` through `feat_68`, `ha
 
 Evidence: RED→GREEN tests for membership, excluded unreviewed/rejected/dropped rows, no P003 leakage, protected prior versions, deterministic materialization, tampered content/manifest, legacy compatibility, and explicit build/verify CLI. `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` passed **49/49**, with no real camera required. A separate temporary-workspace smoke successfully froze all **5,400** rows of the repository's historical `datasets/gesture_dataset.csv` alongside one synthetic accepted v2 Sample and passed `verify_snapshot`, without mutating the dataset or workspaces. This does NOT prove real camera collection, training performance, sealed P003 evaluation, or cross-platform packaging.
 
+### HD-07 grouped Development training and Model Artifact (verified 2026-10-08)
+
+Training requires a frozen Development Snapshot with **at least two independent Collection Sessions**. It never queries current SQLite, trains on a P003/final-test Snapshot, or activates the candidate automatically. On CachyOS Linux CPU:
+
+```bash
+# Default: Development session-held-out CV, 25/50/75/100% learning curves,
+# 20 epochs, seed 42; explicit final refit without legacy augmentation.
+uv run --frozen python -m handd_core.train_cli --workspace /path/to/Hand-D-workspace --snapshot dev-SNAPSHOT_ID
+
+# Quick local plumbing check; still evaluates only frozen development sessions:
+uv run --frozen python -m handd_core.train_cli --workspace /path/to/Hand-D-workspace --snapshot dev-SNAPSHOT_ID --epochs 1 --fractions 1.0
+
+# Only when the snapshot contains a frozen legacy.npz, and augmentation
+# has been explicitly selected for final refit:
+uv run --frozen python -m handd_core.train_cli --workspace /path/to/Hand-D-workspace --snapshot dev-SNAPSHOT_ID --final-legacy
+```
+
+Outputs are immutable-by-creation `reports/experiment-*/` (fold checkpoint weights and `metrics.json`) and `models/candidate-*/` (`weights.pth`, versioned `manifest.json`, copy of `metrics.json`). The report contains each fold's non-overlapping train/validation Session IDs and Sample IDs, full OOF predictions/uncalibrated scores, Macro F1, per-class precision/recall/F1, confusion matrix and learning-curve points. If the snapshot has legacy data, the trainer runs both **without_legacy** and **with_legacy** over the same Development heldout sessions; **legacy rows never become the heldout evaluation set**. Old legacy provenance has no reliable Collection-Session groups, so its trial may still contain unknowable historical overlap. Treat it as exploratory, not a certified leakage-free generalization result.
+
+The final refit uses **all eligible Development Samples**, plus legacy only if `--final-legacy` was explicitly given. A Candidate is not automatically selected Active; its loader validates architecture, 69-feature contract, label order, weight checksum and metrics checksum. A true unseen-participant P003 evaluation remains separate and **No verificado**.
+
+Executed evidence: TDD module/CLI RED before GREEN, full `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` **56/56 passing**, and ephemeral smoke using **20 synthetic v2 Samples in 2 Sessions** plus the full **5,400-row historical legacy partition**. One-epoch paired training created both OOF variants and a compatible loadable five-class final-refit Candidate. This verifies plumbing only; no real-data classification accuracy, test P003 evidence, deployment FPS or cross-platform performance has been measured for the new Candidate.
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:
