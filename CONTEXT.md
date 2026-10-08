@@ -15,6 +15,12 @@ _Avoid_: Dataset App, admin app
 **Project Workspace**:
 A user-selected portable writable Hand-D project directory that owns the canonical SQLite dataset plus project-scoped snapshots, generated Model Artifacts, reports, and workspace configuration. Workspace-internal references use relative paths so the directory can be moved, copied, cloned, or used directly as a Git repository without changing its logical structure. It is separate from the installed application bundle and can be opened by both source and packaged Hand-D builds.
 
+**Workspace Format Version**:
+The version of the portable workspace layout/config contract. It is independent from App SemVer and from the SQLite Schema Version. Supported older formats migrate forward only; Hand-D never automatically downgrades a workspace.
+
+**SQLite Schema Version**:
+The version of the canonical workspace database schema. It can evolve independently from the surrounding Workspace Format Version and is migrated forward transactionally with recoverable backup/checkpoint and validation.
+
 **Easy Mode**:
 A progressive-disclosure UI mode, disabled by default, that reduces technical density and exposes safer/high-level controls without changing the underlying workspace, data model, runtime contracts, or artifact compatibility. Advanced controls remain available by switching presentation mode rather than through a different application.
 

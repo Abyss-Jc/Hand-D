@@ -83,6 +83,9 @@ Evolve the semester project into one maintained desktop product with two spaces:
 - Snapshot creation never starts training automatically. An explicit Prepare Training transition opens the reproducible Training & Evaluation workflow.
 - Training consumes snapshots strictly read-only; correcting data means curate -> new snapshot -> new training rather than mutating prior experiment inputs.
 - Newly trained Model Artifacts are candidates by default and do not replace an existing Active Model automatically. The user explicitly selects a replacement; only a workspace with no prior Active Model may bootstrap to its first compatible trained model.
+- Workspace format version and SQLite schema version evolve independently. Supported old workspaces migrate forward only with a recoverable backup/checkpoint, transactional migration, and validation; Hand-D never performs automatic downgrades or writes an incompatible newer workspace from an older app.
+- External Model Artifacts are validated and copied into the workspace model store before selection so portability does not depend on arbitrary absolute paths. Bare legacy weight files require an explicit migration/import contract.
+- Hardware/UI preferences are local per-device/user state; collaborative/project state such as Active Model, datasets, snapshots, gesture definitions, and training policy remains workspace-scoped.
 
 ## Current evidence
 

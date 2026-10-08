@@ -498,6 +498,47 @@ Each workspace stores an **Active Model** reference. Whiteboard uses that compat
 
 Producing a new Model Artifact does not implicitly change that Active Model reference. The existing model remains active until the user explicitly selects another compatible artifact in Studio. The only bootstrap exception is a workspace with no Active Model yet: the first successfully produced compatible model may become its initial Active Model automatically.
 
+### Workspace compatibility and migration
+
+Workspace evolution has two independent version axes:
+
+- `workspace_format_version` — project layout/config contract;
+- `schema_version` — canonical SQLite schema contract.
+
+They may evolve independently. Opening an older supported version is a forward-only operation:
+
+```text
+detect older version
+→ create recoverable backup/checkpoint
+→ begin transactional migration
+→ migrate
+→ validate invariants
+→ commit
+```
+
+Migration failure rolls back rather than leaving a half-migrated canonical dataset. Hand-D never automatically downgrades a workspace or SQLite schema. If the running app is older than the workspace/schema it encounters, it must not write; safe read-only inspection is optional only when the specific compatibility path has been deliberately implemented and tested.
+
+### Model import
+
+Workspace portability forbids normal Active Model references to arbitrary external absolute paths. Importing a complete external Model Artifact therefore means:
+
+```text
+select artifact
+→ validate manifest
+→ validate Feature Transform / labels / runtime compatibility
+→ allocate/import workspace artifact identity
+→ copy into workspace models/
+→ expose as candidate for explicit activation
+```
+
+The source artifact remains external; the workspace-owned copy becomes the canonical imported artifact. A bare legacy `.pth` lacks enough semantic contract to follow this path directly and requires an explicit legacy migration/import flow before Hand-D may treat it as compatible.
+
+### Workspace-scoped vs device-scoped configuration
+
+Portable project state lives with the workspace: canonical dataset, snapshots, Model Artifacts, Active Model, gesture definitions, project/training policy, and other collaboration-relevant configuration.
+
+Machine/user state lives in platform-local Hand-D configuration: preferred camera/device identifier, window/display preferences, Easy Mode, purely local UI preferences, and any explicit local runtime-provider override. Copying/cloning the workspace must not carry `/dev/video*`, Windows device IDs, FaceTime camera identifiers, or other machine-specific settings to another computer.
+
 Normal preferences/cache/logs may use the platform application-data directories, but those are distinct from the project dataset/workspace. Tauri's writable app-data paths are appropriate for application-owned state; the canonical team dataset remains an explicit project/workspace concern.
 
 ### Dependency/runtime compatibility gates
