@@ -197,6 +197,8 @@ Gesture recognition and action dispatch remain separate seams: Python emits a st
 
 The current baseline is role-dependent, not a simplistic one-class-one-tool list: Index_Finger on the Drawing Hand draws; Fist erases; Ruler on the Modifier Hand changes drawing to a straight-line mode; Thumb_Up on the Modifier Hand adjusts thickness/eraser size; Idle takes no action. Future gesture labels may map onto supported role-aware actions without requiring a macro/scripting engine.
 
+The v2 action catalog stays deliberately finite and UI-configurable. It initially exposes implemented built-in drawing, erasing, straight-line-modifier, tool-adjustment and No Action behaviors, filtered by role. Further built-in actions (such as color/tool selection) can join the catalog as the Whiteboard supports them; custom scripts, macros, and arbitrary external commands are not part of this scope. Studio should not advertise an action before a functioning handler exists.
+
 Every accepted technical observation persists the canonical 21-point MediaPipe data: 21 normalized image-space x/y/z triples plus 21 world-space x/y/z triples. The 69-value legacy-compatible model input is not what Collect stores as source truth; it is materialized later through Feature Transform v1.
 
 Dataset contains **Browse** and **Review**. Browse exposes filters and summaries over participant/session/capture/gesture/hand/review state. Review exposes Suggested for Review, Accept, Reject, Drop, optional tags/notes, random QC, and deliberate batch acceptance.
