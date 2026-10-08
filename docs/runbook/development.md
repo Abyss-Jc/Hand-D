@@ -194,6 +194,25 @@ The final refit uses **all eligible Development Samples**, plus legacy only if `
 
 Executed evidence: TDD module/CLI RED before GREEN, full `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` **56/56 passing**, and ephemeral smoke using **20 synthetic v2 Samples in 2 Sessions** plus the full **5,400-row historical legacy partition**. One-epoch paired training created both OOF variants and a compatible loadable five-class final-refit Candidate. This verifies plumbing only; no real-data classification accuracy, test P003 evidence, deployment FPS or cross-platform performance has been measured for the new Candidate.
 
+### HD-08 v2 runtime with real webcam and Model Artifact (2026-10-08)
+
+The new Python runtime explicitly validates and loads a versioned final-refit Candidate with its declared 69-feature transform and label order; **a bare legacy `.pth` is not a valid Model Artifact**. LIVE_STREAM callbacks enter a latest-only mailbox; the owner thread produces normalized index-tip positions, fixed Drawing/Modifier Hand roles, stable gestures/actions, camera/model health and Runtime Session sequence-enveloped updates. Current stabilization defaults are **3 consecutive predictions over at least 60 ms** (prototype values to tune with real gesture data). A newer READY snapshot resets the event consumer gate, so old-session gesture events cannot be replayed. Canvas strokes, undo and smoothing do not belong to this Python runtime.
+
+```bash
+# Run a bounded headless no-recording probe with a verified Candidate:
+uv run --frozen python -m handd_core.runtime_cli --model-artifact /path/to/workspace/models/candidate-ID --camera 0 --seconds 8
+
+# Optional framing/gesture preview without image/video capture to disk:
+uv run --frozen python -m handd_core.runtime_cli --model-artifact /path/to/workspace/models/candidate-ID --camera 0 --seconds 20 --preview
+
+# All no-camera tests, including latest callback/role/stale-event/model checks:
+uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q
+```
+
+Executed evidence on CachyOS webcam `/dev/video0`: (1) with a disposable five-output **diagnostic** Artifact, 175 video frames (~28.58 FPS), 175 MediaPipe callbacks, 173 processed callback batches and ~**0.871 ms p95** for the post-landmarker Python computation window, with no recorded frame/sample. All its predicted Fist labels were intentionally forced and **are not gesture accuracy**. (2) a full disposable **SQLite synthetic P001 sample → Snapshot → one-epoch HD-07 Candidate → HD-08 camera runtime** exercise: 20 synthetic v2 Samples across two sessions, 175 frames (~29 FPS), 175 callbacks, 174 processed batches, 4 hand predictions, zero stabilized tool actions; the hand observations were too sparse to satisfy the safety debounce. Both disposable workspaces and models were deleted.
+
+`uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` passed **87/87**; `uv lock --check`, Python compileall and git diff checks passed. The local p95 excludes sensor/landmarker latency, WebSocket, IPC and frontend; **do not claim full end-to-end p95, stable 30Hz recognized-hand cadence, real-model accuracy, production Tauri sidecar, MJPEG or cross-platform validation** based on this smoke.
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:
@@ -232,7 +251,7 @@ Verified for v2 on CachyOS Linux x86-64 (2026-10-08):
 Still **No verificado**:
 
 - reproducibility on a different clean machine and supported non-Linux platforms;
-- production-grade Studio collection, trained-v2 LIVE_STREAM inference, and Tauri HTTP/WS/MJPEG integration; the Linux camera + legacy classifier and one temporary SQLite capture were verified separately above;
+- production-grade Studio collection, real-gesture-trained v2 accuracy/cadence, and Tauri HTTP/WS/MJPEG integration; the Linux camera + legacy classifier, one temporary SQLite Capture, and synthetic-trained HD-08 Python live inference were verified separately above;
 - Apple Silicon/MPS execution;
 - CUDA/ROCm/XPU execution;
 - production desktop-shell packaging.
