@@ -245,6 +245,29 @@ Typical warnings include:
 
 The readiness layer does not turn collection heuristics into false scientific laws. For example, the current ~100-usable-Sample target may trigger a warning, but snapshot creation is not blocked solely because a class contains fewer observations. Learning-curve evidence remains the mechanism for deciding whether more data is actually needed.
 
+### Snapshot Builder interaction
+
+Snapshot Builder is intentionally narrow. In the normal Studio flow it asks only for decisions that cannot be safely derived:
+
+- snapshot name/description;
+- intentionally selected participant/session scope, when the user is not building the normal Development Snapshot;
+- legacy inclusion policy when compatible legacy data exists;
+- acknowledgement/review of Snapshot Readiness warnings.
+
+Feature Transform identity, label order, fixed fold definitions, seed/reproducibility policy, and exact eligible/excluded Sample membership are derived from the workspace/protocol and shown through Advanced details rather than presented as mandatory knobs.
+
+Snapshot creation is append-only. Once a snapshot ID is allocated and its manifest/materialization is written, Studio never mutates it in place. A revised experiment creates a new snapshot, even when it is conceptually based on an older one.
+
+Normal eligibility is the conjunction of two independent states:
+
+```text
+review_status == accepted
+AND
+lifecycle_status == active
+```
+
+Unreviewed Samples are active observations with no human quality decision yet; they are excluded from snapshot membership and contribute a readiness warning until reviewed. Accepting an unreviewed Sample changes only Review Status to accepted. Lifecycle remains active unless the Sample is separately dropped. Rejected Samples fail the quality condition; dropped Samples fail the lifecycle condition.
+
 Workspace uses the desktop operating system's native directory chooser through Tauri for Open/Create operations. A new workspace asks only for a name and target location; Hand-D initializes the config, SQLite store, and expected project directories itself.
 
 ### Easy Mode

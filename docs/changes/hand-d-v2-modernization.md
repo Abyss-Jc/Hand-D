@@ -75,6 +75,9 @@ Evolve the semester project into one maintained desktop product with two spaces:
 - Advanced UI names top-1 score, runner-up score, and top-two margin directly rather than treating raw softmax output as a calibrated probability.
 - Dataset analytics focus on actionable balance/coverage/progress and collection gaps, not a bloated analytics dashboard; exploratory embedding plots are deferred.
 - Snapshot Builder is preceded by a compact Snapshot Readiness check. Integrity/contract violations are hard blockers; coverage/quality issues are warnings. Preferred collection counts remain evidence-informed guidance rather than arbitrary blockers.
+- Snapshot Builder keeps normal configuration minimal and derives transform/labels/folds/reproducibility defaults from workspace/protocol state, exposing detailed controls only through Advanced inspection.
+- Existing snapshots are never edited or overwritten; any membership/configuration/materialization change creates a new snapshot identity.
+- Normal snapshot membership is accepted + active only. Unreviewed Samples are excluded and raise a readiness warning until human review; rejected and dropped Samples remain excluded for independent quality/lifecycle reasons.
 
 ## Current evidence
 
