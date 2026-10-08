@@ -96,6 +96,24 @@ uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D
 
 Manual review CLI transitions and readiness output were exercised in subprocess tests against temporary SQLite files. Snapshot Readiness **does not generate a snapshot**; immutable manifest/NPZ creation remains HD-06. Avoid running the collector simultaneously with another writer on the same workspace database.
 
+### HD-04 physical webcam + legacy model diagnostic (verified 2026-10-08)
+
+This bounded probe opens the local webcam and uses the **existing** `models/hand_landmarker.task` and `models/gesture_mlp.pth` (PyTorch `weights_only=True`). It runs MediaPipe **LIVE_STREAM**, the shared 69-feature transform and the existing five-output classifier. **No images, video, SQLite Samples, or Workspace data are saved.**
+
+```bash
+# Headless, 8-second finite smoke test:
+uv run --frozen python -m handd_core.camera_smoke --camera 0 --seconds 8
+
+# Optional interactive diagnostic preview; press q/Esc or let the limit expire:
+uv run --frozen python -m handd_core.camera_smoke --camera 0 --seconds 30 --preview
+```
+
+Evidence observed on CachyOS laptop `/dev/video0`: 234/234 frames at 640×480 in 8.04 seconds (**29.12 capture FPS**); 234 LIVE_STREAM callbacks, 233 callback batches processed, 12 batches with a detected hand. Raw MediaPipe handedness Left x12, model output Idle x12, zero invalid feature vectors and zero inference errors. A second **executed** visual-preview run at 6 seconds returned 175/175 frames (**28.93 capture FPS**), 175 callbacks, 74 hand-containing callback batches, raw label Left x74 and old-model predictions Idle x32, Index_Finger x29, Fist x13; zero classifier errors. The preview window opened and exited successfully; OpenCV emitted a Qt/Wayland plugin warning, so Wayland-native Qt provider behavior is not verified. The GPU-related EGL initialization log is not proof of GPU-accelerated ML inference; legacy MLP used Torch CPU.
+
+Interpretation: the camera, MediaPipe task, Feature Transform and legacy MLP work together. The checkpoint is a 69→128→64→5 `state_dict`, **without an independently verified label manifest**; predictions are diagnostic rather than demonstrated classification accuracy. Neither physical-hand Left/Right mapping nor the persistent real-image/world landmark Capture through `collect_cli` has been verified. Before collecting trusted real participant data, use the live preview to show a known physical Left hand and then a known Right hand, compare `MP=...` and `mano estimada=...`, and correct the mirror convention if necessary. Never silently label uncertain samples.
+
+`uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` now passes **38/38** (includes 3 no-camera legacy-model smoke-contract tests).
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:
