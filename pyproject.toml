@@ -1,0 +1,36 @@
+[project]
+name = "hand-d"
+version = "0.2.0.dev0"
+description = "Hand-D gesture whiteboard and dataset/model studio"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "numpy>=2.2,<3",
+  "mediapipe==0.10.33",
+  "opencv-contrib-python==4.13.0.92",
+  "torch>=2.6,<3",
+]
+
+[dependency-groups]
+training = [
+  "scikit-learn>=1.6,<2",
+  "pandas>=2.2,<4",
+  "matplotlib>=3.10,<4",
+]
+dev = [
+  "pytest>=8,<10",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+# The Intel Linux development target uses PyTorch CPU wheels; acceleration
+# remains benchmark-gated, and other supported OSes resolve their native wheel.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
