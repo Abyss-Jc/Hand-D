@@ -63,6 +63,39 @@ Verified result: **10 tests passed** for shared Feature Transform v1 and existin
 
 HD-03 adds the no-camera SQLite dataset-store tests. Verified on 2026-10-08: `venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v` passed **20/20**. These tests use temporary SQLite databases and do not alter the team's canonical workspace or legacy CSV data.
 
+### HD-04/05 collection and manual review (2026-10-08)
+
+TDD validation executed:
+
+```bash
+uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q
+uv run --frozen python -m handd_core.collect_cli --help
+```
+
+The full no-camera suite passed **35/35**. It tests 21-point observations, interval-based quota, pause/resume with persisted progress, invalid/wrong-hand exclusion, local pseudonymous device ID, latest-only LIVE_STREAM callback bridging, explicit human review, and read-only readiness. CLI help was checked via subprocess. The physical camera execution below is **No verificado** (requires camera permission and actual gesture/hand checking):
+
+```bash
+uv run --frozen python -m handd_core.collect_cli \
+  --workspace /path/to/your/Hand-D-workspace \
+  --participant P001 --gesture Index_Finger --hand Right \
+  --camera 0 --quota 120 --interval-ms 100
+```
+
+The collector creates a fresh Collection Session and Capture, stores **only image/world landmarks and anonymous provenance** in `handd.sqlite`, and shows live preview for framing. Press `p` to pause/resume, `q` to end early, or interrupt to stop; stored Samples remain unreviewed/active. Handedness inversion currently follows the mirrored legacy-camera convention and **needs physical Left/Right smoke verification before trusted data collection**. Use anonymous participant IDs.
+
+Inspect and curate by exact Sample ID (manual CLI, no automatic acceptance):
+
+```bash
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D-workspace list --status unreviewed
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D-workspace accept SAMPLE_ID --reason reviewed
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D-workspace drop SAMPLE_ID
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D-workspace restore SAMPLE_ID
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D-workspace list --include-dropped
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/your/Hand-D-workspace readiness
+```
+
+Manual review CLI transitions and readiness output were exercised in subprocess tests against temporary SQLite files. Snapshot Readiness **does not generate a snapshot**; immutable manifest/NPZ creation remains HD-06. Avoid running the collector simultaneously with another writer on the same workspace database.
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:

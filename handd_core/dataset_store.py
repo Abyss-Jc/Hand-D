@@ -237,6 +237,22 @@ class DatasetStore:
     def count_samples(self) -> int:
         return self.conn.execute('SELECT count(*) FROM samples').fetchone()[0]
 
+    def get_capture_progress(self, capture_id: str) -> dict[str, Any]:
+        """Return durable quota/identity/progress for a resumable capture."""
+        row = self.conn.execute(
+            '''SELECT c.hand, c.gesture, c.target,
+                      count(s.sample_id) AS count,
+                      max(s.frame_index) AS last_frame_index,
+                      max(s.timestamp_ms) AS last_timestamp_ms
+               FROM captures c
+               LEFT JOIN samples s ON s.capture_id=c.capture_id
+               WHERE c.capture_id=? GROUP BY c.capture_id''',
+            (capture_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(capture_id)
+        return dict(row)
+
     def list_eligible_samples(self) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             '''SELECT s.*, c.gesture, c.hand, c.session_id, cs.participant_id
@@ -246,6 +262,35 @@ class DatasetStore:
                ORDER BY cs.participant_id, c.session_id, s.capture_id, s.frame_index''',
         ).fetchall()
         return [self._decode_sample(row) for row in rows]
+
+    def get_active_review_counts(self) -> dict[str, int]:
+        """Counts for review readiness, excluding soft-dropped samples."""
+        counts = {status: 0 for status in REVIEW_STATUSES}
+        for row in self.conn.execute(
+            '''SELECT review_status, count(*) AS total FROM samples
+               WHERE lifecycle_status='active' GROUP BY review_status''',
+        ):
+            counts[row['review_status']] = row['total']
+        return counts
+
+    def list_samples_overview(self, *, review_status: str | None = None,
+                              limit: int = 100,
+                              include_dropped: bool = False) -> list[dict[str, Any]]:
+        """Small, read-only summary for a human review queue (no raw arrays)."""
+        if review_status is not None and review_status not in REVIEW_STATUSES:
+            raise ValueError('invalid review status filter')
+        if limit <= 0:
+            raise ValueError('limit must be positive')
+        return [dict(row) for row in self.conn.execute(
+            '''SELECT s.sample_id, c.gesture, c.session_id, cs.participant_id,
+                      s.review_status, s.lifecycle_status, s.timestamp_ms
+               FROM samples s JOIN captures c ON c.capture_id=s.capture_id
+               JOIN collection_sessions cs ON cs.session_id=c.session_id
+               WHERE (? IS NULL OR s.review_status=?)
+                 AND (? OR s.lifecycle_status='active')
+               ORDER BY s.recorded_at, s.sample_id LIMIT ?''',
+            (review_status, review_status, include_dropped, limit),
+        ).fetchall()]
 
     def _transition(self, sample_id: str, new_status: str, *, field: str,
                     allowed: frozenset[str], table: str, reason: str | None) -> None:

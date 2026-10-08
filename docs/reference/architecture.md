@@ -30,7 +30,13 @@ The collector currently contains inconsistent handedness semantics: filtering co
 
 The standalone CSV/plotting collector is still a **legacy** path and has not yet migrated to the shared Feature Transform. The v2 collection core must import the shared module rather than copying this normalization logic.
 
-The new `handd_core.dataset_store` implements the first v2 SQLite domain boundary (2026-10-08): Participant → Collection Session → Capture → raw image/world landmark Sample; independent Review Status and Lifecycle Status with database-enforced observation/event immutability and audit triggers. It is implemented but not yet connected to a camera collector, Snapshot Builder, or Studio UI. Schema v1 refuses unknown newer database versions; forward migration from older deployed v2 schemas is not yet implemented, since this is the first v2 schema.
+The new `handd_core.dataset_store` implements the first v2 SQLite domain boundary (2026-10-08): Participant → Collection Session → Capture → raw image/world landmark Sample; independent Review Status and Lifecycle Status with database-enforced observation/event immutability and audit triggers. It is connected to a **CLI collection adapter** but not yet to the immutable Snapshot Builder or Studio UI. Schema v1 refuses unknown newer database versions; forward migration from older deployed v2 schemas is not yet implemented, since this is the first v2 schema.
+
+`handd_core.capture_sampling` now accepts candidate MediaPipe 21×3 image/world landmark observations, rejects numerically invalid/wrong-hand detections, and persists Samples on a configurable **time interval** rather than a fixed frame stride. It derives new sample IDs and uses a persistent anonymous device ID stored in local app config, not the workspace. Quota/progress is resumed from SQLite and interrupted captures preserve already stored Samples.
+
+`handd_core.live_collection` bridges asynchronous MediaPipe LIVE_STREAM callbacks through a latest-only buffer; only the main SQLite-owner thread calls `CaptureSampler.offer`. `handd_core.collect_cli` provides an explicitly invoked camera collector with a mirrored input frame, while `handd_core.review_cli` provides human Accept/Reject/Drop/Restore and read-only Snapshot Readiness. The callback bridge and CLIs are covered by synthetic/no-camera tests, but **physical camera operation and real handedness must be validated on hardware before claiming production collector readiness**.
+
+`handd_core.snapshot_readiness` checks eligible accepted+active observations (with optional development/final Session exclusions); it blocks missing eligible rows, invalid Feature Transform observations or explicit development/final Session overlap. Collection coverage and unreviewed active rows are warnings, not blockers. This is a read-only preflight, **not** the immutable Snapshot Builder (HD-06).
 
 ### Dataset curation
 
