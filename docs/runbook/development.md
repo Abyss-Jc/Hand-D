@@ -114,6 +114,28 @@ Interpretation: the camera, MediaPipe task, Feature Transform and legacy MLP wor
 
 `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` now passes **38/38** (includes 3 no-camera legacy-model smoke-contract tests).
 
+### HD-06 immutable Development Snapshot (verified 2026-10-08)
+
+The Snapshot Builder reads **accepted + active** rows from `handd.sqlite`, restricted to P001/P002 Development Sessions. It never includes P003 in a Development Snapshot, even if that participant's Session is explicitly listed. It creates a new `snapshots/dev-*/` directory containing `manifest.json` and `dataset.npz` with exact model-ready 69-feature inputs, Sample/Participant/Session IDs, fixed label order, session holdout folds and SHA256 integrity checks. Existing Snapshot versions are never overwritten; revising human Review creates a new Snapshot. Creation does **not** start training.
+
+```bash
+# Inspect blockers and coverage warnings before building:
+uv run --frozen python -m handd_core.review_cli --workspace /path/to/Hand-D-workspace readiness
+
+# Freeze current reviewed Development membership (no training is launched):
+uv run --frozen python -m handd_core.snapshot_cli --workspace /path/to/Hand-D-workspace build --note 'development baseline'
+
+# Optional: freeze legacy data independently alongside the v2 materialization:
+uv run --frozen python -m handd_core.snapshot_cli --workspace /path/to/Hand-D-workspace build --legacy-csv datasets/gesture_dataset.csv
+
+# Verify, replacing the ID with the generated snapshot folder name:
+uv run --frozen python -m handd_core.snapshot_cli --workspace /path/to/Hand-D-workspace verify dev-SNAPSHOT_ID
+```
+
+Optional legacy CSV must exactly contain columns `feat_0` through `feat_68`, `handedness`, `label`, finite features, handedness encoded as 0/1, and compatible five-class labels. The `legacy.npz` partition is frozen with its own hash and tagged `legacy_unverified_no_session_groups`; **do not** use legacy rows as unseen-participant validation evidence. Without legacy input, the snapshot contains only reviewed v2 data. A one-Session Snapshot is allowed with coverage warnings; the saved `validation_folds` is empty until two or more Development Sessions exist, so grouped cross-validation cannot be claimed yet.
+
+Evidence: RED→GREEN tests for membership, excluded unreviewed/rejected/dropped rows, no P003 leakage, protected prior versions, deterministic materialization, tampered content/manifest, legacy compatibility, and explicit build/verify CLI. `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` passed **49/49**, with no real camera required. A separate temporary-workspace smoke successfully froze all **5,400** rows of the repository's historical `datasets/gesture_dataset.csv` alongside one synthetic accepted v2 Sample and passed `verify_snapshot`, without mutating the dataset or workspaces. This does NOT prove real camera collection, training performance, sealed P003 evaluation, or cross-platform packaging.
+
 ### Canonical dataset collaboration
 
 For the October milestone, `handd.sqlite` is edited sequentially rather than concurrently:
