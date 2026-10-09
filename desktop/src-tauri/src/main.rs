@@ -1,6 +1,7 @@
-//! HD-09 native supervisor. Development uses Python from the repo venv;
-//! distributing a packaged Python sidecar is a separate release gate.
+//! HD-09 native supervisor and explicit workspace/document commands.
+mod native_files;
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -27,6 +28,42 @@ struct Supervisor {
     shutdown: Arc<AtomicBool>,
     active_child: Arc<Mutex<Option<Child>>>,
     workspace: Arc<Mutex<Option<PathBuf>>>,
+    portable_root: Arc<Mutex<Option<PathBuf>>>,
+}
+
+fn source_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn bundled_sidecar(resources: &PathBuf) -> Option<PathBuf> {
+    let suffix=if cfg!(windows) {"handd-sidecar.exe"} else {"handd-sidecar"};
+    [
+        resources.join("sidecar/handd-sidecar").join(suffix),
+        resources.join("sidecar").join(suffix),
+    ].into_iter().find(|path|path.is_file())
+}
+
+fn sidecar_program(resources: Option<&PathBuf>, packaged: bool) -> Result<(Command, bool), String> {
+    if packaged {
+        if let Some(resources)=resources {
+            if let Some(binary)=bundled_sidecar(resources) {
+                let mut command=Command::new(binary);
+                command.current_dir(resources);
+                return Ok((command, true));
+            }
+        }
+        // Never silently fall back to the developer's compile-time home
+        // directory when an installed release is missing its bundled sidecar.
+        return Err("The packaged Hand-D Python sidecar is missing".into());
+    }
+    // Tauri dev *always* uses local source Python, even after a packaged
+    // sidecar was built. Changes to Python must not silently run stale code.
+    let root=source_root();
+    let python=if cfg!(windows) {root.join(".venv/Scripts/python.exe")}
+                else {root.join(".venv/bin/python")};
+    let mut command=Command::new(python);
+    command.current_dir(root);
+    Ok((command, false))
 }
 
 #[tauri::command]
@@ -41,6 +78,10 @@ fn restart_sidecar(state: tauri::State<'_, Supervisor>) {
 
 #[tauri::command]
 fn select_workspace(path: String, state: tauri::State<'_, Supervisor>) -> Result<String, String> {
+    apply_workspace(path, &state)
+}
+
+fn apply_workspace(path: String, state: &Supervisor) -> Result<String, String> {
     // This command runs only from the trusted local Tauri webview. It does
     // not create new databases and never changes a workspace implicitly.
     let canonical = PathBuf::from(path).canonicalize()
@@ -53,25 +94,80 @@ fn select_workspace(path: String, state: tauri::State<'_, Supervisor>) -> Result
     Ok(canonical.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn pick_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String>, String> {
+    let Some(path)=native_files::pick_folder()? else {return Ok(None)};
+    apply_workspace(path.to_string_lossy().to_string(),&state).map(Some)
+}
+
+#[tauri::command]
+fn create_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String>, String> {
+    let Some(path)=native_files::pick_folder()? else {return Ok(None)};
+    let canonical=path.canonicalize().map_err(|e|e.to_string())?;
+    if !canonical.is_dir() || canonical.read_dir().map_err(|e|e.to_string())?.next().is_some() {
+        return Err("Choose an existing empty directory for a new workspace".into());
+    }
+    let portable=state.portable_root.lock().expect("resource lock").clone();
+    let (mut command, frozen)=sidecar_program(portable.as_ref(),!cfg!(debug_assertions))?;
+    if frozen { command.arg("--init-workspace"); }
+    else { command.args(["-m","handd_core.workspace_init"]); }
+    let output=command.arg("--workspace").arg(&canonical).output()
+        .map_err(|e|format!("Could not initialize workspace: {e}"))?;
+    if !output.status.success(){
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    apply_workspace(canonical.to_string_lossy().to_string(),&state).map(Some)
+}
+
+#[tauri::command]
+fn save_drawing(document: String) -> Result<Option<String>, String> {
+    native_files::save_drawing(document)
+}
+
+#[tauri::command]
+fn open_drawing() -> Result<Option<native_files::DrawingOpen>, String> {
+    native_files::open_drawing()
+}
+
+#[tauri::command]
+fn export_svg(svg: String) -> Result<Option<String>, String> {
+    native_files::export_svg(svg)
+}
 fn spawn_supervisor(state: Supervisor) {
     thread::spawn(move || {
-        let root: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .expect("Hand-D repository root");
         while !state.shutdown.load(Ordering::SeqCst) {
             *state.ready.lock().expect("state lock") = None;
             // Kill the Python process directly, not a uv wrapper which could
             // leave its child orphaned when the desktop exits.
-            let mut command = Command::new(root.join(".venv/bin/python"));
-            command.args([
+            let portable=state.portable_root.lock().expect("resource lock").clone();
+            let (mut command, frozen)=match sidecar_program(
+                portable.as_ref(),!cfg!(debug_assertions)) {
+                Ok(launcher)=>launcher,
+                Err(error)=>{
+                    eprintln!("Hand-D packaged sidecar unavailable: {error}");
+                    thread::sleep(Duration::from_secs(2));
+                    continue;
+                }
+            };
+            if frozen {
+                if let Some(resources)=portable.as_ref() {
+                    command.arg("--task").arg(resources.join("models/hand_landmarker.task"));
+                    // Diagnostic legacy predictor only: Sidecar reports
+                    // legacy_unverified until a verified v2 Candidate is
+                    // explicitly selected. Never present as evaluated v2.
+                    let legacy=resources.join("models/gesture_mlp.pth");
+                    if legacy.is_file() {
+                        command.arg("--legacy-checkpoint").arg(legacy);
+                    }
+                }
+            } else {
+                command.args([
                     "-u", "-m", "handd_core.sidecar_main",
                     "--legacy-checkpoint", "models/gesture_mlp.pth",
-                ])
-                .current_dir(&root)
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::inherit());
+                ]);
+            }
+            command.stdin(Stdio::null())
+                .stdout(Stdio::piped()).stderr(Stdio::inherit());
             if let Some(workspace) = state.workspace.lock().expect("workspace lock").clone() {
                 command.arg("--workspace").arg(workspace);
             }
@@ -135,12 +231,15 @@ fn main() {
     let run_state = supervisor.clone();
     tauri::Builder::default()
         .manage(supervisor.clone())
-        .setup(move |_app| {
+        .setup(move |app| {
+            *supervisor.portable_root.lock().expect("resource lock") =
+                app.path().resource_dir().ok();
             spawn_supervisor(supervisor.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            sidecar_status, restart_sidecar, select_workspace
+            sidecar_status, restart_sidecar, select_workspace, pick_workspace,
+            create_workspace, save_drawing, open_drawing, export_svg
         ])
         .build(tauri::generate_context!())
         .expect("error building Hand-D desktop")
@@ -153,4 +252,26 @@ fn main() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod supervisor_tests {
+    use super::*;
+    #[test]
+    fn package_prefers_local_frozen_sidecar_over_developer_python() {
+        let temp=std::env::temp_dir().join(format!(
+            "handd-sidecar-resources-test-{}",std::process::id()));
+        let bin=temp.join("sidecar/handd-sidecar").join(
+            if cfg!(windows) {"handd-sidecar.exe"} else {"handd-sidecar"});
+        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        std::fs::write(&bin,b"test marker").unwrap();
+        let (command,frozen)=sidecar_program(Some(&temp),true).unwrap();
+        assert!(frozen);
+        assert_eq!(command.get_program(),bin.as_os_str());
+        let (development,development_frozen)=sidecar_program(Some(&temp),false).unwrap();
+        assert!(!development_frozen);
+        assert!(development.get_program().to_string_lossy().contains(".venv"));
+        assert!(sidecar_program(None,true).is_err());
+        std::fs::remove_dir_all(temp).unwrap();
+    }
 }

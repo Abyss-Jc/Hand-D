@@ -12,7 +12,9 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'review-drop','review-restore','build-snapshot','snapshot-result',
   'collect-participant','collect-gesture','collect-hand','collect-target',
   'collect-interval','collect-start','collect-pause','collect-resume',
-  'collect-finish','collect-progress'];
+  'collect-finish','collect-progress','models-list','models-refresh',
+  'models-activate','models-status','browse-workspace','create-workspace',
+  'save-drawing','open-drawing','export-drawing','document-status'];
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
@@ -239,6 +241,82 @@ test('Studio Collect starts only on explicit action and exposes Pause Resume Fin
   assert.equal(socket.sent.at(-1).action,'collect_resume');
   elements['collect-finish'].emit('click');
   assert.equal(socket.sent.at(-1).action,'collect_finish');
+});
+
+test('Studio activates only selected compatible candidate, shows Active Model on Whiteboard',()=>{
+  const socket=connections.at(-1);
+  const before=socket.sent?.length||0;
+  elements['models-refresh'].emit('click');
+  assert.equal(socket.sent.length,before+1);
+  assert.equal(socket.sent.at(-1).action,'models');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+    ok:true,data:{active_model_id:null,selected_candidate_id:null,health:'legacy_unverified',
+      candidates:[
+        {artifact_id:'candidate-validated',compatible:true,labels:5,active:false},
+        {artifact_id:'candidate-broken',compatible:false,reason:'bad checksum',active:false},
+      ]}});
+  assert.equal(elements['models-list'].children.length,2);
+  elements['models-list'].value='candidate-broken';
+  elements['models-activate'].emit('click');
+  assert.notEqual(socket.sent.at(-1).action,'model_activate',
+    'invalid Candidate never sent for activation');
+  elements['models-list'].value='candidate-validated';
+  elements['models-activate'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'model_activate');
+  assert.equal(socket.sent.at(-1).artifact_id,'candidate-validated');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+    ok:true,data:{artifact_id:'candidate-validated',label_order:['Fist','Index_Finger']}});
+  socket.sendEvent({type:'studio.model',snapshot:{
+    active_model_id:'candidate-validated',health:{model:'ready',camera:'tracking'}
+  }});
+  assert.match(elements['model-status'].textContent,/candidate-validated/);
+  assert.match(elements['models-status'].textContent,/candidate-validated/);
+});
+
+test('Save/Open preserves editable strokes; Export emits camera-free SVG; cancel preserves drawing',async()=>{
+  const invoked=[];
+  const saved={document:null};
+  window.__TAURI__={core:{invoke:async(command,args)=>{
+    invoked.push(command);
+    if(command==='save_drawing'){saved.document=args.document;return '/tmp/ink.handd.json';}
+    if(command==='open_drawing')return {path:'/tmp/ink.handd.json',document:saved.document};
+    if(command==='export_svg'){
+      assert.match(args.svg,/viewBox="0 0 1000 600"/);
+      assert.doesNotMatch(args.svg,/<(image|video|script)/);
+      return '/tmp/ink.svg';
+    }
+    throw Error(command);
+  }}};
+  const originalCount=elements.drawing.children.length;
+  elements['save-drawing'].emit('click');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(saved.document);
+  assert.equal(JSON.parse(saved.document).format,'handd-whiteboard');
+  assert.equal(elements.drawing.children.length,originalCount);
+  elements.clear.emit('click');
+  assert.equal(elements.drawing.children.length,0);
+  elements['open-drawing'].emit('click');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(elements.drawing.children.length,originalCount);
+  elements['export-drawing'].emit('click');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(invoked.includes('export_svg'));
+  assert.match(elements['document-status'].textContent,/ink.svg/);
+});
+
+test('Browse/Create Workspace invoke native picker, not arbitrary frontend directory access',async()=>{
+  let kind;
+  window.__TAURI__={core:{invoke:async command=>{
+    kind=command;
+    return '/tmp/native-user-project';
+  }}};
+  elements['browse-workspace'].emit('click');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(kind,'pick_workspace');
+  assert.equal(elements['workspace-path'].value,'/tmp/native-user-project');
+  elements['create-workspace'].emit('click');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(kind,'create_workspace');
 });
 
 test('eraser UI subtracts only existing ink, not camera or controls', async()=>{

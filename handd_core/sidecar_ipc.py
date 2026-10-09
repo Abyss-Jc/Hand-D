@@ -19,6 +19,7 @@ from aiohttp import WSMsgType, web
 from handd_core.runtime_v2 import GestureRuntime
 from handd_core.studio_workspace import StudioWorkspace
 from handd_core.studio_collection import StudioCollection
+from handd_core.studio_models import StudioModels
 
 
 class SidecarServer:
@@ -29,6 +30,7 @@ class SidecarServer:
         self.runtime = runtime
         self.token = token or token_urlsafe(32)
         self.studio = StudioWorkspace(workspace) if workspace is not None else None
+        self.models = StudioModels(self.studio.path) if self.studio else None
         self.collection = StudioCollection(self.studio.path) if self.studio else None
         self.camera_available = False
         self._studio_lock = asyncio.Lock()
@@ -143,7 +145,14 @@ class SidecarServer:
                     except (ValueError, TypeError):
                         continue
                     if isinstance(command, dict) and command.get('type') == 'studio.request':
-                        await ws.send_json(await self._studio_request(command))
+                        response = await self._studio_request(command)
+                        await ws.send_json(response)
+                        if command.get('action') == 'model_activate' and response.get('ok'):
+                            await self.publish_event({
+                                'type': 'studio.model',
+                                'snapshot': self.runtime.snapshot(),
+                                'data': response['data'],
+                            })
         finally:
             self._clients.discard(ws)
         return ws
@@ -167,6 +176,15 @@ class SidecarServer:
                 elif action == 'snapshot':
                     data = await asyncio.to_thread(
                         self.studio.build_snapshot, note=command.get('note', ''))
+                elif action == 'models':
+                    data = {
+                        'active_model_id': self.runtime.snapshot()['active_model_id'],
+                        'selected_candidate_id': self.models.listed_active_id(),
+                        'candidates': await asyncio.to_thread(self.models.list_candidates),
+                        'health': self.runtime.snapshot()['health']['model'],
+                    }
+                elif action == 'model_activate':
+                    data = self.models.activate(command.get('artifact_id'), self.runtime)
                 elif action == 'collect_status':
                     data = self.collection.status()
                 elif action == 'collect_start':

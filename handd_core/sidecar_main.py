@@ -17,6 +17,7 @@ import sys
 from handd_core.runtime_v2 import GestureRuntime, LatestRuntimeResults
 from handd_core.sidecar_ipc import SidecarServer
 from handd_core.preview_pacing import PreviewPacer
+from handd_core.studio_models import StudioModels
 
 
 def parser() -> argparse.ArgumentParser:
@@ -134,6 +135,19 @@ async def run(args) -> None:
         runtime.activate_model(args.model_artifact)
     elif args.legacy_checkpoint is not None:
         runtime.activate_legacy_checkpoint(args.legacy_checkpoint)
+    if args.workspace is not None:
+        # A previously verified explicit workspace selection takes priority
+        # over the development-only legacy checkpoint on every restart.
+        models = StudioModels(args.workspace)
+        try:
+            if models.active_id() is not None:
+                models.restore(runtime)
+        except (ValueError, OSError) as exc:
+            # Also catch corrupt persisted selection JSON: the Whiteboard
+            # and camera must remain available in tracking-only mode.
+            # Never silently use legacy predictions after an invalid v2 ID.
+            runtime.mark_model_load_error()
+            print(f'Active Model could not be restored: {exc}', file=sys.stderr)
     server = SidecarServer(runtime=runtime, workspace=args.workspace)
     port = await server.start()
     print(json.dumps({

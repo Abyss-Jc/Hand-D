@@ -34,6 +34,13 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 7. Pulsar **Restart camera**: sidecar debe reconectarse con sesión nueva, el documento debe sobrevivir y el overlay no debe dejar manos fantasma.
 8. Si existe un proyecto de pruebas con `handd.sqlite`, entrar a **Studio → Existing project workspace directory → Open workspace** usando su ruta local. Verificar que **Review** muestra conteos y Sample IDs reales, que **Accept/Reject/Drop/Restore** requieren clicks explícitos y que **Build Development Snapshot** no entrena ni incluye P003. No hacer acciones sobre un dataset real sin intención/backup. Sin proyecto, Studio debe mostrar un empty state honesto y Whiteboard debe seguir funcionando.
 9. Con **un workspace temporal de laboratorio, nunca datos de producción**, mantener cámara activa y usar **Studio → Collect → Participant P001 → Intended gesture → Physical hand → Start Capture**. Comprobar contador con la mano seleccionada, **Pause**, **Resume** y **Finish**. Luego pulsar **Refresh** en Review: las nuevas observaciones deben aparecer como unreviewed. **No** debe abrirse una segunda cámara ni almacenarse video. Start debe rechazar cámara desconectada o P003. Captura física de Studio aún NO verificada en Mac ni Linux hasta ejecutar este paso.
+10. Con el mismo workspace de laboratorio, usar el selector nativo **Browse… / Create workspace…**, luego **Save drawing… / Open drawing… / Export SVG…**. Comprobar que los archivos guardados contienen solo trazos editables, que abrir un archivo corrupto no borra el lienzo y que el SVG exportado no incluye la cámara. **Model Artifacts → Refresh Models → Make Active** requiere un `candidate-*` real de la salida de entrenamiento; un artefacto inválido no sustituye al actual y el modelo compatible elegido sobrevive **Restart camera**. No hacer activación sobre un dataset/modelo de producción durante una prueba.
+11. En **cada Mac de destino**, construir el sidecar PyInstaller y la app nativos, nunca reutilizar binarios Linux. Fuera del flujo principal de macOS, probar el bundle instalado antes de afirmar compatibilidad:
+    ```bash
+    bash scripts/build-sidecar-bundle.sh
+    npm --prefix desktop run build -- --bundles app
+    ```
+    La firma, permisos TCC para el child congelado, notarización y eventual salida del sandbox deben verificarse físicamente. `NSCameraUsageDescription` en Info.plist no demuestra por sí solo el permiso efectivo.
 
 ## Registro mínimo
 
@@ -51,15 +58,18 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 | UI English-only: accessible controls and messages | No verificado | No verificado |
 | Existing workspace / manual review / Development Snapshot (test project only) | No verificado | No verificado |
 | Studio Collect: Start/Pause/Resume/Finish + unreviewed Samples, no second camera | No verificado | No verificado |
+| Studio Active Model (compatible, rollback, restart) | No verificado | No verificado |
+| Native workspace dialog + Save/Open editable + clean SVG | No verificado | No verificado |
+| Native .app sidecar subprocess + camera permissions/TCC | No verificado | No verificado |
 | Gestos reales / fluidez percibida | No verificado | No verificado |
 
 No compartir tokens del sidecar, seriales, fotos ni video; solo comandos, errores y medidas agregadas.
 
 ## Limitaciones que no deben confundirse con bugs ya resueltos
 
-- `desktop/src-tauri/src/main.rs` ejecuta el Python del clon local. `npm --prefix desktop run dev` es una prueba **desde el repositorio**; aún **no** existe un `.app` empaquetado para distribución. Firma, sandbox, permisos de cámara del proceso Python y notarización quedan por verificar en hardware.
+- El modo `npm --prefix desktop run dev` usa el Python local del clon. El empaquetado nativo ya tiene receta con PyInstaller y Rust ResourceDir, pero **solo existe prueba de construcción y lanzamiento del .deb Linux**. No hay todavía `.app` validado en Mac. Firma, sandbox, TCC/cámara del child PyInstaller y notarización permanecen pendientes de evidencia real.
 - La geometría de overlay y cámara comparte plano de imagen, pero JPEG y eventos WS llegan a ritmos distintos; posible desfase temporal, todavía sin p95 end-to-end.
 - Wiggly es un efecto visual propio, opt-in, sin sonidos, GIF ni grabación.
-- HD-09 sigue **IN PROGRESS** (Studio Collect/Review/Snapshot y empaquetado); HD-10 sigue **TODO** (datos reales → entrenamiento → modelo verificado → Whiteboard). No declarar macOS Tier 1 validado antes de los resultados físicos.
+- HD-09 está **DONE para el alcance Linux implementado y empaquetado**, con pruebas automatizadas y sidecar con cámara real; el flujo de clicks GUI sobre datos reales y los paquetes macOS/Windows **no** están verificados. HD-10 sigue **TODO** (datos reales → entrenamiento → modelo verificado → Whiteboard). No declarar macOS Tier 1 validado antes de los resultados físicos.
 
 Actualizar `docs/changes/hand-d-v2-tickets.md` después de la prueba de laboratorio con evidencia de cada Mac.

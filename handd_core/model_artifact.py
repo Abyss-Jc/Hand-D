@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -80,5 +81,6 @@ def load_model_artifact(path: str | Path) -> tuple[ModelPredictor, dict]:
         state = torch.load(root / "weights.pth", map_location="cpu", weights_only=True)
         model.load_state_dict(state, strict=True)
         return ModelPredictor(model, tuple(labels)), manifest
-    except (OSError, KeyError, TypeError, json.JSONDecodeError, RuntimeError) as exc:
+    except (OSError, KeyError, TypeError, json.JSONDecodeError,
+            RuntimeError, pickle.UnpicklingError) as exc:
         raise ModelArtifactError(f"invalid or missing Model Artifact: {exc}") from exc

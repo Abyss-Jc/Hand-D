@@ -44,6 +44,15 @@ class FakePredictor:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_failed_persisted_model_remains_visible_during_valid_tracking(self):
+        runtime = GestureRuntime()
+        runtime.mark_model_load_error()
+        self.assertEqual(runtime.snapshot()['health']['model'], 'error')
+        update = runtime.process_result(observation('Left'), 100)
+        self.assertEqual(update['payload']['health']['model'], 'error')
+        self.assertIsNotNone(update['payload']['drawing']['pointer'])
+        self.assertIsNone(update['payload']['drawing']['action'])
+
     def test_all_21_landmarks_per_physical_role_and_safe_release(self):
         runtime = GestureRuntime(predictor=FakePredictor(), stable_frames=1, stable_ms=0)
         result = observation('Left', 'Right', x=.34, y=.62)

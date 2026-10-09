@@ -1,6 +1,6 @@
 # Wiggly brush: line-boil research, implementation and verification
 
-**Status:** New three-frame implementation completed on 2026-10-08 after the user explicitly requested the fix. Automated geometry, SVG raster and synthetic performance checks passed on Linux; **physical WebKit visual acceptance by the user and macOS verification are still pending**. Do not call the final appearance user-approved until that check.
+**Status:** New three-frame implementation completed on 2026-10-08 after the user explicitly requested the fix. Automated geometry, SVG raster and synthetic performance checks passed on Linux; **the user confirmed on October 9 that Wiggly now looks right**. Independent full WebKit performance metrics and macOS hardware validation remain pending.
 
 ## Evidence and why the current approach looks wrong
 
@@ -26,7 +26,7 @@ The **canonical normalized path** remains the only editable, undoable Whiteboard
 3. **Cycle at 12 FPS** using `LINE_BOIL_FRAME_MS=1000/12` and `StrokeRenderer.animateWiggly`. All variants are SVG children of one ink group, under the same existing chronological masks. Rather than modifying each path per tick, a single `data-boil-frame` attribute on the root SVG selects frame 0→1→2 via CSS. On reduced motion, leave Studio or hidden page, the canonical static path is visible, and frame switching stops.
 4. **Transparent erasure:** the mask containing the black Eraser only clips ink groups created before the erase action; later Pen/Wiggly ink sits above the masked group. Neither camera pixels nor UI controls are part of these ink masks.
 5. **Performance:** three variants are regenerated only when that specific live stroke gets new points, on the preexisting RAF drawing cadence. Once finished, the cost of the 12 FPS clock does not increase with stroke count in JavaScript; browser compositing cost still needs WebKit FPS verification.
-6. **Still pending human review:** side-by-side mouse handwriting, circles, zigzags and two-hand tracking in native Tauri, Camera Overlay and Clean Canvas, Undo/Redo, reduced motion, plus macOS device rendering. Color/width/pattern can be tuned from that evidence.
+6. **Human review:** user explicitly accepted the new look on October 9. Further systematic side-by-side FPS/latency measurements, two-hand drawing interactions and macOS device rendering have not yet been measured.
 
 ### TDD evidence (RED → GREEN)
 
@@ -34,6 +34,6 @@ The **canonical normalized path** remains the only editable, undoable Whiteboard
 - `node --test desktop/tests/wiggly.test.mjs desktop/tests/stroke-renderer.test.mjs desktop/tests/app-ui.test.mjs`: cached paths survive ordinary strokes and erasers, frame switch changes no `d` geometry and exactly one SVG root attribute, real UI undo/redo, reduced motion, old camera-transparent eraser guarantees.
 - `node desktop/tests/benchmark-line-boil.mjs`: synthetic 120-stroke (112 Wiggly), 360-frame display-clock test; **0 path geometry writes during clocks**, ~0.66ms total Node simulated clock work; NOT a WebKit/browser FPS measure.
 - SVG **real raster** using local `rsvg-convert` with three generated variants and a synthetic red camera background: all three variants had nonidentical pixel renderings, visible ink outside the eraser, red background visible at the erased center; no webcam frames captured.
-- Native Tauri process and visual acceptance: **No verificado** until the test run and user feedback below.
+- Native Tauri process and visual acceptance: the user confirmed the new brush looked correct on 2026-10-09; quantitative WebKit FPS and macOS device checks are separate open evidence gates.
 
-**Priority:** P2 optional visual polish; core replacement implemented, hardware visual-acceptance gate remains open without blocking HD-09→HD-10.
+**Priority:** P2 optional visual polish, implemented and accepted visually by the user; additional platform/hardware performance tests do not block the Linux HD-09→HD-10 tracer.

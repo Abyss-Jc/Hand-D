@@ -94,9 +94,22 @@ class GestureRuntime:
         # This is NOT sensor→IPC→frontend latency.
         return health
 
+    def mark_model_load_error(self) -> None:
+        """Retain a failed persisted Active Model indicator while tracking."""
+        self.predictor = None
+        self._active_model_id = None
+        self._model_health = 'error'
+        self._success_model_health = 'error'
+        for state in self._states.values():
+            state.reset()
+
     def activate_model(self, path) -> dict:
         """Explicit, atomic Candidate activation after Model Artifact validation."""
         model, manifest = load_model_artifact(path)
+        return self.install_loaded_model(model, manifest)
+
+    def install_loaded_model(self, model, manifest: dict) -> dict:
+        """Swap a previously verified predictor on the runtime owner thread."""
         self.predictor = model
         self._model_health = 'ready'
         self._success_model_health = 'ready'
@@ -205,7 +218,8 @@ class GestureRuntime:
             try:
                 raw = self.predictor.predict(features.reshape(1, 69))[0] if self.predictor else None
                 self._model_health = (
-                    self._success_model_health if self.predictor else 'unavailable'
+                    self._success_model_health if (self.predictor
+                        or self._success_model_health == 'error') else 'unavailable'
                 )
             except (ValueError, RuntimeError, TypeError, IndexError):
                 raw = None

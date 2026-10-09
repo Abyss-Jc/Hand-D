@@ -1,6 +1,7 @@
 import {RuntimeGate, Strokes} from './runtime-state.mjs';
 import {StrokeRenderer} from './stroke-renderer.mjs';
 import {HandOverlay,fitScene} from './hand-overlay.mjs';
+import {encodeWhiteboard,decodeWhiteboard,exportCleanSvg} from './drawing-document.mjs';
 
 const $ = id => document.getElementById(id);
 const strokes = new Strokes();
@@ -19,13 +20,17 @@ let pendingWorkspace = null;
 let studioRequestNumber = 0;
 const studioRequests = new Map();
 let collectState = 'idle';
+let activeModelId = null;
+let modelChoices = new Map();
+let drawingDirty = false;
 
 function modelLabel(health) {
   switch (health?.model) {
-    case 'ready': return 'V2 MODEL: READY';
+    case 'ready': return 'V2 MODEL: READY'
+      + (activeModelId ? ' · ' + activeModelId : '');
     case 'legacy_unverified':
       return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED';
-    case 'error': return 'MODEL: INFERENCE ERROR';
+    case 'error': return 'MODEL: LOAD / INFERENCE ERROR';
     case 'unavailable': return 'NO MODEL LOADED · TRACKING ONLY';
     default: return 'MODEL: WAITING FOR SIDECAR';
   }
@@ -38,11 +43,16 @@ function displayHealth(health) {
 function redraw() {
   strokeRenderer.sync(strokes.paths);
 }
+function markDrawingEdited() {
+  drawingDirty = true;
+  $('document-status').textContent = 'Unsaved drawing changes · video is never saved.';
+}
 function beginStroke(point, source, action) {
   const path = {points: [point], source, tool: action};
   strokes.paths.push(path);
   strokes.redoStack = [];
   redraw();
+  markDrawingEdited();
   return path;
 }
 function extendStroke(path, point) {
@@ -51,6 +61,7 @@ function extendStroke(path, point) {
   if (last && Math.hypot(last.x - point.x, last.y - point.y) < 0.002) return;
   path.points.push(point);
   strokeRenderer.pointAdded(path);
+  markDrawingEdited();
 }
 function setTool(action) {
   if (!['draw','erase','wiggly'].includes(action)) return;
@@ -117,12 +128,53 @@ canvas.addEventListener('pointermove', event => {
 });
 for (const event of ['pointerup', 'pointercancel', 'lostpointercapture'])
   canvas.addEventListener(event, () => { pointerStroke = null; });
-$('undo').addEventListener('click', () => { strokes.undo(); redraw(); });
-$('redo').addEventListener('click', () => { strokes.redo(); redraw(); });
-$('clear').addEventListener('click', () => { strokes.clear(); redraw(); });
+$('undo').addEventListener('click', () => { strokes.undo(); redraw(); markDrawingEdited(); });
+$('redo').addEventListener('click', () => { strokes.redo(); redraw(); markDrawingEdited(); });
+$('clear').addEventListener('click', () => { strokes.clear(); redraw(); markDrawingEdited(); });
 $('tool-pen').addEventListener('click', () => setTool('draw'));
 $('tool-eraser').addEventListener('click', () => setTool('erase'));
 $('tool-wiggly').addEventListener('click', () => setTool('wiggly'));
+// Native dialogs and atomic persistence are implemented on Rust's local OS
+// boundary. The camera frame never enters a file payload.
+$('save-drawing').addEventListener('click',async()=>{
+  try {
+    const document=encodeWhiteboard(strokes.paths);
+    const path=await window.__TAURI__?.core?.invoke('save_drawing',{document});
+    if (path) {
+      drawingDirty=false;
+      $('document-status').textContent='Saved editable drawing: '+path;
+    }
+  } catch(error) {
+    $('document-status').textContent='Could not save drawing: '+String(error);
+  }
+});
+$('open-drawing').addEventListener('click',async()=>{
+  if (strokes.paths.length && typeof window.confirm==='function'
+      && !window.confirm('Replace your current drawing? Save any changes first.'))return;
+  try {
+    const result=await window.__TAURI__?.core?.invoke('open_drawing');
+    if (!result) return;
+    const paths=decodeWhiteboard(result.document);
+    releaseGesture();
+    pointerStroke=null;
+    strokes.paths=paths;
+    strokes.redoStack=[];
+    redraw();
+    drawingDirty=false;
+    $('document-status').textContent='Opened editable drawing: '+result.path;
+  } catch(error) {
+    $('document-status').textContent='Could not open drawing: '+String(error);
+  }
+});
+$('export-drawing').addEventListener('click',async()=>{
+  try{
+    const svg=exportCleanSvg(strokes.paths);
+    const path=await window.__TAURI__?.core?.invoke('export_svg',{svg});
+    if(path)$('document-status').textContent='Exported clean SVG (no camera): '+path;
+  }catch(error){
+    $('document-status').textContent='Could not export clean drawing: '+String(error);
+  }
+});
 
 // A single undistorted camera-plane coordinate system for the image, points,
 // cursor and strokes; letterboxes stay outside this scene.
@@ -238,17 +290,59 @@ function renderCollection(data) {
   $('collect-resume').disabled = data.state !== 'paused';
   $('collect-finish').disabled = !['capturing','paused'].includes(data.state);
 }
+function renderModels(data) {
+  activeModelId = data.active_model_id || null;
+  const selected = $('models-list');
+  const previous = selected.value;
+  selected.replaceChildren();
+  modelChoices = new Map();
+  for (const candidate of data.candidates || []) {
+    const option = document.createElement('option');
+    option.value = candidate.artifact_id;
+    option.disabled = !candidate.compatible;
+    option.textContent = candidate.artifact_id
+      + (candidate.compatible ? ' · compatible · ' + candidate.labels + ' labels'
+        : ' · incompatible (' + (candidate.reason || 'invalid') + ')')
+      + (candidate.active ? ' · ACTIVE' : '');
+    selected.append(option);
+    modelChoices.set(candidate.artifact_id, candidate);
+  }
+  selected.value = modelChoices.has(previous)
+    ? previous : (data.selected_candidate_id || data.candidates?.find(c=>c.compatible)?.artifact_id || '');
+  $('models-activate').disabled = !modelChoices.get(selected.value)?.compatible;
+  $('models-status').textContent = 'Active: ' + (activeModelId || 'no verified v2 model')
+    + ' · Runtime: ' + (data.health || 'unknown');
+  displayHealth({model:data.health});
+}
+$('models-list').addEventListener('change', () => {
+  $('models-activate').disabled = !modelChoices.get($('models-list').value)?.compatible;
+});
+$('models-refresh').addEventListener('click',()=>studioRequest('models'));
+$('models-activate').addEventListener('click',()=>{
+  const artifact_id = $('models-list').value;
+  if (!modelChoices.get(artifact_id)?.compatible) return;
+  if (typeof window.confirm === 'function'
+      && !window.confirm('Make ' + artifact_id + ' the Active Model?')) return;
+  studioRequest('model_activate',{artifact_id});
+});
 function handleStudioResponse(message) {
   const action = studioRequests.get(message.request_id);
   if (!action) return;
   studioRequests.delete(message.request_id);
   if (!message.ok) {
-    const target = action === 'snapshot' ? $('snapshot-result')
+    const target = ['models','model_activate'].includes(action) ? $('models-status')
+      : action === 'snapshot' ? $('snapshot-result')
       : action.startsWith('collect_') ? $('collect-progress') : $('workspace-message');
     target.textContent = message.error || 'Studio operation failed.';
     return;
   }
-  if (action === 'overview') {
+  if (action === 'models') {
+    renderModels(message.data);
+  } else if (action === 'model_activate') {
+    activeModelId = message.data.artifact_id;
+    $('models-status').textContent = 'Active: ' + activeModelId + ' · verified and loaded';
+    studioRequest('models');
+  } else if (action === 'overview') {
     $('workspace-message').textContent = 'Connected workspace: ' + message.data.workspace;
     renderDataset(message.data);
   } else if (action === 'snapshot') {
@@ -278,6 +372,24 @@ $('select-workspace').addEventListener('click', async () => {
   } catch (error) {
     $('workspace-message').textContent = String(error);
   }
+});
+async function nativeWorkspaceDialog(command) {
+  try {
+    const selected=await window.__TAURI__?.core?.invoke(command);
+    if(!selected)return; // native Cancel must never change the workspace
+    pendingWorkspace=selected;
+    $('workspace-path').value=selected;
+    $('workspace-message').textContent='Connecting workspace: '+selected;
+    attachSidecar(null);
+  }catch(error){
+    $('workspace-message').textContent=String(error);
+  }
+}
+$('browse-workspace').addEventListener('click',()=>nativeWorkspaceDialog('pick_workspace'));
+$('create-workspace').addEventListener('click',()=>{
+  if(typeof window.confirm==='function'&&!window.confirm(
+    'Initialize a new Hand-D Project Workspace in an empty folder?'))return;
+  nativeWorkspaceDialog('create_workspace');
 });
 $('refresh-dataset').addEventListener('click', () => studioRequest('overview'));
 for (const action of ['accept','reject','drop','restore']) {
@@ -347,6 +459,7 @@ function attachSidecar(status) {
   releaseGesture();
   if (!status) {
     studioRequests.clear();
+    activeModelId = null;
     renderCollection({state:'idle',count:0,target:0});
     previewUrl = null;
     $('preview').removeAttribute('src');
@@ -383,14 +496,22 @@ function attachSidecar(status) {
       const event = JSON.parse(message.data);
       if (event.type === 'runtime.ready') {
         gate.install(event.snapshot);
+        activeModelId = event.snapshot?.active_model_id || null;
         displayHealth(event.snapshot?.health);
         connectionState(true, 'SIDECAR / CONNECTED');
         if (status.workspace) studioRequest('overview');
         if (status.workspace) studioRequest('collect_status');
+        if (status.workspace) studioRequest('models');
         else $('workspace-message').textContent =
           'No workspace selected. Open an existing project to review samples.';
       } else if (event.type === 'runtime.update') onRuntimeEvent(event);
       else if (event.type === 'studio.response') handleStudioResponse(event);
+      else if (event.type === 'studio.model') {
+        activeModelId = event.snapshot?.active_model_id || null;
+        displayHealth(event.snapshot?.health);
+        $('models-status').textContent = 'Active: ' + (activeModelId || 'none')
+          + ' · runtime updated';
+      }
       else if (event.type === 'studio.collection') {
         renderCollection(event.data);
         if (event.data?.state === 'complete') studioRequest('overview');

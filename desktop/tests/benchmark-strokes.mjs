@@ -15,7 +15,9 @@ const ids = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'review-drop','review-restore','build-snapshot','snapshot-result',
   'collect-participant','collect-gesture','collect-hand','collect-target',
   'collect-interval','collect-start','collect-pause','collect-resume',
-  'collect-finish','collect-progress'];
+  'collect-finish','collect-progress','models-list','models-refresh',
+  'models-activate','models-status','browse-workspace','create-workspace',
+  'save-drawing','open-drawing','export-drawing','document-status'];
 const counters = {nodesCreated:0, replaceChildren:0, pathUpdates:0, svgAppend:0};
 const frameTasks = [];
 globalThis.requestAnimationFrame = cb => { frameTasks.push(cb); return frameTasks.length; };

@@ -379,6 +379,49 @@ User-requested repair of the visually rejected sine-wave Wiggly prototype. `desk
 
 **Not yet verified:** human judgment of appearance in WebKit with camera, real full-stack rendered FPS/p95, macOS hardware. A fresh native Tauri dev session needs the physical visual checklist from [Mac lab](mac-lab-oct09.md). Research and further tuning criteria: [Wiggly line-boil evidence](../changes/hand-d-v2-wiggly-line-boil-research.md).
 
+### HD-09 finish: Active Model, native file operations and Linux portable sidecar (2026-10-09)
+
+**Studio Models (V2-145).** With a canonical existing workspace containing `handd.sqlite`, manually run the immutable training CLI against a curated Development Snapshot (`uv run --frozen python -m handd_core.train_cli --workspace /path/to/project --snapshot dev-SNAPSHOT_ID`). Training writes `models/candidate-*` but **never activates** the candidate. In Studio, use **Model Artifacts → Refresh Models**, select a **compatible** candidate, and explicitly click **Make Active**. Model discovery only accepts immediate workspace-local Candidate directories and regular model files (no symlinks), checks version/role/feature contract, label order, manifest and weights/metrics SHA256. Failed activation preserves the running predictor and the persisted selection; a successful activation writes an atomic selection file (`models/.active-model.json`) and resets runtime temporal state. Sidecar process restarts restore this selection; the Whiteboard reports active artifact ID and model health. The development-only historical checkpoint, if loaded, always reports **legacy_unverified** with uncertified label order.
+
+**Native workspace and Whiteboard files (V2-146).** Studio **Browse…** selects an existing workspace through a native dialog, while **Create workspace…** initializes `handd.sqlite` **only in a selected empty existing folder**, never overwriting user files. Whiteboard **Save drawing…** writes a versioned editable `.handd.json` (canonical pen, Wiggly and Eraser points only); **Open drawing…** validates before replacing live ink, with a user confirmation; **Export SVG…** writes clean static, transparent artwork with chronological erase masks. No frames, MJPEG URLs, camera preview or hand skeleton are saved in these files. Cancel is a no-op and Rust writes are atomic with an 8MB limit. Saving Wiggly exports original static path geometry, not a rasterized frame or captured video.
+
+**Build Linux distribution (V2-147)** from the clone with local `uv` and Tauri dependencies installed:
+
+```bash
+bash scripts/build-sidecar-bundle.sh
+npm --prefix desktop run build -- --bundles deb
+# Optional: a portable Linux x86_64 archive usable on CachyOS/Arch
+# without dpkg or a system-wide install:
+bash scripts/build-linux-portable.sh
+# Generated, not tracked in Git:
+ls -lh desktop/src-tauri/target/release/bundle/deb/Hand-D_0.2.0_amd64.deb
+ls -lh dist/Hand-D_0.2.0_linux_amd64-portable.tar.zst
+```
+
+For a portable launch, move the `.tar.zst` to a writable destination and run:
+
+```bash
+mkdir Hand-D-portable && cd Hand-D-portable
+tar --zstd -xf /path/to/Hand-D_0.2.0_linux_amd64-portable.tar.zst
+./launch-handd.sh
+```
+
+This keeps the tested `usr/bin/hand-d-desktop` and `usr/lib/Hand-D/...` resource layout together; it is **not** a sandboxed Flatpak/AppImage and still requires compatible Linux system WebKitGTK/GTK/C-runtime libraries. It does not need Python, uv, a project checkout, dpkg or npm at launch.
+
+The freezer uses PyInstaller **onedir**, bundling canonical Python, Torch CPU, OpenCV and MediaPipe; Tauri packages that directory and the HandLandmarker task plus clearly **unverified legacy diagnostic** .pth. The development launch continues to use the local project `.venv`, while packaged launches take the bundled sidecar from the platform's Tauri resource directory. Do not copy Linux artifacts into Mac/Windows builds. The frozen folder occupies approximately **1.5 GiB uncompressed**, and the October 9 Linux `.deb` is about **485 MiB**. These are local ignored build outputs, not checked-in binaries.
+
+**Linux process/package evidence (2026-10-09):** built the `.deb`, inspected `data.tar.gz` in the archive and found `usr/bin/hand-d-desktop`, `usr/lib/Hand-D/sidecar/handd-sidecar/handd-sidecar`, `usr/lib/Hand-D/models/hand_landmarker.task` and `gesture_mlp.pth`. Extracted the package to a temporary directory (without system-wide installation), launched that native desktop executable from `/tmp` outside the clone: the Tauri window appeared under Niri, WebKit connected via authenticated localhost HTTP/WS, the child process used the **frozen** sidecar path and accessed `/dev/video0`. The frozen binary also passed `--init-workspace` and a no-camera authenticated health endpoint from `/tmp` with an invalid `PYTHONPATH`; a persisted verified v2 Candidate restored with `active_model_id=candidate-frozen-proof` and `health.model=ready`.
+
+**Physical capture evidence:** with a fresh temporary workspace and frozen sidecar, an authenticated Studio WebSocket `collect_start` request (P001 / `Lab_Diagnostic_Unverified` / Any / target=5) reached **complete 5/5** from actual MediaPipe camera callbacks, and SQLite recorded five unreviewed Samples. No image/video files were saved and the temporary workspace was deleted. This demonstrates the real sidecar/Studio IPC and camera persistence path, **not** that these observations are correctly gesture-labeled or that physical UI clicks have been verified.
+
+**Out-of-scope platform evidence:** Mac Apple Silicon permission prompts, packaged .app code signing/notarization and manual Studio clicks remain **not verified**; follow [macOS lab](mac-lab-oct09.md). Windows packaging/hardware remains unverified. No new model accuracy claim or P003 final evaluation is made. Full Sample→Snapshot→Train→Model→Whiteboard with measured latency is **HD-10**, not a hidden claim of HD-09.
+
+**HD-09 final resilience regression (2026-10-09):** corrupted local `models/.active-model.json` previously raised a startup exception before the sidecar could publish READY. RED→GREEN subprocess tests now require a live authenticated `/health` endpoint, tracking availability and model-health `error` even when persisted Active selection JSON is corrupt. `GestureRuntime.mark_model_load_error` preserves that visible diagnostic while processing hand observations and never silently substitutes the legacy predictor. A newly verified candidate can still be manually activated from Studio. The PyInstaller freezer, Tauri `.deb`, and Linux portable archive must be rebuilt after this Python repair; the commands above do so. This is not HD-10 accuracy evidence.
+
+**Recovery proof with the re-frozen sidecar:** launched `resources/handd-sidecar/handd-sidecar/handd-sidecar` from an unrelated temporary working directory with `PYTHONPATH=/definitely/not/the/repository`, a temporary SQLite workspace, a valid synthetic Candidate and deliberately corrupt `.active-model.json`. The frozen process published READY and authenticated health `model=error`. The authenticated WebSocket `models` request still listed the compatible Candidate, `model_activate` returned success, and the `studio.model` notification reported `model=ready`. This establishes package-contained recovery of a corrupt selection, not real model accuracy.
+
+**Final HD-09 Linux evidence (2026-10-09):** after fixing the persisted-model recovery, reran `uv lock --check`, `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q` (**128/128** Python), `node --test desktop/tests/*.test.mjs` (**34/34** JavaScript), `cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked -q` (**4/4** Rust), both SVG performance probes, JS/shell syntax, document links and `git diff --check`; all passed. Refroze the sidecar, regenerated the Tauri `.deb` (~485 MiB) and portable Linux x86_64 `.tar.zst` (~406 MiB). Extracted the **rebuilt portable archive** to a clean `/tmp` location, launched `launch-handd.sh` with invalid `PYTHONPATH` outside the checkout; Niri opened Hand-D, a child process launched the package-contained sidecar with bundled task/checkpoint paths, and WebKit established localhost IPC sockets. The temporary archive extraction and GUI smoke process were cleaned up afterward. These verifications finish the specified **Linux HD-09 implementation/package gate**, not HD-10 or Mac/Windows signoff.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

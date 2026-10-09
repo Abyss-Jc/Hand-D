@@ -27,6 +27,9 @@
           <button id="view-clean" aria-pressed="false">▧ Clean canvas</button>
           <button id="toggle-hands" aria-pressed="true">✋ Hide hands</button>
           <button id="undo">↶ Undo</button><button id="redo">↷ Redo</button>
+          <button id="save-drawing">Save drawing…</button>
+          <button id="open-drawing">Open drawing…</button>
+          <button id="export-drawing">Export SVG…</button>
           <button id="clear">Clear</button><button id="restart">↻ Restart camera</button>
         </div>
       </div>
@@ -59,6 +62,7 @@
           <div class="mini">Preview is never recorded. Your canvas works even without a sidecar.</div>
         </aside>
       </div>
+      <p id="document-status" role="status" class="mini">Unsaved local drawing · video is never saved.</p>
     </section>
     <section id="studio" class="view" hidden>
       <div class="heading"><div><p class="eyebrow">02 / DATA & MODELS</p>
@@ -69,6 +73,8 @@
           <input id="workspace-path" type="text" autocomplete="off" spellcheck="false"
                  placeholder="/path/to/your/Hand-D/project" aria-describedby="workspace-message">
           <button id="select-workspace">Open workspace</button>
+          <button id="browse-workspace">Browse…</button>
+          <button id="create-workspace">Create workspace…</button>
         </div>
         <p id="workspace-message" role="status">No workspace selected. Whiteboard remains available.</p>
       </div>
@@ -112,6 +118,17 @@
           <p>Immutable Development Snapshots. Only accepted, active P001/P002 samples qualify.</p>
           <button id="build-snapshot" disabled>Build Development Snapshot</button>
           <p id="snapshot-result" role="status">Open a workspace and review samples first.</p>
+        </article>
+        <article class="wide">
+          <span class="marker">04</span><h2>Model Artifacts</h2>
+          <p>Only verified final-refit Candidates from this workspace can become Active. Training remains an explicit CLI step.</p>
+          <label for="models-list">Workspace Candidates</label>
+          <select id="models-list" aria-label="Select a compatible Model Artifact"></select>
+          <div class="studio-actions">
+            <button id="models-refresh">Refresh Models</button>
+            <button id="models-activate" disabled>Make Active</button>
+          </div>
+          <p id="models-status" role="status">Open a workspace to inspect Model Artifacts.</p>
         </article>
         <article class="wide"><span class="marker">●</span><h2>Live runtime status</h2>
           <pre id="diagnostics">The sidecar has not reported its status yet.</pre>

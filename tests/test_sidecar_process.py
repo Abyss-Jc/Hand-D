@@ -2,13 +2,71 @@
 import asyncio
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 from aiohttp import ClientSession
+from handd_core.dataset_store import DatasetStore
+from handd_core.runtime_v2 import GestureRuntime
+from handd_core.studio_models import StudioModels
+from tests.test_studio_models import create_candidate
 
 
 class PythonSidecarProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_corrupt_persisted_active_selection_does_not_kill_whiteboard(self):
+        """HD-09: bad metadata must report a model fault, not kill camera/IPC."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store=DatasetStore(Path(tmp)/'handd.sqlite')
+            store.close()
+            model_dir=Path(tmp)/'models'
+            model_dir.mkdir()
+            (model_dir/'.active-model.json').write_text('{broken json')
+            child=await asyncio.create_subprocess_exec(
+                sys.executable,'-u','-m','handd_core.sidecar_main',
+                '--workspace',tmp,'--no-camera',
+                stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                line=await asyncio.wait_for(child.stdout.readline(),10)
+                self.assertTrue(line,'Sidecar must still publish READY with a bad selection')
+                ready=json.loads(line)
+                async with ClientSession() as session:
+                    async with session.get(
+                        f"http://127.0.0.1:{ready['port']}/health",
+                        headers={'Authorization':'Bearer '+ready['token']},
+                    ) as response:
+                        self.assertEqual(response.status,200)
+                        snapshot=(await response.json())['snapshot']
+                        self.assertEqual(snapshot['health']['model'],'error')
+                        self.assertIsNone(snapshot['active_model_id'])
+            finally:
+                if child.returncode is None:
+                    child.terminate()
+                await asyncio.wait_for(child.wait(),8)
+
+    async def test_workspace_active_v2_model_survives_real_process_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=DatasetStore(Path(tmp)/'handd.sqlite');store.close()
+            create_candidate(tmp,'candidate-restart')
+            StudioModels(tmp).activate('candidate-restart',GestureRuntime())
+            child=await asyncio.create_subprocess_exec(
+                sys.executable,'-u','-m','handd_core.sidecar_main',
+                '--workspace',tmp,'--no-camera',
+                stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+            try:
+                ready=json.loads(await asyncio.wait_for(child.stdout.readline(),10))
+                async with ClientSession() as client:
+                    async with client.get(
+                        f"http://127.0.0.1:{ready['port']}/health",
+                        headers={'Authorization':'Bearer '+ready['token']}) as resp:
+                        self.assertEqual(resp.status,200)
+                        snapshot=(await resp.json())['snapshot']
+                        self.assertEqual(snapshot['active_model_id'],'candidate-restart')
+                        self.assertEqual(snapshot['health']['model'],'ready')
+            finally:
+                if child.returncode is None:child.terminate()
+                await asyncio.wait_for(child.wait(),8)
     async def test_explicit_legacy_model_reports_unverified_health_on_bootstrap(self):
         checkpoint = Path(__file__).resolve().parents[1] / 'models/gesture_mlp.pth'
         process = await asyncio.create_subprocess_exec(

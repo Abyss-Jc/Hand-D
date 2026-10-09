@@ -11,6 +11,7 @@ from handd_core.runtime_v2 import GestureRuntime
 from handd_core.sidecar_ipc import SidecarServer
 from tests.test_feature_transform import landmark_fixture
 from tests.test_runtime_v2 import observation
+from tests.test_studio_models import create_candidate
 
 
 class StudioTransportTests(unittest.IsolatedAsyncioTestCase):
@@ -78,6 +79,35 @@ class StudioTransportTests(unittest.IsolatedAsyncioTestCase):
             await ws.close()
         finally:
             await server.stop()
+
+    async def test_model_catalog_activation_rollback_and_status_over_authenticated_ws(self):
+        create_candidate(self.workspace, "candidate-primary")
+        create_candidate(self.workspace, "candidate-invalid", valid=False)
+        ws=await self.client.ws_connect(
+            f'http://127.0.0.1:{self.port}/ws?token={self.server.token}')
+        await ws.receive_json(timeout=3)
+        async def request(action, **payload):
+            await ws.send_json({'type':'studio.request', 'request_id':action,
+                                'action':action,**payload})
+            return await ws.receive_json(timeout=5)
+        status=await request('models')
+        self.assertTrue(status['ok'])
+        self.assertIsNone(status['data']['active_model_id'])
+        self.assertEqual(len(status['data']['candidates']),2)
+        good=await request('model_activate',artifact_id='candidate-primary')
+        self.assertTrue(good['ok'])
+        self.assertEqual(good['data']['artifact_id'],'candidate-primary')
+        self.assertEqual(self.server.runtime.snapshot()['active_model_id'],
+                         'candidate-primary')
+        notification=await ws.receive_json(timeout=5)
+        self.assertEqual(notification['type'],'studio.model')
+        fail=await request('model_activate',artifact_id='candidate-invalid')
+        self.assertFalse(fail['ok'])
+        self.assertEqual(self.server.runtime.snapshot()['active_model_id'],
+                         'candidate-primary')
+        status=await request('models')
+        self.assertEqual(status['data']['active_model_id'],'candidate-primary')
+        await ws.close()
 
     async def test_explicit_collect_start_pause_resume_status_and_finish(self):
         ws=await self.client.ws_connect(

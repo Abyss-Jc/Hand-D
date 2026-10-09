@@ -76,6 +76,8 @@ docs/_build/
 target/
 desktop/node_modules/
 desktop/src-tauri/gen/
+desktop/src-tauri/resources/handd-sidecar/*
+!desktop/src-tauri/resources/handd-sidecar/.gitkeep
 
 # Jupyter Notebook
 .ipynb_checkpoints

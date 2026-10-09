@@ -23,6 +23,11 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "resources": {
+      "resources/handd-sidecar/": "sidecar",
+      "../../models/hand_landmarker.task": "models/hand_landmarker.task",
+      "../../models/gesture_mlp.pth": "models/gesture_mlp.pth"
+    }
   }
 }
