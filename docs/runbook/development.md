@@ -334,6 +334,14 @@ El pincel Wiggly original, opt-in, hace oscilar la representación de los trazos
 
 **Prueba en Mac Apple Silicon:** [guía macOS, checklist y comandos](mac-lab-oct09.md). El preflight `bash scripts/mac-preflight.sh` no abre cámara; `desktop/src-tauri/Info.plist` declara un motivo de acceso a cámara. Preparación del desarrollo **no implica compilación, sandbox/permissions ni webcam ya verificados en macOS**. El empaquetado independiente de la app no existe aún.
 
+### HD-09 hotfix: borrador transparente y botones siempre visibles (2026-10-08)
+
+**Incidente real del usuario:** el borrador anterior creaba un `path` de 32 unidades con `stroke="#fffef9"` sobre el mismo SVG de dibujo, tapando el video en Camera mode; además el SVG tenía `z-index:2` mientras los botones inferiores carecían de una capa explícita, por lo que los trazos podían taparlos. Borrar **solo tinta** requiere composición alfa, nunca pintar color del fondo.
+
+**TDD:** `desktop/tests/stroke-renderer.test.mjs` falló en RED al exigir que el borrador fuese un trazo negro dentro de un `<mask>` SVG de luminancia, que los trazos posteriores estuviesen fuera de esa máscara y que Undo/Redo reconstruyese la estructura sin perder identidad de los trazos anteriores. GREEN: el renderer crea una máscara blanca con trayectoria negra para recortar únicamente el dibujo previo; las capas resultantes son anidadas cronológicamente para permitir volver a pintar encima. Las herramientas y la etiqueta del lienzo tienen `z-index:6` frente a la escena de cámara `z-index:0`, y tests estáticos protegen la prioridad visual. Un test de la integración DOM verifica click de borrador, Undo y Redo.
+
+**Raster real (librsvg local, sin webcam ni guardar foto):** fondo rojo sintético y trazo negro horizontal con borrado central: píxel sobre tinta = `(26,29,28,255)`, píxel de la zona borrada = `(255,0,0,255)`, es decir el rojo original, no blanco. **104/104 Python, 18/18 JavaScript**, `cargo check --locked`, `uv lock --check` y `git diff --check` pasaron. No se modificó cámara, inferencia, SQLite ni imágenes de usuario. **Pendiente prueba humana en WebKit/Tauri real y en Macs**, incluyendo que los botones inferiores puedan pulsarse después de borrar.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

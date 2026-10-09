@@ -160,3 +160,33 @@ test('reduced-motion restores Wiggly to static path without altering strokes',as
   reducedMotion=false;
   elements.drawing.emit('pointerup',{});
 });
+
+test('eraser UI subtracts only existing ink, not camera or controls', async()=>{
+  const svg=elements.drawing;
+  elements['tool-pen'].emit('click');
+  svg.emit('pointerdown',{button:0,pointerId:1,clientX:180,clientY:160});
+  svg.emit('pointermove',{clientX:340,clientY:300});
+  svg.emit('pointerup',{});
+  await Promise.resolve();
+  elements['tool-eraser'].emit('click');
+  svg.emit('pointerdown',{button:0,pointerId:2,clientX:260,clientY:220});
+  svg.emit('pointermove',{clientX:290,clientY:255});
+  svg.emit('pointerup',{});
+  await Promise.resolve();
+  const defs=svg.children.find(child=>child.id==='defs');
+  assert.ok(defs,'eraser must only contribute a mask in SVG defs');
+  const mask=defs.children.at(-1);
+  const erasedPath=mask.children.at(-1);
+  assert.equal(mask.id,'mask');
+  assert.equal(erasedPath.attributes.stroke,'black');
+  assert.notEqual(erasedPath.attributes.stroke,'#fffef9',
+    'white painting would cover the camera');
+  assert.equal(erasedPath.parentElement,mask);
+  const oldInk=svg.children.find(child=>child.id==='g');
+  assert.equal(oldInk.attributes.mask?.startsWith('url(#handd-erase-'),true);
+  elements.undo.emit('click');
+  assert.equal(svg.children.some(child=>child.id==='defs'),false,
+    'undo eraser restores ink and removes its mask');
+  elements.redo.emit('click');
+  assert.equal(svg.children.some(child=>child.id==='defs'),true);
+});

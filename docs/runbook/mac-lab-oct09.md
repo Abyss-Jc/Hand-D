@@ -29,7 +29,7 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
    Verificar Tauri, sidecar CONECTADO, MJPEG sobre cámara y diagnóstico `MODELO ANTIGUO ACTIVO`. El checkpoint legacy sirve solo como diagnóstico: las etiquetas no tienen validación independiente.
 3. Mostrar la **mano derecha, después izquierda y después ambas**. Verificar 21 puntos por mano, conexiones y colores (lima Drawing, azul Modifier). Confirmar manualmente el espejo y los roles; no asumir que la inversión física está probada para la webcam Mac.
 4. Alternar **Ocultar/Mostrar manos** y **Sobre cámara/Lienzo limpio**: debe conservarse el mismo documento y no deben detenerse MediaPipe ni los eventos WS. En limpio el MJPEG debe dejar de transmitirse al no tener consumidor. Abrir y cerrar el modal ampliado con Escape.
-5. Dibujar con ratón o trackpad: trazo largo y rápido, deshacer/rehacer, lápiz, borrar y **Wiggly** sobre cámara y en limpio. Con **Ajustes del Sistema → Accesibilidad → Pantalla → Reducir movimiento**, Wiggly debe quedarse estático sin perder puntos.
+5. Dibujar con ratón o trackpad: trazo largo y rápido, deshacer/rehacer, lápiz, borrar y **Wiggly** sobre cámara y en limpio. **Regresión crítica de borrador:** dibujar una línea, borrarla parcialmente encima de la cámara; comprobar que reaparece el video real (NO una mancha blanca), que los controles inferiores nunca se tapan ni dejan de responder, que se puede volver a dibujar sobre la zona borrada y que Undo/Redo restaura la tinta. Repetir sobre Lienzo limpio y sobre un trazo Wiggly. Con **Ajustes del Sistema → Accesibilidad → Pantalla → Reducir movimiento**, Wiggly debe quedarse estático sin perder puntos.
 6. Probar `Index_Finger` y `Fist` y registrar etiquetas observadas **sin atribuirles precisión**. Los gestos sobre cámara no necesitan video almacenado.
 7. Pulsar **Reiniciar cámara**: sidecar debe reconectarse con sesión nueva, el documento debe sobrevivir y el overlay no debe dejar manos fantasma.
 
@@ -44,6 +44,7 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 | 21 puntos Drawing + Modifier, alineados | No verificado | No verificado |
 | Camera/Limpio, toggle manos, modal | No verificado | No verificado |
 | Mouse, undo/redo, Wiggly, reduced-motion | No verificado | No verificado |
+| Borrador transparente: no tapa cámara ni controles, re-dibujo y Undo/Redo | No verificado | No verificado |
 | Sidecar restart, trazos conservados | No verificado | No verificado |
 | Gestos reales / fluidez percibida | No verificado | No verificado |
 
