@@ -96,7 +96,7 @@ test('multiple erasers remain chronological, never erase future ink',()=>{
   renderer.sync([a,erase1,b]);frame();
   assert.equal(renderer.elements.get(b).path.parentElement,svg);
   renderer.sync([a]);frame();
-  assert.equal(renderer.elements.get(a).path.parentElement,svg);
+  assert.equal(renderer.elements.get(a).node.parentElement,svg);
 });
 
 test('RED: a queued animation frame cannot resurrect removed strokes',()=>{

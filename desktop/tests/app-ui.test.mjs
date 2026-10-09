@@ -104,11 +104,11 @@ test('camera/clean mode, skeletal visibility and Wiggly style preserve strokes',
   elements.drawing.emit('pointerdown',{button:0,pointerId:1,clientX:150,clientY:200});
   elements.drawing.emit('pointermove',{clientX:300,clientY:400});
   await Promise.resolve();
-  assert.equal(elements.drawing.children.at(-1).attributes.stroke,'#5263e6');
+  assert.equal(elements.drawing.children.at(-1).children[0].attributes.stroke,'#5263e6');
   elements.undo.emit('click');
   elements.redo.emit('click');
   await Promise.resolve();
-  assert.equal(elements.drawing.children.at(-1).attributes.stroke,'#5263e6');
+  assert.equal(elements.drawing.children.at(-1).children[0].attributes.stroke,'#5263e6');
 });
 
 test('connection READY distinguishes legacy model from unavailable model', async () => {
@@ -159,12 +159,18 @@ test('reduced-motion restores Wiggly to static path without altering strokes',as
   for(let i=0;i<8;i++)
     elements.drawing.emit('pointermove',{clientX:155+i*16,clientY:160+i*7});
   await Promise.resolve();
-  const path=elements.drawing.children.at(-1);
+  const group=elements.drawing.children.at(-1);
+  assert.equal(group.children.length,4);
+  const path=group.children[0];
   const stable=path.attributes.d;
+  const variantPaths=group.children.slice(1).map(node=>node.attributes.d);
   timers[1](); // Wiggly presentation timer; transport poll is timers[0].
-  assert.notEqual(path.attributes.d,stable);
+  assert.notEqual(elements.drawing.attributes['data-boil-frame'],undefined);
+  assert.equal(path.attributes.d,stable);
+  assert.equal(new Set(variantPaths).size,3);
   reducedMotion=true;
   timers[1]();
+  assert.equal(elements.drawing.attributes['data-boil-frame'],undefined);
   assert.equal(path.attributes.d,stable);
   reducedMotion=false;
   elements.drawing.emit('pointerup',{});

@@ -168,8 +168,8 @@ $('view-camera').addEventListener('click',()=>setCameraMode(true));
 $('view-clean').addEventListener('click',()=>setCameraMode(false));
 $('toggle-hands').addEventListener('click',()=>setHandsVisible(!handsVisible));
 
-// No animated geometry is stored. 15 Hz deliberately decouples visual wiggle
-// from both MediaPipe and the browser's normal drawing render cadence.
+// Discrete ~12fps boil: three cached ink variants, one SVG root frame selector.
+// No geometry work on the clock and no interference with MediaPipe input.
 const reducedMotion = typeof matchMedia === 'function'
   ? matchMedia('(prefers-reduced-motion: reduce)') : {matches:false};
 let animationStarted = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -436,5 +436,5 @@ setInterval(()=>{
     && !$('whiteboard').hidden
     && (typeof document.hidden === 'undefined' || !document.hidden);
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
-  strokeRenderer.animateWiggly((now-animationStarted)/340,{enabled:animate});
-},65);
+  strokeRenderer.animateWiggly(now-animationStarted,{enabled:animate});
+},83);

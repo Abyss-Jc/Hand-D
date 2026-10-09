@@ -1,7 +1,9 @@
-/** Incremental SVG drawing. The durable Strokes model owns points and undo history.
- * Only the active path's 'd' attribute changes during pointer movement.
- * Browser repaint is scheduled at most once per animation frame.
+/** Incremental SVG drawing with immutable 3-frame line-boil presentations.
+ * Only the active stroke updates path data during input; ticking 12fps changes
+ * one SVG root attribute, not thousands of paths or canonical points.
  */
+import {buildLineBoilFrames, LINE_BOIL_FRAME_MS} from './line-boil.mjs';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let nextEraserMaskId = 0;
 
@@ -21,6 +23,8 @@ export class StrokeRenderer {
     this.scheduled = false;
     this.order = [];
     this.defs = null;
+    this.wigglyCount = 0;
+    this.boilFrame = null;
   }
 
   sync(paths) {
@@ -32,20 +36,20 @@ export class StrokeRenderer {
     const keep = new Set(paths);
     for (const [stroke, entry] of this.elements) {
       if (!keep.has(stroke)) {
-        entry.path.remove();
+        entry.node.remove();
         this.elements.delete(stroke);
         this.pending.delete(stroke);
       }
     }
     if (!appendOnly) {
-      for (const entry of this.elements.values()) entry.path.remove();
+      for (const entry of this.elements.values()) entry.node.remove();
       for (const child of [...this.svg.children]) child.remove();
       this.defs = null;
     }
     const newPaths = appendOnly ? paths.slice(this.order.length) : paths;
     for (const stroke of newPaths) {
       if (this.elements.has(stroke)) {
-        this._attach(stroke, this.elements.get(stroke).path);
+        this._attach(stroke, this.elements.get(stroke).node);
         continue;
       }
       const path = this.createPath();
@@ -57,17 +61,41 @@ export class StrokeRenderer {
       path.setAttribute('stroke-linejoin', 'round');
       path.setAttribute('stroke-linecap', 'round');
       path.setAttribute('pointer-events', 'none');
-      this._attach(stroke, path);
-      this.elements.set(stroke, {path, count: 0, geometry: '', animated: false});
+      const node = stroke.tool === 'wiggly' ? this.createSvg('g') : path;
+      const variants=[];
+      if (stroke.tool === 'wiggly') {
+        node.setAttribute('data-lineboil-stroke', '');
+        path.setAttribute('data-lineboil-static', '');
+        node.append(path);
+        for(let frame=0;frame<3;frame++){
+          const variant=this.createPath();
+          variant.setAttribute('fill','none');
+          variant.setAttribute('stroke','#5263e6');
+          variant.setAttribute('stroke-linejoin','round');
+          variant.setAttribute('stroke-linecap','round');
+          variant.setAttribute('pointer-events','none');
+          variant.setAttribute('data-lineboil-frame',String(frame));
+          node.append(variant);
+          variants.push(variant);
+        }
+      }
+      this._attach(stroke, node);
+      const first=stroke.points[0] || {x:0,y:0};
+      const seed=Number.isInteger(stroke.boilSeed) ? stroke.boilSeed
+        : (Math.imul(Math.round(first.x*1e6),2654435761)
+          ^ Math.imul(Math.round(first.y*1e6),1597334677))>>>0;
+      this.elements.set(stroke,{path,node,variants,seed,count:0,geometry:''});
       this.pointAdded(stroke);
     }
     this.order = [...paths];
+    this.wigglyCount = paths.filter(stroke=>stroke.tool === 'wiggly').length;
+    if (!this.wigglyCount) this._showBoilFrame(null);
   }
 
-  _attach(stroke, path) {
+  _attach(stroke, node) {
     if (stroke.tool !== 'erase') {
       // Ink drawn AFTER an eraser is on top of the previous masked layers.
-      this.svg.append(path);
+      this.svg.append(node);
       return;
     }
     if (!this.defs) {
@@ -91,7 +119,7 @@ export class StrokeRenderer {
     opaque.setAttribute('height', '600');
     opaque.setAttribute('fill', 'white');
     mask.append(opaque);
-    mask.append(path); // black removes *ink alpha*, not camera pixels
+    mask.append(node); // black removes *ink alpha*, not camera pixels
     this.defs.append(mask);
 
     const earlierInk = this.createSvg('g');
@@ -135,43 +163,30 @@ export class StrokeRenderer {
       entry.path.setAttribute(
         'd', entry.geometry + (count === 1 ? ' l0.1 0.1' : '')
       );
-      entry.animated = false;
+      if (entry.variants.length) {
+        const frames=buildLineBoilFrames(stroke.points,{seed:entry.seed});
+        frames.forEach((frame,i)=>{
+          entry.variants[i].setAttribute('d',frame.d);
+          entry.variants[i].setAttribute('stroke-width',String(frame.width));
+        });
+      }
     }
   }
 
-  /** Display-only animation capped at 320 vertices per Wiggly stroke. */
-  animateWiggly(phase, {enabled = true} = {}) {
-    for (const [stroke, entry] of this.elements) {
-      if (stroke.tool !== 'wiggly' || !stroke.points.length) continue;
-      if (!enabled) {
-        if (entry.animated) {
-          entry.path.setAttribute('d', entry.geometry
-            + (stroke.points.length === 1 ? ' l0.1 0.1' : ''));
-          entry.animated = false;
-        }
-        continue;
-      }
-      const points = stroke.points;
-      const stride = Math.max(1, Math.ceil(points.length / 320));
-      const parts = [];
-      for (let i = 0; i < points.length; i += stride) {
-        const point = points[i];
-        // The original ~2px tremor was barely visible. More playful motion,
-        // still bounded around the canonical stroke (never modifying points).
-        const offsetX = Math.sin(i * 1.3 + phase) * 8;
-        const offsetY = Math.cos(i * 1.7 + phase * 1.1) * 7;
-        parts.push((parts.length ? ' L' : 'M')
-          + (point.x * 1000 + offsetX).toFixed(2)
-          + ' ' + (point.y * 600 + offsetY).toFixed(2));
-      }
-      if ((points.length - 1) % stride !== 0) {
-        const point = points[points.length - 1];
-        parts.push(' L' + (point.x * 1000).toFixed(2)
-          + ' ' + (point.y * 600).toFixed(2));
-      }
-      entry.path.setAttribute('d', parts.join('')
-        + (points.length === 1 ? ' l0.1 0.1' : ''));
-      entry.animated = true;
+  _showBoilFrame(frame) {
+    if (frame === this.boilFrame) return;
+    if (frame === null) this.svg.removeAttribute('data-boil-frame');
+    else this.svg.setAttribute('data-boil-frame',String(frame));
+    this.boilFrame = frame;
+  }
+
+  /** Low-FPS line boil: swap display layers with one root attribute only. */
+  animateWiggly(elapsedMs,{enabled=true}={}) {
+    if (!enabled || !this.wigglyCount) {
+      this._showBoilFrame(null);
+      return;
     }
+    this._showBoilFrame(
+      Math.floor(Math.max(0,elapsedMs)/LINE_BOIL_FRAME_MS)%3);
   }
 }
