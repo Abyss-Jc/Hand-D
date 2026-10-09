@@ -74,6 +74,8 @@ docs/_build/
 # PyBuilder
 .pybuilder/
 target/
+desktop/node_modules/
+desktop/src-tauri/gen/
 
 # Jupyter Notebook
 .ipynb_checkpoints

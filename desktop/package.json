@@ -1,0 +1,17 @@
+{
+  "name": "hand-d-desktop",
+  "version": "0.2.0-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "node --check web/app.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.1"
+  }
+}

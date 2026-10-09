@@ -9,6 +9,7 @@ dependencies = [
   "mediapipe==0.10.33",
   "opencv-contrib-python==4.13.0.92",
   "torch>=2.6,<3",
+  "aiohttp>=3.11,<4",
 ]
 
 [dependency-groups]

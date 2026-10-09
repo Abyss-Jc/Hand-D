@@ -258,6 +258,30 @@ Still **No verificado**:
 
 These items must remain marked `No verificado` until commands/tests are actually run.
 
+### HD-09 Tauri / Python sidecar development spike (verified on CachyOS, 2026-10-08)
+
+This is the **real Linux desktop process**, not the UX prototype HTML. WebKit2GTK 4.1, GTK3, Rust, Node and npm are present. Polkit authorized installation of missing system dependencies. Python dependencies are locked in uv including aiohttp, npm dependencies are pinned in desktop/package-lock.json, and Cargo uses desktop/src-tauri/Cargo.lock.
+
+```bash
+# From the Hand-D repository root:
+uv sync --frozen
+npm ci --prefix desktop
+cargo check --manifest-path desktop/src-tauri/Cargo.toml --locked
+node --test desktop/tests/*.test.mjs
+uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q
+
+# Open the actual native window:
+npm --prefix desktop run dev
+```
+
+The native window is titled **Hand-D — Whiteboard + Studio**. Rust supervises the local `.venv/bin/python -u -m handd_core.sidecar_main` (development only). Python prints one bootstrap JSON line to Rust (random loopback port, per-launch capability token, Runtime Session ID) and serves authenticated `GET /health`, `GET /ws` and `GET /mjpeg` bound exclusively to `127.0.0.1`. It uses MediaPipe LIVE_STREAM and the mirrored camera. The preview image and WebSocket include the bootstrap token in their loopback URL because the browser's `<img>` element cannot add Bearer Authorization headers. HTTP access logs are disabled, origins are restricted, no-cache/referrer headers are set, and neither tokens nor image data should be persisted or logged. Packaged Python binaries are **not** implemented.
+
+Whiteboard is the default screen, usable with the mouse without a working camera. It supports drawing, erasing, undo/redo, clear, and a modal enlarged canvas which reuses the same DOM/SVG instead of discarding history. Studio currently exposes an **accurate overview and runtime diagnostics, not yet interactive Collect/Review/Snapshot tools**. The runtime starts without an active v2 Candidate, so unsupported gestures cannot become live tool actions by accident.
+
+Evidence: full **93/93** Python tests (including 6 IPC/subprocess tests), **4/4** Node tests, `uv lock --check`, `cargo check --locked` and a full native `npm --prefix desktop run dev` compilation/launch passed. Niri confirmed the Hand-D desktop window and Rust PID. WebKit opened actual loopback connections to the Python sidecar, and the Python process owned the webcam. After deliberately sending SIGTERM to the supervised Python child, Rust launched a fresh child with a new ephemeral port while the original Tauri window stayed open and WebKit reconnected. Canvas/history preservation on reconnection is unit-tested rather than visually recorded. A real gesture-driven drawing demo, full Studio controls, packaged distribution, explicit on-screen crash/close teardown and end-to-end latency remain **No verificado**.
+
+If preview fails, inspect Studio diagnostics and camera permissions. Check Linux dependency presence using `pkg-config --modversion webkit2gtk-4.1`. Never commit `desktop/node_modules` or `desktop/src-tauri/target`; neither belongs to source control.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.
