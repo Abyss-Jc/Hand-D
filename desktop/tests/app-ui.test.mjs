@@ -9,7 +9,10 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'view-camera','view-clean','toggle-hands','tool-wiggly',
   'workspace-path','select-workspace','workspace-message','dataset-summary',
   'review-sample','refresh-dataset','review-accept','review-reject',
-  'review-drop','review-restore','build-snapshot','snapshot-result'];
+  'review-drop','review-restore','build-snapshot','snapshot-result',
+  'collect-participant','collect-gesture','collect-hand','collect-target',
+  'collect-interval','collect-start','collect-pause','collect-resume',
+  'collect-finish','collect-progress'];
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
@@ -186,8 +189,9 @@ test('Studio uses explicit workspace and manual review/immutable snapshot comman
   socket.sendEvent({type:'runtime.ready',snapshot:{
     runtime_session_id:'studio-session',seq:0,timestamp_ms:-1,health:{model:'unavailable'}
   }});
-  assert.equal(socket.sent.at(-1).action,'overview');
-  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+  const overviewRequest=socket.sent.find(request=>request.action==='overview');
+  assert.ok(overviewRequest);
+  socket.sendEvent({type:'studio.response',request_id:overviewRequest.request_id,
     ok:true,data:{workspace:'/tmp/handd-user-workspace',
       sample_count:1,review_counts:{unreviewed:0,accepted:1,rejected:0},
       samples:[{sample_id:'SAMPLE0',gesture:'Fist',review_status:'unreviewed',
@@ -200,6 +204,35 @@ test('Studio uses explicit workspace and manual review/immutable snapshot comman
   assert.equal(socket.sent.at(-1).sample_id,'SAMPLE0');
   elements['build-snapshot'].emit('click');
   assert.equal(socket.sent.at(-1).action,'snapshot');
+});
+
+test('Studio Collect starts only on explicit action and exposes Pause Resume Finish',async()=>{
+  // Existing Studio WebSocket connected by previous test.
+  const socket=connections.at(-1);
+  elements['collect-participant'].value='P001';
+  elements['collect-gesture'].value='Fist';
+  elements['collect-hand'].value='Right';
+  elements['collect-target'].value='2';
+  elements['collect-interval'].value='100';
+  const before=socket.sent?.length || 0;
+  elements['collect-start'].emit('click');
+  assert.equal(socket.sent.length,before+1);
+  assert.equal(socket.sent.at(-1).action,'collect_start');
+  assert.equal(socket.sent.at(-1).participant,'P001');
+  assert.equal(socket.sent.at(-1).target,2);
+  const request_id=socket.sent.at(-1).request_id;
+  socket.sendEvent({type:'studio.response',request_id,ok:true,data:{
+    state:'capturing',count:0,target:2,participant:'P001',gesture:'Fist'
+  }});
+  assert.match(elements['collect-progress'].textContent,/0\s*\/\s*2/);
+  elements['collect-pause'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'collect_pause');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+    ok:true,data:{state:'paused',count:1,target:2}});
+  elements['collect-resume'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'collect_resume');
+  elements['collect-finish'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'collect_finish');
 });
 
 test('eraser UI subtracts only existing ink, not camera or controls', async()=>{

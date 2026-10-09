@@ -18,6 +18,7 @@ let previewUrl = null;
 let pendingWorkspace = null;
 let studioRequestNumber = 0;
 const studioRequests = new Map();
+let collectState = 'idle';
 
 function modelLabel(health) {
   switch (health?.model) {
@@ -224,12 +225,26 @@ function renderDataset(data) {
     $('snapshot-result').textContent = 'Ready for an explicit Development Snapshot.';
   }
 }
+function renderCollection(data) {
+  if (!data || typeof data.state !== 'string') return;
+  collectState = data.state;
+  $('collect-progress').textContent =
+    data.state.toUpperCase() + ' · ' + (data.count ?? 0)
+    + ' / ' + (data.target ?? 0) + ' samples'
+    + (data.gesture ? ' · ' + data.gesture : '')
+    + (data.error ? ' · ' + data.error : '');
+  $('collect-start').disabled = ['capturing','paused'].includes(data.state);
+  $('collect-pause').disabled = data.state !== 'capturing';
+  $('collect-resume').disabled = data.state !== 'paused';
+  $('collect-finish').disabled = !['capturing','paused'].includes(data.state);
+}
 function handleStudioResponse(message) {
   const action = studioRequests.get(message.request_id);
   if (!action) return;
   studioRequests.delete(message.request_id);
   if (!message.ok) {
-    const target = action === 'snapshot' ? $('snapshot-result') : $('workspace-message');
+    const target = action === 'snapshot' ? $('snapshot-result')
+      : action.startsWith('collect_') ? $('collect-progress') : $('workspace-message');
     target.textContent = message.error || 'Studio operation failed.';
     return;
   }
@@ -240,6 +255,9 @@ function handleStudioResponse(message) {
     $('snapshot-result').textContent = 'Snapshot created: '
       + message.data.snapshot_id + ' (' + message.data.workspace_relative_path + ')';
     studioRequest('overview');
+  } else if (action.startsWith('collect_')) {
+    renderCollection(message.data);
+    if (['complete','finished'].includes(message.data.state)) studioRequest('overview');
   } else {
     $('workspace-message').textContent = 'Saved manual review for ' + message.data.sample_id;
     studioRequest('overview');
@@ -274,6 +292,22 @@ $('build-snapshot').addEventListener('click', () => {
       && !window.confirm('Create a new immutable Development Snapshot now?')) return;
   studioRequest('snapshot', {note:'Created explicitly from Hand-D Studio'});
 });
+// Start/Pause/Resume/Finish are the only gates for durable Sample writes.
+// The server validates all parameters; frontend never creates Samples.
+$('collect-start').addEventListener('click', () => {
+  studioRequest('collect_start', {
+    participant:$('collect-participant').value,
+    gesture:$('collect-gesture').value.trim(),
+    hand:$('collect-hand').value,
+    target:Number($('collect-target').value),
+    interval_ms:Number($('collect-interval').value),
+  });
+});
+for (const action of ['pause','resume','finish']) {
+  $('collect-' + action).addEventListener('click', () => {
+    studioRequest('collect_' + action);
+  });
+}
 
 const normalParent = $('canvas-shell').parentElement;
 $('expand').addEventListener('click', () => {
@@ -313,6 +347,7 @@ function attachSidecar(status) {
   releaseGesture();
   if (!status) {
     studioRequests.clear();
+    renderCollection({state:'idle',count:0,target:0});
     previewUrl = null;
     $('preview').removeAttribute('src');
     $('camera-fallback').hidden = false;
@@ -351,10 +386,15 @@ function attachSidecar(status) {
         displayHealth(event.snapshot?.health);
         connectionState(true, 'SIDECAR / CONNECTED');
         if (status.workspace) studioRequest('overview');
+        if (status.workspace) studioRequest('collect_status');
         else $('workspace-message').textContent =
           'No workspace selected. Open an existing project to review samples.';
       } else if (event.type === 'runtime.update') onRuntimeEvent(event);
       else if (event.type === 'studio.response') handleStudioResponse(event);
+      else if (event.type === 'studio.collection') {
+        renderCollection(event.data);
+        if (event.data?.state === 'complete') studioRequest('overview');
+      }
     } catch (error) {
       console.error('Invalid runtime message', error);
     }

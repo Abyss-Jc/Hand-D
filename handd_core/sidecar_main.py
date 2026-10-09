@@ -11,6 +11,7 @@ import asyncio
 import json
 from pathlib import Path
 import signal
+import sqlite3
 import sys
 
 from handd_core.runtime_v2 import GestureRuntime, LatestRuntimeResults
@@ -70,20 +71,44 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
                 ok, frame = await asyncio.to_thread(camera.read)
                 now = max(timestamp + 1, int((loop.time() - started) * 1000))
                 if not ok:
+                    server.camera_available = False
                     released = server.runtime.expire_if_stale(now)
                     if released:
                         await server.publish_event(released)
                     await asyncio.sleep(.1)
                     continue
                 timestamp = now
+                server.camera_available = True
                 frame = cv2.flip(frame, 1)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 detector.detect_async(
                     mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), now,
                 )
-                event = mailbox.drain_to(server.runtime)
+                collected = []
+                capture_error = []
+                def collect_from_same_callback(result, at_ms):
+                    if server.collection is not None:
+                        try:
+                            sample = server.collection.offer_result(result, at_ms)
+                        except (sqlite3.Error, OSError, RuntimeError):
+                            capture_error.append(server.collection.fail())
+                        else:
+                            if sample is not None:
+                                collected.append(sample)
+                event = mailbox.drain_to(
+                    server.runtime, on_observation=collect_from_same_callback)
                 if event is not None:
                     await server.publish_event(event)
+                if collected:
+                    # No raw landmarks or frames in UI progress messages.
+                    await server.publish_event({
+                        'type':'studio.collection',
+                        'data':server.collection.status(),
+                    })
+                if capture_error:
+                    await server.publish_event({
+                        'type':'studio.collection', 'data':capture_error[0],
+                    })
                 else:
                     expired = server.runtime.expire_if_stale(now)
                     if expired is not None:
@@ -99,6 +124,7 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
                         await server.publish_jpeg(data.tobytes())
                 await asyncio.sleep(0)
     finally:
+        server.camera_available = False
         camera.release()
 
 

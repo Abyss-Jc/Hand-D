@@ -73,7 +73,28 @@
         <p id="workspace-message" role="status">No workspace selected. Whiteboard remains available.</p>
       </div>
       <div class="studio-grid">
-        <article><span class="marker">01</span><h2>Collect</h2><p>MediaPipe LIVE_STREAM provides raw landmarks with provenance and pending review.</p><p class="mini">Studio collection controls: pending integration.</p></article>
+        <article>
+          <span class="marker">01</span><h2>Collect</h2>
+          <p>Capture landmarks from the same live camera stream. Samples are always unreviewed until you review them.</p>
+          <label for="collect-participant">Participant (development only)</label>
+          <select id="collect-participant"><option value="P001">P001</option><option value="P002">P002</option></select>
+          <label for="collect-gesture">Intended gesture</label>
+          <input id="collect-gesture" type="text" value="Index_Finger" maxlength="64">
+          <label for="collect-hand">Physical hand</label>
+          <select id="collect-hand"><option value="Right">Right</option><option value="Left">Left</option><option value="Any">Either hand</option></select>
+          <label for="collect-target">Target samples</label>
+          <input id="collect-target" type="number" min="1" max="10000" value="120">
+          <label for="collect-interval">Sampling interval (ms)</label>
+          <input id="collect-interval" type="number" min="20" max="10000" value="100">
+          <div class="studio-actions">
+            <button id="collect-start">Start Capture</button>
+            <button id="collect-pause" disabled>Pause</button>
+            <button id="collect-resume" disabled>Resume</button>
+            <button id="collect-finish" disabled>Finish</button>
+          </div>
+          <p id="collect-progress" role="status">Idle · select an existing workspace to begin.</p>
+          <p class="mini">P003 Final Test collection is intentionally excluded from this development control.</p>
+        </article>
         <article>
           <span class="marker">02</span><h2>Review</h2>
           <p>Manual Accept / Reject and Drop / Restore with a canonical SQLite audit trail.</p>

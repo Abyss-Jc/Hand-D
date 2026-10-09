@@ -10,6 +10,7 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | What exactly must the October 13 tracer prove? | [Tracer specification](spec/hand-d-v2-oct13-tracer.md) |
 | Which tickets are executed next and how are they verified? | [Execution tickets](changes/hand-d-v2-tickets.md) |
 | How will Camera-first overlay, smooth drawing and the optional Wiggly brush be implemented/tested? | [Camera overlay + fluidez TDD plan](changes/hand-d-v2-camera-overlay-fluidity-tdd.md) |
+| Why doesn't Wiggly look like the reference, and what's the deferred replacement? | [Original WigglyPaint research + line-boil plan](changes/hand-d-v2-wiggly-line-boil-research.md) |
 | How do we verify Hand-D on the Apple Silicon Macs without overstating platform support? | [macOS lab checklist (October 9)](runbook/mac-lab-oct09.md) |
 | What should approved Whiteboard/Studio UX look and behave like? | [v2 UX Shape](design/hand-d-v2-ux-shape.md) |
 | How is Hand-D structured today and what boundaries are we moving toward? | [Architecture reference](reference/architecture.md) |

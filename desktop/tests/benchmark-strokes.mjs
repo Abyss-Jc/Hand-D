@@ -12,7 +12,10 @@ const ids = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'view-camera','view-clean','toggle-hands','tool-wiggly',
   'workspace-path','select-workspace','workspace-message','dataset-summary',
   'review-sample','refresh-dataset','review-accept','review-reject',
-  'review-drop','review-restore','build-snapshot','snapshot-result'];
+  'review-drop','review-restore','build-snapshot','snapshot-result',
+  'collect-participant','collect-gesture','collect-hand','collect-target',
+  'collect-interval','collect-start','collect-pause','collect-resume',
+  'collect-finish','collect-progress'];
 const counters = {nodesCreated:0, replaceChildren:0, pathUpdates:0, svgAppend:0};
 const frameTasks = [];
 globalThis.requestAnimationFrame = cb => { frameTasks.push(cb); return frameTasks.length; };

@@ -33,6 +33,7 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 6. Probar `Index_Finger` y `Fist` y registrar etiquetas observadas **sin atribuirles precisión**. Los gestos sobre cámara no necesitan video almacenado.
 7. Pulsar **Restart camera**: sidecar debe reconectarse con sesión nueva, el documento debe sobrevivir y el overlay no debe dejar manos fantasma.
 8. Si existe un proyecto de pruebas con `handd.sqlite`, entrar a **Studio → Existing project workspace directory → Open workspace** usando su ruta local. Verificar que **Review** muestra conteos y Sample IDs reales, que **Accept/Reject/Drop/Restore** requieren clicks explícitos y que **Build Development Snapshot** no entrena ni incluye P003. No hacer acciones sobre un dataset real sin intención/backup. Sin proyecto, Studio debe mostrar un empty state honesto y Whiteboard debe seguir funcionando.
+9. Con **un workspace temporal de laboratorio, nunca datos de producción**, mantener cámara activa y usar **Studio → Collect → Participant P001 → Intended gesture → Physical hand → Start Capture**. Comprobar contador con la mano seleccionada, **Pause**, **Resume** y **Finish**. Luego pulsar **Refresh** en Review: las nuevas observaciones deben aparecer como unreviewed. **No** debe abrirse una segunda cámara ni almacenarse video. Start debe rechazar cámara desconectada o P003. Captura física de Studio aún NO verificada en Mac ni Linux hasta ejecutar este paso.
 
 ## Registro mínimo
 
@@ -49,6 +50,7 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 | Sidecar restart, trazos conservados | No verificado | No verificado |
 | UI English-only: accessible controls and messages | No verificado | No verificado |
 | Existing workspace / manual review / Development Snapshot (test project only) | No verificado | No verificado |
+| Studio Collect: Start/Pause/Resume/Finish + unreviewed Samples, no second camera | No verificado | No verificado |
 | Gestos reales / fluidez percibida | No verificado | No verificado |
 
 No compartir tokens del sidecar, seriales, fotos ni video; solo comandos, errores y medidas agregadas.

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import sqlite3
 from secrets import token_urlsafe
 from urllib.parse import urlsplit
 
@@ -17,6 +18,7 @@ from aiohttp import WSMsgType, web
 
 from handd_core.runtime_v2 import GestureRuntime
 from handd_core.studio_workspace import StudioWorkspace
+from handd_core.studio_collection import StudioCollection
 
 
 class SidecarServer:
@@ -27,6 +29,8 @@ class SidecarServer:
         self.runtime = runtime
         self.token = token or token_urlsafe(32)
         self.studio = StudioWorkspace(workspace) if workspace is not None else None
+        self.collection = StudioCollection(self.studio.path) if self.studio else None
+        self.camera_available = False
         self._studio_lock = asyncio.Lock()
         if len(self.token) < 24:
             raise ValueError('launch token is too short')
@@ -105,6 +109,8 @@ class SidecarServer:
 
     async def stop(self):
         self._stopping = True
+        if self.collection is not None:
+            self.collection.close()
         async with self._frame_condition:
             self._frame_condition.notify_all()
         clients = list(self._clients)
@@ -161,12 +167,28 @@ class SidecarServer:
                 elif action == 'snapshot':
                     data = await asyncio.to_thread(
                         self.studio.build_snapshot, note=command.get('note', ''))
+                elif action == 'collect_status':
+                    data = self.collection.status()
+                elif action == 'collect_start':
+                    if not self.camera_available:
+                        raise ValueError('Camera is not ready for Studio capture')
+                    data = self.collection.start(
+                        participant=command.get('participant'),
+                        gesture=command.get('gesture'), hand=command.get('hand'),
+                        target=command.get('target', 120),
+                        interval_ms=command.get('interval_ms', 100))
+                elif action == 'collect_pause':
+                    data = self.collection.pause()
+                elif action == 'collect_resume':
+                    data = self.collection.resume()
+                elif action == 'collect_finish':
+                    data = self.collection.finish()
                 else:
                     raise ValueError('Unsupported Studio action')
             return {**result, 'ok': True, 'data': data}
         except KeyError:
             return {**result, 'ok': False, 'error': 'Sample not found'}
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, sqlite3.Error) as exc:
             return {**result, 'ok': False, 'error': str(exc)[:200]}
 
     async def publish_event(self, event: dict) -> None:

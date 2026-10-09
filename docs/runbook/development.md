@@ -357,7 +357,19 @@ uv run --frozen python -m handd_core.collect_cli --workspace /path/to/project --
 # build a Development Snapshot deliberately (no training will auto-start).
 ```
 
-**Still TODO for HD-09:** native folder picker/Create Workspace UX, in-app guided Capture controls, deliberate v2 Active Model selection, native Save/Export, packaging independent of project-local Python, and polished/validated macOS. The new in-app Studio paths only cover existing databases. HD-10 real-data model-performance claims remain TODO.
+### HD-09 Studio Collect — same camera, explicit start, no automatic review
+
+New development-only Studio controls (require **an existing selected workspace** with handd.sqlite):
+
+1. Open Studio, type the local workspace directory and choose **Open workspace**. Whiteboard stays usable independently.
+2. Keep the camera active. Under **Collect**, choose Participant **P001/P002**, intended gesture, physical hand (Right/Left/Either), target (1–10000, default 120) and sampling interval (20–10000ms, default 100).
+3. Click **Start Capture**. This explicitly opens a fresh Session/Capture in that workspace and consumes **only the same latest MediaPipe LIVE_STREAM observation** already processed for Whiteboard by `LatestRuntimeResults.drain_to(on_observation=...)`. No second OpenCV device or detector is created; SQLite writes occur on the event-loop owner thread, not the MediaPipe callback thread.
+4. **Pause / Resume / Finish** preserve all previously recorded canonical Samples. A completed quota automatically stops collection; Review lists them as **unreviewed**, and no Snapshot or training starts automatically. Missing camera, P003 or invalid hand/gesture/quota is rejected before any capture starts. Bad tracking observations are skipped. Camera loss and any storage problem must not cause partial video capture (no video is ever persisted).
+5. Capture state and count appear in the Studio Collect card. If the sidecar restarts, unreviewed samples already committed to SQLite remain durable; any in-memory active collection is stopped. Start a new capture to resume experimentation.
+
+**Evidence:** tests/test_studio_collection.py validates explicit creation and persisted 21x3 world+image data, mirrored handedness, pause/resume, quota auto-finish, no P003, invalid data; tests/test_studio_transport.py validates authenticated commands and no-camera rejection; desktop/tests/app-ui.test.mjs covers actual UI request messages and statuses. This is an **automated synthetic landmark test**, not a verified real-human camera collection from Tauri. The macOS runbook includes a separate hardware smoke for this.
+
+**Still TODO for HD-09:** native folder picker/Create Workspace UX, richer guided Collection and P003 Final Test workflow, deliberate v2 Active Model selection, native Save/Export, packaging independent of project-local Python, and polished/validated macOS. Wiggly line-boil redesign is explicitly **deferred** as optional P2: [Wiggly research](../changes/hand-d-v2-wiggly-line-boil-research.md). HD-10 real-data model-performance claims remain TODO.
 
 ## Recuperación
 

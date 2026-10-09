@@ -289,13 +289,18 @@ class LatestRuntimeResults:
             self._pending.clear()
             self._pending.append((result, timestamp_ms))
 
-    def drain_to(self, runtime: GestureRuntime) -> dict | None:
+    def drain_to(self, runtime: GestureRuntime, *, on_observation=None) -> dict | None:
         with self._lock:
             if not self._pending:
                 return None
             result, ts = self._pending.pop()
         output = runtime.process_result(result, ts)
         if output is not None:
+            # Same owner thread and same freshest MediaPipe callback used for
+            # runtime inference. A Studio collector may opt-in explicitly;
+            # no second camera or MediaPipe invocation, and no callback writes.
+            if on_observation is not None:
+                on_observation(result, ts)
             with self._lock:
                 self._stats['processed'] += 1
         return output
