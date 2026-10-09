@@ -15,6 +15,7 @@ import sys
 
 from handd_core.runtime_v2 import GestureRuntime, LatestRuntimeResults
 from handd_core.sidecar_ipc import SidecarServer
+from handd_core.preview_pacing import PreviewPacer
 
 
 def parser() -> argparse.ArgumentParser:
@@ -57,7 +58,7 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
         min_tracking_confidence=.7,
         result_callback=mailbox.on_result,
     )
-    count = 0
+    preview_pacer = PreviewPacer(target_fps=30)
     timestamp = -1
     loop = asyncio.get_running_loop()
     started = loop.time()
@@ -87,8 +88,7 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
                         await server.publish_event(expired)
                 # Cap preview FPS separately from inference; original BGR frame
                 # remains process-local and is never persisted.
-                count += 1
-                if count % 2 == 0:
+                if preview_pacer.due(loop.time(), subscribers=server.preview_subscribers):
                     worked, data = await asyncio.to_thread(
                         cv2.imencode, '.jpg', frame,
                         [cv2.IMWRITE_JPEG_QUALITY, 68],

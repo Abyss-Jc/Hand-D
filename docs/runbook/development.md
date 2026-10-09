@@ -300,6 +300,30 @@ node --test desktop/tests/*.test.mjs
 uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q
 ```
 
+### Whiteboard fluidez: renderer incremental + preview pacing (2026-10-08)
+
+Este corte optimiza la fluidez **sin cambiar Feature Transform, gesto, dataset, ni guardar video**. Se corrigieron dos cuellos de botella medidos: reconstruir el SVG completo por punto y entregar solo uno de cada dos frames MJPEG.
+
+```bash
+# Mismo benchmark sintético en Node antes/después, 121 trazos, 1410 puntos:
+node desktop/tests/benchmark-strokes.mjs
+
+# Probe de transporte con webcam durante 8 segundos.
+# Abre un sidecar temporal con el clasificador legacy solo para diagnóstico;
+# no imprime tokens, no decodifica ni guarda los JPEG:
+uv run --frozen python scripts/bench_sidecar_preview.py
+
+# Comprobaciones automatizadas:
+node --test desktop/tests/*.test.mjs
+uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q
+```
+
+**Datos obtenidos:** el probe DOM simulado pasó de **56.265 SVG paths creados / 705 vaciados / 74,99 ms** a **121 paths / 0 vaciados / 7,53 ms**. `desktop/web/stroke-renderer.mjs` conserva nodos y añade segmentos solo al trazo activo, agrupando invalidaciones con `requestAnimationFrame`; tests comprueban undo/redo, erase y callbacks pendientes. **Node mock no mide WebKit real.** El probe sidecar con webcam y un cliente HTTP+WebSocket real pasó de **14,74 a 29,22 FPS MJPEG entregados**; WS pasó de **26,85 a 27,85 actualizaciones/s** en dos corridas de 8 s, con distinto número de manos detectadas por cambios de escena. `PreviewPacer` limita a aproximadamente 30 Hz, sin encoder JPEG cuando no hay espectadores del stream, y `SidecarServer.preview_subscribers` se limpia al desconectar el cliente. Es una medida de **entrega local de MJPEG**, no FPS de render en WebKit ni p95 cámara→pantalla.
+
+Una prueba adicional de cámara legacy de 16 s con preview reportó **29,47 FPS de lectura**, 467 callbacks y 417 callback batches con manos, 0 errores de inferencia. El clasificador antiguo mantiene etiquetas **no validadas independientemente**. La app Tauri optimizada arrancó en Niri y WebKit abrió sockets HTTP al sidecar supervisado con webcam. **102/102 tests Python y 8/8 Node pasaron** además de `uv lock --check`, compileall, sintaxis JS y diff check. Esto no verifica todavía Camera-first con overlay de 21 puntos, Wiggly, Export ni mejora subjetiva con gestos reales.
+
+**Prueba manual solicitada al usuario:** en la app abierta, dibujar un trazo rápido y largo con ratón; comprobar Undo/Redo. Después mostrar manos derecha/izquierda y distinguir claramente si se siente entrecortado el **video**, el **cursor** o el **trazo**. Si persiste jank, capturar telemetría de WebKit y timestamp de IPC antes de otra modificación. Mantener el cambio ajeno de UX fuera de este ticket.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

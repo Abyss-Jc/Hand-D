@@ -81,13 +81,26 @@ class SidecarTransportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_mjpeg_stream_sends_frame_with_multipart_format(self):
         # Minimal JPEG signature for transport checks; no camera or disk use.
+        self.assertEqual(self.server.preview_subscribers, 0)
         await self.server.publish_jpeg(b'\xff\xd8EXAMPLE\xff\xd9')
         async with self.client.get(self.url(f'mjpeg?token={self.token}')) as response:
             self.assertEqual(response.status, 200)
+            self.assertEqual(self.server.preview_subscribers, 1)
             self.assertIn('multipart/x-mixed-replace', response.headers['Content-Type'])
             chunk = await asyncio.wait_for(response.content.read(300), 3)
             self.assertIn(b'Content-Type: image/jpeg', chunk)
             self.assertIn(b'\xff\xd8EXAMPLE\xff\xd9', chunk)
+
+    async def test_preview_subscribers_return_to_zero_on_stream_close(self):
+        response = await self.client.get(self.url(f'mjpeg?token={self.token}'))
+        self.assertEqual(self.server.preview_subscribers, 1)
+        response.close()
+        for _ in range(25):
+            if self.server.preview_subscribers == 0:
+                break
+            await asyncio.sleep(.08)
+        self.assertEqual(self.server.preview_subscribers, 0,
+                         'stream close must stop useless JPEG encoding work')
 
     async def test_new_process_has_new_token_and_runtime_session(self):
         other = SidecarServer(runtime=GestureRuntime(), token=secrets.token_urlsafe(32))

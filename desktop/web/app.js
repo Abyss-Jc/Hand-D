@@ -1,8 +1,9 @@
 import {RuntimeGate, Strokes} from './runtime-state.mjs';
+import {StrokeRenderer} from './stroke-renderer.mjs';
 
 const $ = id => document.getElementById(id);
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const strokes = new Strokes();
+const strokeRenderer = new StrokeRenderer($('drawing'));
 const gate = new RuntimeGate();
 let tool = 'draw';
 let pointerStroke = null;
@@ -26,23 +27,7 @@ function displayHealth(health) {
 }
 
 function redraw() {
-  const svg = $('drawing');
-  svg.replaceChildren();
-  for (const stroke of strokes.paths) {
-    if (!stroke.points.length) continue;
-    const path = document.createElementNS(SVG_NS, 'path');
-    const d = stroke.points.map((p, i) =>
-      (i === 0 ? 'M' : 'L') + (p.x * 1000).toFixed(2) + ' ' + (p.y * 600).toFixed(2)
-    ).join(' ');
-    path.setAttribute('d', d + (stroke.points.length === 1 ? ' l0.1 0.1' : ''));
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', stroke.tool === 'erase' ? '#fffef9' : '#1a1d1c');
-    path.setAttribute('stroke-width', stroke.tool === 'erase' ? '32' : '4');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
-    path.setAttribute('pointer-events', 'none');
-    svg.append(path);
-  }
+  strokeRenderer.sync(strokes.paths);
 }
 function beginStroke(point, source, action) {
   const path = {points: [point], source, tool: action};
@@ -56,7 +41,7 @@ function extendStroke(path, point) {
   const last = path.points.at(-1);
   if (last && Math.hypot(last.x - point.x, last.y - point.y) < 0.002) return;
   path.points.push(point);
-  redraw();
+  strokeRenderer.pointAdded(path);
 }
 function setTool(action) {
   if (action !== 'draw' && action !== 'erase') return;

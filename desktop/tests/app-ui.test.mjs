@@ -18,6 +18,12 @@ class Element {
   append(node) { this.children.push(node); node.parentElement = this; }
   prepend(node) { this.children.unshift(node); node.parentElement = this; }
   replaceChildren() { this.children = []; }
+  remove() {
+    if (!this.parentElement) return;
+    const list=this.parentElement.children;
+    list.splice(list.indexOf(this),1);
+    this.parentElement=null;
+  }
   setPointerCapture() {}
   getBoundingClientRect() { return {left:0,top:0,width:1000,height:600}; }
   focus() {}

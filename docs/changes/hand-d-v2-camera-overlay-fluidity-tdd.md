@@ -1,6 +1,6 @@
 # Hand-D v2 — Camera-first, hands overlay y fluidez (plan TDD)
 
-**Estado:** planificación aprobada; sin implementación ni benchmarking nuevos.
+**Estado:** en ejecución. Slice inicial de fluidez medido y corregido con TDD; Camera-first, esqueleto, Wiggly y Export siguen pendientes.
 **Decisiones:** UX-Q116=A, UX-Q117=A (2026-10-08); opción creativa inspirada en Wigglypaint solicitada (2026-10-08).
 **Cobertura:** Whiteboard Tauri, runtime Python y canal transitorio de landmarks; no modificar Studio, entrenamiento, SQLite ni el modelo.
 **Documentos de autoridad:** [Requirements](../requirements/hand-d-v2.md), [Architecture](../reference/architecture.md), [UX Shape](../design/hand-d-v2-ux-shape.md).
@@ -16,7 +16,15 @@
 
 La cantidad de pinceles extra, los sonidos y el formato/frecuencia de exportación animada **no están especificados**. No crear esos requisitos por anticipado.
 
-## Observaciones del código (no son benchmarks)
+## Evidencia de la primera optimización (2026-10-08)
+
+**Slice 0 + parte de slices 5 y 6 — RED → GREEN:** el benchmark sintético de Node `node desktop/tests/benchmark-strokes.mjs` procesó **121 trazos y 1.410 puntos**, con el mismo fixture antes/después. El renderer previo recreó **56.265 paths SVG**, llamó **705 veces a `replaceChildren`** y tardó **74,99 ms**. El nuevo `StrokeRenderer` actualiza solo el trazo afectado con `requestAnimationFrame`: **121 paths**, **0 `replaceChildren`**, **165 modificaciones de geometría**, **7,53 ms** en esa corrida. Esto mide operaciones simuladas del DOM en Node, **no FPS/latencia de WebKit**. Tests nuevos prueban batching, identidad de paths tras undo/redo, borrado seguro y ausencia de resurrección con callback pendiente.
+
+El probe real `uv run --frozen python scripts/bench_sidecar_preview.py` midió **8 segundos por corrida** con el mismo modelo legacy de desarrollo en la webcam: MJPEG al cliente local **14,74 → 29,22 FPS** y eventos WS **26,85 → 27,85/s** al sustituir el divisor fijo de 2 fotogramas por `PreviewPacer` limitado a 30 Hz, sin JPEG cuando no hay clientes. Cambió la cantidad de eventos con manos (persona/escena no controladas), así que estos dos runs **no comparan accuracy ni p95 extremo a extremo**. El preview todavía debe verificarse en WebKit; la captura física legacy separada registró 29,47 FPS de sensor y 467 callbacks en ~16 s sin errores de inferencia. La UI nativa arrancó con sidecar y cámara en Niri. **El usuario todavía debe juzgar visualmente la fluidez**, idealmente con cambios de modo/modal cuando estén disponibles.
+
+**Tests automáticos:** **102/102 Python**, **8/8 JavaScript**; py compileall, uv lock y sintaxis JS pasan. No hubo cambios en documentos editables ni se guardaron frames/video. Como prueba manual inmediata: trazo con mouse de 10 segundos (seguido de Undo/Redo), dos manos frente a cámara y observación diferenciada de video, tracking y trazo. Si un aspecto sigue janky, medir primero su cadencia; no asumir que otro aumenta solo porque mejoró el transporte.
+
+## Observaciones del código (línea base anterior; no son benchmarks salvo lo medido arriba)
 
 | Riesgo | Evidencia leída | Hipótesis que debe medirse |
 |---|---|---|
@@ -68,4 +76,4 @@ El plan **no fija cifras nuevas** sin evidencia; reutiliza los presupuestos ya a
 - **Bloqueante para corregir experiencia:** slices 0–6 y 9, con reconocimiento/WS estables. **Mejora creativa opt-in:** slices 7–8; no debe retrasar una corrección de jank ni habilitar accidentalmente captura de cámara.
 - Fuera de este corte: copiar código/assets/sonidos originales de WigglyPaint, GIF animado, timeline, biblioteca de pinceles extensa, cambios en Studio, alteraciones a Feature Transform/dataset, validación de generalización P003 y empaquetado de release.
 
-**Evidencia de esta iteración documental:** lectura de código, requisitos y referencia externa, sin ejecutar benchmarks, tests ni cámara y sin modificar implementación. La worktree mantiene un cambio ajeno sin confirmar en `docs/design/hand-d-v2-ux-shape.md`, que no debe mezclarse con este plan.
+**Historial:** este documento comenzó como planificación sin implementación. La iteración de fluidez descrita arriba incorporó pruebas y código de renderizado/preview, pero **no** implementó aún Cámara como fondo, el esqueleto de 21 puntos, el toggle Whiteboard, Wiggly ni Export. Mantener intacto el cambio de UX ajeno que permanece sin confirmar en `docs/design/hand-d-v2-ux-shape.md`.

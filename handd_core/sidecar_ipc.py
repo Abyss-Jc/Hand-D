@@ -31,6 +31,7 @@ class SidecarServer:
         self._frame_condition = asyncio.Condition()
         self._latest_jpeg: bytes | None = None
         self._frame_seq = 0
+        self.preview_subscribers = 0
         self._stopping = False
         self.port: int | None = None
 
@@ -156,15 +157,24 @@ class SidecarServer:
             },
         )
         await stream.prepare(request)
+        self.preview_subscribers += 1
         last_seq = -1
         try:
             while not self._stopping:
+                if request.transport is None or request.transport.is_closing():
+                    break
                 async with self._frame_condition:
-                    await self._frame_condition.wait_for(
-                        lambda: self._stopping or (
-                            self._latest_jpeg is not None and self._frame_seq != last_seq
+                    try:
+                        await asyncio.wait_for(
+                            self._frame_condition.wait_for(
+                                lambda: self._stopping or (
+                                    self._latest_jpeg is not None
+                                    and self._frame_seq != last_seq
+                                )
+                            ), timeout=.25,
                         )
-                    )
+                    except asyncio.TimeoutError:
+                        continue
                     if self._stopping:
                         break
                     jpeg = self._latest_jpeg
@@ -175,8 +185,10 @@ class SidecarServer:
                 )
         except (asyncio.CancelledError, ConnectionError, RuntimeError):
             pass
-        try:
-            await stream.write_eof()
-        except (ConnectionError, RuntimeError):
-            pass
+        finally:
+            self.preview_subscribers -= 1
+            try:
+                await stream.write_eof()
+            except (ConnectionError, RuntimeError):
+                pass
         return stream
