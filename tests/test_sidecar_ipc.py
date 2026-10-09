@@ -44,6 +44,25 @@ class SidecarTransportTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Exception):
             await self.client.ws_connect(self.url('ws?token=bad'))
 
+    async def test_tauri_dev_origin_can_use_dynamic_frontend_port(self):
+        # Tauri CLI selected 1430 on CachyOS; 1420 cannot be hard-coded.
+        for origin in ('http://127.0.0.1:1430', 'http://localhost:1430'):
+            ws = await self.client.ws_connect(
+                self.url(f'ws?token={self.token}'), origin=origin,
+            )
+            self.assertEqual((await ws.receive_json(timeout=3))['type'], 'runtime.ready')
+            await ws.close()
+
+    async def test_foreign_origin_remains_forbidden_even_with_valid_token(self):
+        from aiohttp import WSServerHandshakeError
+        for origin in ('https://evil.example', 'http://127.0.0.1.evil.example:1430',
+                       'http://localhost:1430.evil.example'):
+            with self.assertRaises(WSServerHandshakeError) as error:
+                await self.client.ws_connect(
+                    self.url(f'ws?token={self.token}'), origin=origin,
+                )
+            self.assertEqual(error.exception.status, 403)
+
     async def test_websocket_ready_snapshot_events_and_reconnect(self):
         ws = await self.client.ws_connect(self.url(f'ws?token={self.token}'))
         initial = await ws.receive_json(timeout=3)

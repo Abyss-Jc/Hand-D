@@ -11,6 +11,7 @@ import asyncio
 import hmac
 import json
 from secrets import token_urlsafe
+from urllib.parse import urlsplit
 
 from aiohttp import WSMsgType, web
 
@@ -45,12 +46,30 @@ class SidecarServer:
         # Do not expose the capability to arbitrary web pages with explicit
         # cross-origin requests; Tauri app origins are decided by supervisor.
         origin = request.headers.get('Origin')
-        if origin is not None and origin not in (
-            'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost',
-            'http://localhost:1420', 'http://127.0.0.1:1420',
-        ):
+        if origin is not None and not self._trusted_origin(origin):
             raise web.HTTPForbidden(text='unrecognized Origin')
         return await handler(request)
+
+    @staticmethod
+    def _trusted_origin(origin: str) -> bool:
+        if origin in ('tauri://localhost', 'http://tauri.localhost',
+                      'https://tauri.localhost'):
+            return True
+        try:
+            parsed = urlsplit(origin)
+            return (
+                parsed.scheme == 'http'
+                and parsed.hostname in ('127.0.0.1', 'localhost')
+                and parsed.port is not None
+                and 1 <= parsed.port <= 65535
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.path == ''
+                and not parsed.query
+                and not parsed.fragment
+            )
+        except ValueError:
+            return False
 
     async def _headers(self, request: web.Request, response: web.StreamResponse):
         response.headers['Cache-Control'] = 'no-store'

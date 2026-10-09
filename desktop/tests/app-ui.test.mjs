@@ -5,7 +5,7 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'nav-whiteboard','nav-studio','whiteboard','studio','canvas-shell',
   'modal-canvas-slot','full-overlay','close-expand','expand','camera-fallback',
   'preview','footer-session','status','lamp','gesture','tracking','diagnostics',
-  'cursor','restart'];
+  'cursor','restart','model-status'];
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
@@ -32,7 +32,19 @@ globalThis.document = {
   addEventListener() {},
 };
 globalThis.window = {};
-globalThis.setInterval = () => {};
+const timers = [];
+globalThis.setInterval = callback => { timers.push(callback); };
+const connections = [];
+globalThis.WebSocket = class {
+  static CLOSED = 3;
+  constructor(url) {
+    this.url = url;
+    this.readyState = 1;
+    connections.push(this);
+  }
+  close() { this.readyState = 3; this.onclose?.(); }
+  sendEvent(data) { this.onmessage?.({data: JSON.stringify(data)}); }
+};
 await import('../web/app.js');
 
 test('mouse strokes support undo/redo and survive modal reparenting', () => {
@@ -56,4 +68,32 @@ test('Whiteboard and Studio navigation does not erase canvas', () => {
   elements['nav-whiteboard'].emit('click');
   assert.equal(elements.whiteboard.hidden, false);
   assert.equal(elements.drawing.children.length, 1);
+});
+
+test('connection READY distinguishes legacy model from unavailable model', async () => {
+  const meta = {port: 39001, token: 'synthetic-test-token', runtime_session_id: 'session-a'};
+  window.__TAURI__ = {core: {invoke: async command => {
+    assert.equal(command, 'sidecar_status');
+    return meta;
+  }}};
+  await timers[0]();
+  assert.equal(connections.length, 1);
+  assert.match(connections[0].url, /127[.]0[.]0[.]1:39001[/]ws/);
+  connections[0].sendEvent({type: 'runtime.ready', snapshot: {
+    runtime_session_id:'session-a',seq:0,timestamp_ms:-1,
+    health:{model:'legacy_unverified',camera:'starting'}
+  }});
+  assert.match(elements.status.textContent, /CONECTADO/);
+  assert.match(elements['model-status'].textContent, /ANTIGUO ACTIVO/);
+  await timers[0]();
+  assert.equal(connections.length, 1, 'healthy WS should not reconnect each poll');
+
+  connections[0].sendEvent({
+    type:'runtime.update',runtime_session_id:'session-a',seq:1,timestamp_ms:10,
+    payload:{drawing:{physical_hand:'Right',raw_gesture:'Index_Finger',
+                      stable_gesture:'Index_Finger',action:null,pointer:null},
+             modifier:{action:null},health:{model:'legacy_unverified',camera:'tracking'}},
+  });
+  assert.equal(elements.gesture.textContent, 'Index_Finger');
+  assert.match(elements['model-status'].textContent, /SIN VALIDACIÓN/);
 });

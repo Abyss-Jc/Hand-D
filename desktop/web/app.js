@@ -10,6 +10,21 @@ let gestureStroke = null;
 let ws = null;
 let sidecarKey = null;
 
+function modelLabel(health) {
+  switch (health?.model) {
+    case 'ready': return 'MODELO V2: LISTO';
+    case 'legacy_unverified':
+      return 'MODELO ANTIGUO ACTIVO · ETIQUETAS SIN VALIDACIÓN INDEPENDIENTE';
+    case 'error': return 'MODELO: ERROR DE INFERENCIA';
+    case 'unavailable': return 'MODELO NO CARGADO · SOLO TRACKING';
+    default: return 'MODELO: ESPERANDO SIDECAR';
+  }
+}
+function displayHealth(health) {
+  $('model-status').textContent = modelLabel(health);
+  $('diagnostics').textContent = JSON.stringify(health ?? {}, null, 2);
+}
+
 function redraw() {
   const svg = $('drawing');
   svg.replaceChildren();
@@ -57,11 +72,15 @@ function onRuntimeEvent(event) {
   if (!gate.accept(event)) return;
   const draw = event.payload?.drawing ?? {};
   const modifier = event.payload?.modifier ?? {};
-  $('gesture').textContent = draw.stable_gesture || draw.raw_gesture || 'SIN DETECCIÓN';
+  $('gesture').textContent = draw.stable_gesture || draw.raw_gesture || (
+    event.payload?.health?.camera === 'tracking'
+      ? 'MANO DETECTADA · SIN CLASIFICACIÓN'
+      : 'SIN MANO DETECTADA'
+  );
   $('tracking').textContent = 'Dibujar: ' + (draw.physical_hand || 'Right')
     + ' / ' + (draw.action || 'sin acción') + ' · Modificar: '
     + (modifier.action || 'inactivo');
-  $('diagnostics').textContent = JSON.stringify(event.payload?.health ?? {}, null, 2);
+  displayHealth(event.payload?.health);
   const point = draw.pointer;
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
       || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
@@ -156,6 +175,7 @@ function attachSidecar(status) {
     $('preview').removeAttribute('src');
     $('camera-fallback').hidden = false;
     $('footer-session').textContent = 'Sin sesión conectada';
+    displayHealth(null);
     connectionState(false, 'SIDECAR INICIANDO / RECONECTANDO');
     return;
   }
@@ -175,6 +195,7 @@ function attachSidecar(status) {
       const event = JSON.parse(message.data);
       if (event.type === 'runtime.ready') {
         gate.install(event.snapshot);
+        displayHealth(event.snapshot?.health);
         connectionState(true, 'SIDECAR / CONECTADO');
       } else if (event.type === 'runtime.update') onRuntimeEvent(event);
     } catch (error) {

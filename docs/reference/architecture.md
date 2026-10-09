@@ -50,6 +50,8 @@ A real Tauri 2 Rust host now supervises the project-local Python sidecar directl
 
 **Not yet complete:** Studio currently contains an accurate overview and health diagnostics rather than real Collect/Review/Snapshot controls; desktop-selected Model Artifact loading, release bundling of Python, visual stroke-preservation testing across a crash and end-to-end gesture latency remain HD-09/HD-10 gates. The native shell smoke is not a production feature-completeness or gesture-accuracy claim.
 
+**HD-09 live-camera regression:** a functioning MJPEG preview does not imply WebSocket control events are connected, and neither implies a predictor is loaded. The sidecar Origin guard now permits any valid loopback-only development Origin port (Tauri dynamically selected port 1430 on Linux), while rejecting foreign hosts and still requiring an unpredictable per-launch token. The Rust development launcher explicitly supplies a legacy checkpoint option to allow smoke-testing the historical model on the live canvas; its health and ID are marked **legacy/unverified** and the five-label order remains an assumption, not a trusted v2 Model Artifact. The future active-Candidate selection flow remains distinct and must require full versioned manifest verification. UI diagnostics distinguish transport, camera/hand state, and model state.
+
 ### Dataset curation
 
 `dataset_extraction_tools/data_view_3d.py` is an interactive Matplotlib viewer/purger over the CSV representation. Its current save path is not a durable curation model; v2 will replace destructive row editing with review-state-driven dataset generation.

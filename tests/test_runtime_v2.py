@@ -164,6 +164,19 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(runtime.process_result(observation('Left'), 135)
                              ['payload']['drawing']['action'], 'erase')
 
+    def test_explicit_legacy_checkpoint_has_unverified_metadata_but_predicts(self):
+        checkpoint = Path(__file__).resolve().parents[1] / 'models/gesture_mlp.pth'
+        runtime = GestureRuntime(stable_frames=1, stable_ms=0)
+        self.assertEqual(runtime.snapshot()['health']['model'], 'unavailable')
+        metadata = runtime.activate_legacy_checkpoint(checkpoint)
+        self.assertEqual(metadata['kind'], 'legacy_diagnostic')
+        self.assertTrue(metadata['label_order_unverified'])
+        self.assertTrue(runtime.snapshot()['active_model_id'].startswith('legacy-unverified-'))
+        state = runtime.process_result(observation('Left'), 100)
+        self.assertIn(state['payload']['drawing']['raw_gesture'],
+                      ('Fist', 'Index_Finger', 'Ruler', 'Thumb_Up', 'Idle'))
+        self.assertEqual(state['payload']['health']['model'], 'legacy_unverified')
+
     def test_custom_label_only_acts_after_explicit_supported_mapping(self):
         runtime = GestureRuntime(predictor=FakePredictor('Custom'),
                                  stable_frames=1, stable_ms=0)

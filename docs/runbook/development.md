@@ -282,6 +282,24 @@ Evidence: full **93/93** Python tests (including 6 IPC/subprocess tests), **4/4*
 
 If preview fails, inspect Studio diagnostics and camera permissions. Check Linux dependency presence using `pkg-config --modversion webkit2gtk-4.1`. Never commit `desktop/node_modules` or `desktop/src-tauri/target`; neither belongs to source control.
 
+### HD-09 camera preview visible, gestures absent, or sidecar repeatedly reconnecting (2026-10-08)
+
+Two development defects were diagnosed on the actual Tauri/Niri shell after the first native smoke. **Cause 1:** the Rust launcher started Python without any gesture model. MediaPipe could track hands but every prediction/action remained null. **Cause 2:** aiohttp accepted WebSocket Origins for Tauri's assumed development port 1420, while the live Tauri instance used port **1430**; camera MJPEG could work even though WebSocket handshakes returned HTTP 403. These were independent failures, not evidence the webcam itself was broken.
+
+TDD reproduced the 1430 WebSocket handshake rejection and missing explicit legacy-checkpoint activation; fixed aiohttp Origin verification to accept only a syntactically valid local development Origin on 127.0.0.1/localhost with a valid dynamic port, while continuing to reject arbitrary/foreign origins and require the per-launch token. The native **development launcher now explicitly opts into** `models/gesture_mlp.pth` using `--legacy-checkpoint`. Python loads the five-output state dict with `weights_only=True` and a fixed 69-feature CPU predictor; its health reports `legacy_unverified` and its ID includes an abbreviated checkpoint SHA256. The five legacy class names/order are only the historical best-known assumption, **not independently certified metadata, a v2 Model Artifact, P003 evidence, or a scientifically validated accuracy result**. For a validated v2 model, use the distinct `--model-artifact` option after generating and verifying a final-refit Candidate; both options cannot be given together.
+
+The Whiteboard now reports separate model and camera statuses. `MODELO ANTIGUO ACTIVO` indicates diagnostic legacy inference, `MODELO NO CARGADO` indicates tracking-only mode, and `SIN MANO DETECTADA` means MediaPipe did not yield a usable hand. Rust supervision and MJPEG still operate independently of WebSocket recovery. On the live Linux desktop, Niri confirmed the window, the supervised Python argv included the explicit legacy flag, that process held `/dev/video0`, and WebKit established **two stable loopback connections** (preview and WS) to the same sidecar across repeated socket checks. User-observed classification reliability and drawing gestures on a real hand still require an in-person interaction; don't infer accuracy from a healthy transport.
+
+```bash
+# Native development window with explicit legacy diagnostic inference:
+npm --prefix desktop run dev
+
+# No-camera regressions and all project tests:
+uv run --frozen python -m unittest tests.test_sidecar_ipc tests.test_sidecar_process tests.test_runtime_v2 -q
+node --test desktop/tests/*.test.mjs
+uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q
+```
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

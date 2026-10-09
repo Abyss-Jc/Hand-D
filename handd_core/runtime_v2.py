@@ -70,6 +70,7 @@ class GestureRuntime:
         self._actions = {role: dict(mapping) for role, mapping in BASE_ACTIONS.items()}
         self._stale_released = False
         self._model_health = 'ready' if predictor is not None else 'unavailable'
+        self._success_model_health = self._model_health
         self._camera_health = 'starting'
         self._compute_times_ms = deque(maxlen=120)
 
@@ -98,6 +99,7 @@ class GestureRuntime:
         model, manifest = load_model_artifact(path)
         self.predictor = model
         self._model_health = 'ready'
+        self._success_model_health = 'ready'
         self._active_model_id = manifest['artifact_id']
         for role in self._states:
             self._states[role].reset()
@@ -107,6 +109,18 @@ class GestureRuntime:
                 if name in model.label_order
             }
         return {'artifact_id': self._active_model_id, 'label_order': list(model.label_order)}
+
+    def activate_legacy_checkpoint(self, path) -> dict:
+        """Opt-in old checkpoint, clearly marked unverified in every health update."""
+        from handd_core.legacy_model import load_legacy_checkpoint
+        predictor, metadata = load_legacy_checkpoint(path)
+        self.predictor = predictor
+        self._active_model_id = metadata['artifact_id']
+        self._model_health = 'legacy_unverified'
+        self._success_model_health = 'legacy_unverified'
+        for state in self._states.values():
+            state.reset()
+        return metadata
 
     def set_actions(self, *, drawing=None, modifier=None) -> None:
         """Workspace-configured, role-safe built-in actions (never arbitrary code)."""
@@ -189,7 +203,9 @@ class GestureRuntime:
             pointer = {'x': float(tip[0]), 'y': float(tip[1])}
             try:
                 raw = self.predictor.predict(features.reshape(1, 69))[0] if self.predictor else None
-                self._model_health = 'ready' if self.predictor else 'unavailable'
+                self._model_health = (
+                    self._success_model_health if self.predictor else 'unavailable'
+                )
             except (ValueError, RuntimeError, TypeError, IndexError):
                 raw = None
                 inference_failed = True

@@ -3,11 +3,36 @@ import asyncio
 import json
 import sys
 import unittest
+from pathlib import Path
 
 from aiohttp import ClientSession
 
 
 class PythonSidecarProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_legacy_model_reports_unverified_health_on_bootstrap(self):
+        checkpoint = Path(__file__).resolve().parents[1] / 'models/gesture_mlp.pth'
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, '-u', '-m', 'handd_core.sidecar_main',
+            '--no-camera', '--legacy-checkpoint', str(checkpoint),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            ready = json.loads(await asyncio.wait_for(process.stdout.readline(), 9))
+            self.assertEqual(ready['type'], 'sidecar.ready')
+            async with ClientSession() as client:
+                async with client.get(
+                    f"http://127.0.0.1:{ready['port']}/health",
+                    headers={'Authorization': 'Bearer ' + ready['token']},
+                ) as response:
+                    self.assertEqual(response.status, 200)
+                    health = (await response.json())['snapshot']
+                    self.assertEqual(health['health']['model'], 'legacy_unverified')
+                    self.assertTrue(health['active_model_id'].startswith('legacy-unverified-'))
+        finally:
+            if process.returncode is None:
+                process.terminate()
+            await asyncio.wait_for(process.wait(), 8)
+
     async def test_bootstrap_and_restart_have_separate_authentication(self):
         async def launch():
             child = await asyncio.create_subprocess_exec(

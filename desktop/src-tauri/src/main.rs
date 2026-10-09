@@ -48,7 +48,10 @@ fn spawn_supervisor(state: Supervisor) {
             // Kill the Python process directly, not a uv wrapper which could
             // leave its child orphaned when the desktop exits.
             let started = Command::new(root.join(".venv/bin/python"))
-                .args(["-u", "-m", "handd_core.sidecar_main"])
+                .args([
+                    "-u", "-m", "handd_core.sidecar_main",
+                    "--legacy-checkpoint", "models/gesture_mlp.pth",
+                ])
                 .current_dir(&root)
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())

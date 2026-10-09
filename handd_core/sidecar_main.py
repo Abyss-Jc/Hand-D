@@ -23,7 +23,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument('--camera', type=int, default=0)
     p.add_argument('--task', type=Path, default=Path(__file__).resolve().parents[1]
                    / 'models' / 'hand_landmarker.task')
-    p.add_argument('--model-artifact', type=Path, default=None)
+    model = p.add_mutually_exclusive_group()
+    model.add_argument('--model-artifact', type=Path, default=None)
+    model.add_argument('--legacy-checkpoint', type=Path, default=None,
+                       help='Development-only old .pth (label order unverified)')
     return p
 
 
@@ -101,6 +104,8 @@ async def run(args) -> None:
     runtime = GestureRuntime()
     if args.model_artifact is not None:
         runtime.activate_model(args.model_artifact)
+    elif args.legacy_checkpoint is not None:
+        runtime.activate_legacy_checkpoint(args.legacy_checkpoint)
     server = SidecarServer(runtime=runtime)
     port = await server.start()
     print(json.dumps({
