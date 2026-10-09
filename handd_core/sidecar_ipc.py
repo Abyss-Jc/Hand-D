@@ -16,14 +16,18 @@ from urllib.parse import urlsplit
 from aiohttp import WSMsgType, web
 
 from handd_core.runtime_v2 import GestureRuntime
+from handd_core.studio_workspace import StudioWorkspace
 
 
 class SidecarServer:
     host = '127.0.0.1'
 
-    def __init__(self, *, runtime: GestureRuntime, token: str | None = None):
+    def __init__(self, *, runtime: GestureRuntime, token: str | None = None,
+                 workspace=None):
         self.runtime = runtime
         self.token = token or token_urlsafe(32)
+        self.studio = StudioWorkspace(workspace) if workspace is not None else None
+        self._studio_lock = asyncio.Lock()
         if len(self.token) < 24:
             raise ValueError('launch token is too short')
         self._runner: web.AppRunner | None = None
@@ -126,12 +130,44 @@ class SidecarServer:
         try:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
-                    # This endpoint publishes runtime status, not unaudited
-                    # arbitrary commands. Ignore all client text messages.
-                    continue
+                    if len(msg.data) > 4096:
+                        continue
+                    try:
+                        command = json.loads(msg.data)
+                    except (ValueError, TypeError):
+                        continue
+                    if isinstance(command, dict) and command.get('type') == 'studio.request':
+                        await ws.send_json(await self._studio_request(command))
         finally:
             self._clients.discard(ws)
         return ws
+
+    async def _studio_request(self, command: dict) -> dict:
+        request_id = command.get('request_id')
+        if not isinstance(request_id, str) or len(request_id) > 64:
+            request_id = ''
+        result = {'type': 'studio.response', 'request_id': request_id}
+        if self.studio is None:
+            return {**result, 'ok': False,
+                    'error': 'Select an existing Hand-D workspace first'}
+        action = command.get('action')
+        try:
+            async with self._studio_lock:
+                if action == 'overview':
+                    data = await asyncio.to_thread(self.studio.overview)
+                elif action in ('accept','reject','drop','restore'):
+                    data = await asyncio.to_thread(
+                        self.studio.transition, command.get('sample_id'), action)
+                elif action == 'snapshot':
+                    data = await asyncio.to_thread(
+                        self.studio.build_snapshot, note=command.get('note', ''))
+                else:
+                    raise ValueError('Unsupported Studio action')
+            return {**result, 'ok': True, 'data': data}
+        except KeyError:
+            return {**result, 'ok': False, 'error': 'Sample not found'}
+        except (ValueError, OSError) as exc:
+            return {**result, 'ok': False, 'error': str(exc)[:200]}
 
     async def publish_event(self, event: dict) -> None:
         for client in tuple(self._clients):

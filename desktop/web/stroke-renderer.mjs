@@ -156,8 +156,10 @@ export class StrokeRenderer {
       const parts = [];
       for (let i = 0; i < points.length; i += stride) {
         const point = points[i];
-        const offsetX = Math.sin(i * 1.3 + phase) * 1.8;
-        const offsetY = Math.cos(i * 1.7 + phase * 1.1) * 1.6;
+        // The original ~2px tremor was barely visible. More playful motion,
+        // still bounded around the canonical stroke (never modifying points).
+        const offsetX = Math.sin(i * 1.3 + phase) * 8;
+        const offsetY = Math.cos(i * 1.7 + phase * 1.1) * 7;
         parts.push((parts.length ? ' L' : 'M')
           + (point.x * 1000 + offsetX).toFixed(2)
           + ' ' + (point.y * 600 + offsetY).toFixed(2));

@@ -342,6 +342,23 @@ El pincel Wiggly original, opt-in, hace oscilar la representación de los trazos
 
 **Raster real (librsvg local, sin webcam ni guardar foto):** fondo rojo sintético y trazo negro horizontal con borrado central: píxel sobre tinta = `(26,29,28,255)`, píxel de la zona borrada = `(255,0,0,255)`, es decir el rojo original, no blanco. **104/104 Python, 18/18 JavaScript**, `cargo check --locked`, `uv lock --check` y `git diff --check` pasaron. No se modificó cámara, inferencia, SQLite ni imágenes de usuario. **Pendiente prueba humana en WebKit/Tauri real y en Macs**, incluyendo que los botones inferiores puedan pulsarse después de borrar.
 
+### HD-09 English-only UI, stronger Wiggly and real Studio Review/Snapshot
+
+The user explicitly approved **English-only product UI** (ADR 0005, V2-142). The actual Tauri HTML, accessible names, runtime states, Camera/Whiteboard controls, Studio placeholders and modal copy are now all English. Internal docs can remain Spanish. `node --test desktop/tests/ui-language.test.mjs` is the regression contract. Wiggly is opt-in, visual-only, with bounded **8px horizontal / 7px vertical** displacement (previously ~2px), a **65ms repaint timer**, untouched original path geometry, undo/redo and reduced-motion fallback.
+
+**The next HD-09 thin Studio slice is no longer a simulated Dataset overview.** In the Studio workspace field, enter the path to an **existing** Hand-D Project Workspace containing `handd.sqlite` and choose **Open workspace**. This deliberately does not create a database. Rust validates and canonicalizes the directory, restarts the single Python sidecar with a `--workspace` argument, and keeps the Whiteboard document intact. The authenticated existing WebSocket accepts a narrow allowlist of `studio.request` messages only: `overview` (up to 40 real sample summaries + counts + snapshot blockers), `accept` / `reject` / `drop` / `restore` (audited single-Sample manual decisions) and `snapshot` (new immutable Development snapshot, **only on explicit user click**). Invalid Sample IDs, unconfigured workspaces and unsupported commands fail safely; P003 does not appear eligible for Development. Camera frames/landmarks are not saved by this UI.
+
+To prepare data without turning Studio into a fake collector:
+
+```bash
+# Existing canonical collection CLI, run with appropriate real labels and participant:
+uv run --frozen python -m handd_core.collect_cli --workspace /path/to/project --participant P001 --gesture Index_Finger --hand Right --camera 0 --quota 120
+# Return to Studio, open /path/to/project, review the actual Samples, then
+# build a Development Snapshot deliberately (no training will auto-start).
+```
+
+**Still TODO for HD-09:** native folder picker/Create Workspace UX, in-app guided Capture controls, deliberate v2 Active Model selection, native Save/Export, packaging independent of project-local Python, and polished/validated macOS. The new in-app Studio paths only cover existing databases. HD-10 real-data model-performance claims remain TODO.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

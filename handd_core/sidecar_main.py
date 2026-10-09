@@ -22,6 +22,8 @@ def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Hand-D v2 private Python sidecar')
     p.add_argument('--no-camera', action='store_true', help='IPC-only diagnostics')
     p.add_argument('--camera', type=int, default=0)
+    p.add_argument('--workspace', type=Path, default=None,
+                   help='Explicit existing project directory; never creates a dataset implicitly')
     p.add_argument('--task', type=Path, default=Path(__file__).resolve().parents[1]
                    / 'models' / 'hand_landmarker.task')
     model = p.add_mutually_exclusive_group()
@@ -106,11 +108,12 @@ async def run(args) -> None:
         runtime.activate_model(args.model_artifact)
     elif args.legacy_checkpoint is not None:
         runtime.activate_legacy_checkpoint(args.legacy_checkpoint)
-    server = SidecarServer(runtime=runtime)
+    server = SidecarServer(runtime=runtime, workspace=args.workspace)
     port = await server.start()
     print(json.dumps({
         'type': 'sidecar.ready', 'host': server.host, 'port': port,
         'token': server.token, 'runtime_session_id': runtime.runtime_session_id,
+        'workspace': str(server.studio.path) if server.studio else None,
     }), flush=True)
     shutdown = asyncio.Event()
     loop = asyncio.get_running_loop()

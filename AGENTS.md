@@ -29,6 +29,7 @@ When documenting:
 
 ## Architectural boundaries
 
+- **UI language is English-only** in Whiteboard and Studio, including dynamic model/runtime status, empty states and accessibility labels (ADR 0005, V2-142). Internal planning documents may be bilingual.
 - **Hand-D App** is the user-facing whiteboard.
 - **Hand-D Studio** is the advanced project/data surface for collection, inspection, curation, model/workspace management, and dataset preparation; it is not developer-only.
 - Training/evaluation must be reproducible but is outside the Studio GUI milestone.

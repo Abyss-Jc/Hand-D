@@ -6,10 +6,14 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'modal-canvas-slot','full-overlay','close-expand','expand','camera-fallback',
   'preview','footer-session','status','lamp','gesture','tracking','diagnostics',
   'cursor','restart','model-status','camera-scene','hands-overlay',
-  'view-camera','view-clean','toggle-hands','tool-wiggly'];
+  'view-camera','view-clean','toggle-hands','tool-wiggly',
+  'workspace-path','select-workspace','workspace-message','dataset-summary',
+  'review-sample','refresh-dataset','review-accept','review-reject',
+  'review-drop','review-restore','build-snapshot','snapshot-result'];
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
+    this.value = ''; this.disabled = false;
     this.style = {}; this.attributes = {}; this.classList = {toggle() {}};
     this.parentElement = null;
   }
@@ -37,9 +41,10 @@ elements['canvas-shell'].parentElement = new Element('workspace');
 globalThis.document = {
   getElementById(id) { if (!elements[id]) throw Error(id); return elements[id]; },
   createElementNS(_namespace, tag) { return new Element(tag); },
+  createElement(tag) { return new Element(tag); },
   addEventListener() {},
 };
-globalThis.window = {};
+globalThis.window = {confirm: () => true};
 const timers = [];
 globalThis.setInterval = callback => { timers.push(callback); };
 let reducedMotion = false;
@@ -53,6 +58,7 @@ globalThis.WebSocket = class {
     connections.push(this);
   }
   close() { this.readyState = 3; this.onclose?.(); }
+  send(data) { this.sent = [...(this.sent || []),JSON.parse(data)]; }
   sendEvent(data) { this.onmessage?.({data: JSON.stringify(data)}); }
 };
 await import('../web/app.js');
@@ -115,8 +121,8 @@ test('connection READY distinguishes legacy model from unavailable model', async
     runtime_session_id:'session-a',seq:0,timestamp_ms:-1,
     health:{model:'legacy_unverified',camera:'starting'}
   }});
-  assert.match(elements.status.textContent, /CONECTADO/);
-  assert.match(elements['model-status'].textContent, /ANTIGUO ACTIVO/);
+  assert.match(elements.status.textContent, /CONNECTED/);
+  assert.match(elements['model-status'].textContent, /LEGACY MODEL ACTIVE/);
   await timers[0]();
   assert.equal(connections.length, 1, 'healthy WS should not reconnect each poll');
 
@@ -127,7 +133,7 @@ test('connection READY distinguishes legacy model from unavailable model', async
              modifier:{action:null},health:{model:'legacy_unverified',camera:'tracking'}},
   });
   assert.equal(elements.gesture.textContent, 'Index_Finger');
-  assert.match(elements['model-status'].textContent, /SIN VALIDACIÓN/);
+  assert.match(elements['model-status'].textContent, /NOT INDEPENDENTLY VERIFIED/);
 });
 
 test('Modifier skeleton stays visible when Drawing Hand is absent',()=>{
@@ -159,6 +165,41 @@ test('reduced-motion restores Wiggly to static path without altering strokes',as
   assert.equal(path.attributes.d,stable);
   reducedMotion=false;
   elements.drawing.emit('pointerup',{});
+});
+
+test('Studio uses explicit workspace and manual review/immutable snapshot commands',async()=>{
+  elements['workspace-path'].value='/tmp/handd-user-workspace';
+  let selected=null;
+  window.__TAURI__ = {core:{invoke:async (command,args)=>{
+    if(command==='select_workspace'){selected=args.path;return args.path;}
+    if(command==='sidecar_status') return {
+      port:39009,token:'synthetic-token',runtime_session_id:'studio-session',
+      workspace:'/tmp/handd-user-workspace',
+    };
+    throw Error(command);
+  }}};
+  elements['select-workspace'].emit('click');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(selected,'/tmp/handd-user-workspace');
+  await timers[0]();
+  const socket=connections.at(-1);
+  socket.sendEvent({type:'runtime.ready',snapshot:{
+    runtime_session_id:'studio-session',seq:0,timestamp_ms:-1,health:{model:'unavailable'}
+  }});
+  assert.equal(socket.sent.at(-1).action,'overview');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+    ok:true,data:{workspace:'/tmp/handd-user-workspace',
+      sample_count:1,review_counts:{unreviewed:0,accepted:1,rejected:0},
+      samples:[{sample_id:'SAMPLE0',gesture:'Fist',review_status:'unreviewed',
+                lifecycle_status:'active'}],snapshot_ready:true,eligible_count:1,
+      snapshot_blockers:[],snapshot_warnings:[]}});
+  assert.equal(elements['review-sample'].children.length,1);
+  elements['review-sample'].value='SAMPLE0';
+  elements['review-accept'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'accept');
+  assert.equal(socket.sent.at(-1).sample_id,'SAMPLE0');
+  elements['build-snapshot'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'snapshot');
 });
 
 test('eraser UI subtracts only existing ink, not camera or controls', async()=>{

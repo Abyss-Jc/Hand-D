@@ -1,82 +1,107 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Hand-D — Whiteboard y Studio</title>
+  <title>Hand-D — Whiteboard + Studio</title>
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
   <header class="top">
     <div class="brand">HAND<span>—</span>D <small>DRAW WITH YOUR HANDS</small></div>
-    <nav aria-label="Espacios">
+    <nav aria-label="Workspaces">
       <button id="nav-whiteboard" class="selected" aria-selected="true">01 / WHITEBOARD</button>
       <button id="nav-studio" aria-selected="false">02 / STUDIO</button>
     </nav>
-    <div class="connection" aria-live="polite"><span id="lamp"></span><span id="status">INICIANDO SIDECAR</span></div>
+    <div class="connection" aria-live="polite"><span id="lamp"></span><span id="status">STARTING SIDECAR</span></div>
   </header>
   <main>
     <section id="whiteboard" class="view">
       <div class="heading">
-        <div><p class="eyebrow">01 / LIENZO EN VIVO</p><h1>Tu mano.<br>Tu lienzo.</h1>
-        <p>Usa el ratón o conecta el runtime Python. Tus trazos no se pierden si la cámara falla.</p></div>
+        <div><p class="eyebrow">01 / LIVE WHITEBOARD</p><h1>Your hand.<br>Your canvas.</h1>
+        <p>Draw with your mouse or with gestures. Your strokes stay safe if the camera disconnects.</p></div>
         <div class="toolbar">
-          <button id="view-camera" class="selected" aria-pressed="true">◉ Sobre cámara</button>
-          <button id="view-clean" aria-pressed="false">▧ Lienzo limpio</button>
-          <button id="toggle-hands" aria-pressed="true">✋ Ocultar manos</button>
-          <button id="undo">↶ Deshacer</button><button id="redo">↷ Rehacer</button>
-          <button id="clear">Limpiar</button><button id="restart">↻ Reiniciar cámara</button>
+          <button id="view-camera" class="selected" aria-pressed="true">◉ Camera overlay</button>
+          <button id="view-clean" aria-pressed="false">▧ Clean canvas</button>
+          <button id="toggle-hands" aria-pressed="true">✋ Hide hands</button>
+          <button id="undo">↶ Undo</button><button id="redo">↷ Redo</button>
+          <button id="clear">Clear</button><button id="restart">↻ Restart camera</button>
         </div>
       </div>
       <div class="workspace">
         <div class="canvas-shell" id="canvas-shell">
           <div class="camera-scene" id="camera-scene">
-            <img id="preview" alt="Cámara en vivo detrás de los trazos, sin grabación" />
-            <span id="camera-fallback">Esperando cámara…</span>
+            <img id="preview" alt="Live camera behind your drawing; video is not recorded" />
+            <span id="camera-fallback">Waiting for camera…</span>
             <svg id="hands-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"
-                 aria-label="Articulaciones de Drawing Hand y Modifier Hand" role="img"></svg>
+                 aria-label="Drawing Hand and Modifier Hand landmarks" role="img"></svg>
             <svg id="drawing" viewBox="0 0 1000 600" preserveAspectRatio="none" role="img"
-                 aria-label="Whiteboard. Dibuja con ratón o mano derecha al conectar el modelo."></svg>
+                 aria-label="Whiteboard. Draw with your mouse or with the Drawing Hand."></svg>
             <div id="cursor" hidden></div>
           </div>
-          <span class="canvas-tag" id="canvas-tag">WHITEBOARD · LIENZO LOCAL</span>
+          <span class="canvas-tag" id="canvas-tag">WHITEBOARD · LOCAL CANVAS</span>
           <div class="tools">
-            <button id="tool-pen" class="selected">✎ Dibujar</button>
-            <button id="tool-eraser">⌫ Borrar</button>
+            <button id="tool-pen" class="selected">✎ Pen</button>
+            <button id="tool-eraser">⌫ Eraser</button>
             <button id="tool-wiggly" aria-pressed="false">〰 Wiggly</button>
-            <button id="expand" aria-label="Ampliar el lienzo">⛶ Ampliar</button>
+            <button id="expand" aria-label="Expand whiteboard">⛶ Expand</button>
           </div>
         </div>
         <aside class="camera-panel">
-          <div class="camera-label">CÁMARA · MANOS DETECTADAS</div>
-          <p class="mini">Verde lima = Drawing Hand. Azul = Modifier Hand. El dibujo y sus puntos permanecen al cambiar de vista.</p>
-          <p class="eyebrow">GESTO ACTUAL</p>
-          <strong id="gesture">SIN DETECCIÓN</strong>
-          <p id="tracking">Drawing: derecha · Modifier: izquierda</p>
-          <p class="model-line" id="model-status" aria-live="polite">MODELO: ESPERANDO SIDECAR</p>
-          <div class="mini">El preview no se almacena. El lienzo funciona aun sin sidecar.</div>
+          <div class="camera-label">CAMERA · HAND TRACKING</div>
+          <p class="mini">Lime = Drawing Hand. Blue = Modifier Hand. Your drawing stays in place when switching views.</p>
+          <p class="eyebrow">CURRENT GESTURE</p>
+          <strong id="gesture">NO HAND DETECTED</strong>
+          <p id="tracking">Drawing: Right · Modifier: Left</p>
+          <p class="model-line" id="model-status" aria-live="polite">MODEL: WAITING FOR SIDECAR</p>
+          <div class="mini">Preview is never recorded. Your canvas works even without a sidecar.</div>
         </aside>
       </div>
     </section>
     <section id="studio" class="view" hidden>
-      <div class="heading"><div><p class="eyebrow">02 / DATOS Y MODELOS</p>
-      <h1>Studio.</h1><p>Contratos de recolección, revisión y snapshots de Hand-D v2.</p></div></div>
+      <div class="heading"><div><p class="eyebrow">02 / DATA & MODELS</p>
+      <h1>Studio.</h1><p>Collection, review and snapshot workflows for Hand-D v2.</p></div></div>
+      <div class="workspace-selector">
+        <label for="workspace-path">Existing project workspace directory</label>
+        <div class="workspace-selector-row">
+          <input id="workspace-path" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="/path/to/your/Hand-D/project" aria-describedby="workspace-message">
+          <button id="select-workspace">Open workspace</button>
+        </div>
+        <p id="workspace-message" role="status">No workspace selected. Whiteboard remains available.</p>
+      </div>
       <div class="studio-grid">
-        <article><span class="marker">01</span><h2>Capturar</h2><p>MediaPipe LIVE_STREAM recoge landmarks crudos con procedencia y revisión pendiente.</p><p class="mini">Colección GUI: por integrar con el sidecar.</p></article>
-        <article><span class="marker">02</span><h2>Revisar</h2><p>Accept / Reject y Drop / Restore permanecen independientes y auditados.</p><p class="mini">Revisión GUI: por integrar.</p></article>
-        <article><span class="marker">03</span><h2>Snapshots</h2><p>NPZ + manifiesto y entrenamiento LOSO por sesión, sin mezclar P003 ni filas legacy.</p><p class="mini">Creación desde Studio: por integrar.</p></article>
-        <article class="wide"><span class="marker">●</span><h2>Estado real del runtime</h2>
-          <pre id="diagnostics">El sidecar aún no informó su estado.</pre>
-          <p class="mini">Esta interfaz no simula resultados de entrenamiento. La conexión nativa es un trabajo HD-09 en curso.</p></article>
+        <article><span class="marker">01</span><h2>Collect</h2><p>MediaPipe LIVE_STREAM provides raw landmarks with provenance and pending review.</p><p class="mini">Studio collection controls: pending integration.</p></article>
+        <article>
+          <span class="marker">02</span><h2>Review</h2>
+          <p>Manual Accept / Reject and Drop / Restore with a canonical SQLite audit trail.</p>
+          <div id="dataset-summary" aria-live="polite">Open an existing workspace to inspect samples.</div>
+          <label for="review-sample">Sample</label>
+          <select id="review-sample" aria-label="Select sample for manual review"></select>
+          <div class="studio-actions">
+            <button id="review-accept">Accept</button><button id="review-reject">Reject</button>
+            <button id="review-drop">Drop</button><button id="review-restore">Restore</button>
+            <button id="refresh-dataset">Refresh</button>
+          </div>
+        </article>
+        <article>
+          <span class="marker">03</span><h2>Snapshots</h2>
+          <p>Immutable Development Snapshots. Only accepted, active P001/P002 samples qualify.</p>
+          <button id="build-snapshot" disabled>Build Development Snapshot</button>
+          <p id="snapshot-result" role="status">Open a workspace and review samples first.</p>
+        </article>
+        <article class="wide"><span class="marker">●</span><h2>Live runtime status</h2>
+          <pre id="diagnostics">The sidecar has not reported its status yet.</pre>
+          <p class="mini">This view does not simulate training results. Desktop integration is still in progress under HD-09.</p></article>
       </div>
     </section>
   </main>
-  <div id="full-overlay" class="overlay" hidden role="dialog" aria-modal="true" aria-label="Whiteboard ampliado">
-    <div class="modal"><div class="modal-top"><strong>WHITEBOARD / MODO AMPLIADO</strong><button id="close-expand">✕ Cerrar / Esc</button></div>
+  <div id="full-overlay" class="overlay" hidden role="dialog" aria-modal="true" aria-label="Expanded whiteboard">
+    <div class="modal"><div class="modal-top"><strong>WHITEBOARD / EXPANDED VIEW</strong><button id="close-expand">✕ Close / Esc</button></div>
       <div id="modal-canvas-slot"></div></div>
   </div>
-  <footer><span>HAND-D / V2 · LINUX DEVELOPMENT</span><span id="footer-session">Sin sesión conectada</span></footer>
+  <footer><span>HAND-D / V2 · DEVELOPMENT BUILD</span><span id="footer-session">No sidecar session</span></footer>
 </body>
 </html>

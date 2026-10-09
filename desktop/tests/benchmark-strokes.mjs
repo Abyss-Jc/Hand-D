@@ -9,7 +9,10 @@ const ids = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'modal-canvas-slot','full-overlay','close-expand','expand','camera-fallback',
   'preview','footer-session','status','lamp','gesture','tracking','diagnostics',
   'cursor','restart','model-status','camera-scene','hands-overlay',
-  'view-camera','view-clean','toggle-hands','tool-wiggly'];
+  'view-camera','view-clean','toggle-hands','tool-wiggly',
+  'workspace-path','select-workspace','workspace-message','dataset-summary',
+  'review-sample','refresh-dataset','review-accept','review-reject',
+  'review-drop','review-restore','build-snapshot','snapshot-result'];
 const counters = {nodesCreated:0, replaceChildren:0, pathUpdates:0, svgAppend:0};
 const frameTasks = [];
 globalThis.requestAnimationFrame = cb => { frameTasks.push(cb); return frameTasks.length; };
@@ -38,6 +41,7 @@ objects['canvas-shell'].parentElement=new Element('workspace');
 globalThis.document = {
   getElementById(name){return objects[name]||(()=>{throw new Error(name)})();},
   createElementNS(_ns,type){counters.nodesCreated++;return new Element(type);},
+  createElement(type){counters.nodesCreated++;return new Element(type);},
   addEventListener(){},
 };
 globalThis.window={};

@@ -22,16 +22,17 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
    uv run --frozen python -m handd_core.camera_smoke --camera 0 --seconds 10
    ```
    Registrar `CAMERA_OPEN`, `CAPTURE_FPS`, callbacks, muestras con manos y errores. `--preview` es opcional; Qt puede comportarse distinto en Macs.
-2. Cerrar el probe y lanzar la app:
+2. Cerrar el probe y lanzar la app (la **UI está completamente en inglés**, ADR 0005):
    ```bash
    npm --prefix desktop run dev
    ```
-   Verificar Tauri, sidecar CONECTADO, MJPEG sobre cámara y diagnóstico `MODELO ANTIGUO ACTIVO`. El checkpoint legacy sirve solo como diagnóstico: las etiquetas no tienen validación independiente.
+   Verificar Tauri, estado `SIDECAR / CONNECTED`, MJPEG sobre cámara y diagnóstico `LEGACY MODEL ACTIVE`. El checkpoint legacy sirve solo como diagnóstico: las etiquetas no tienen validación independiente.
 3. Mostrar la **mano derecha, después izquierda y después ambas**. Verificar 21 puntos por mano, conexiones y colores (lima Drawing, azul Modifier). Confirmar manualmente el espejo y los roles; no asumir que la inversión física está probada para la webcam Mac.
-4. Alternar **Ocultar/Mostrar manos** y **Sobre cámara/Lienzo limpio**: debe conservarse el mismo documento y no deben detenerse MediaPipe ni los eventos WS. En limpio el MJPEG debe dejar de transmitirse al no tener consumidor. Abrir y cerrar el modal ampliado con Escape.
-5. Dibujar con ratón o trackpad: trazo largo y rápido, deshacer/rehacer, lápiz, borrar y **Wiggly** sobre cámara y en limpio. **Regresión crítica de borrador:** dibujar una línea, borrarla parcialmente encima de la cámara; comprobar que reaparece el video real (NO una mancha blanca), que los controles inferiores nunca se tapan ni dejan de responder, que se puede volver a dibujar sobre la zona borrada y que Undo/Redo restaura la tinta. Repetir sobre Lienzo limpio y sobre un trazo Wiggly. Con **Ajustes del Sistema → Accesibilidad → Pantalla → Reducir movimiento**, Wiggly debe quedarse estático sin perder puntos.
+4. Alternar **Hide hands / Show hands** y **Camera overlay / Clean canvas**: debe conservarse el mismo documento y no deben detenerse MediaPipe ni los eventos WS. En limpio el MJPEG debe dejar de transmitirse al no tener consumidor. Abrir y cerrar el modal ampliado con Escape.
+5. Dibujar con ratón o trackpad: trazo largo y rápido, **Undo/Redo**, **Pen**, **Eraser** y **Wiggly** sobre cámara y en limpio. **Regresión crítica de borrador:** dibujar una línea, borrarla parcialmente encima de la cámara; comprobar que reaparece el video real (NO una mancha blanca), que los controles inferiores nunca se tapan ni dejan de responder, que se puede volver a dibujar sobre la zona borrada y que Undo/Redo restaura la tinta. Repetir sobre Clean canvas y sobre un trazo Wiggly. Wiggly debe moverse visiblemente más que antes, sin desplazar los puntos guardados. Con **Ajustes del Sistema → Accesibilidad → Pantalla → Reducir movimiento**, Wiggly debe quedarse estático sin perder puntos.
 6. Probar `Index_Finger` y `Fist` y registrar etiquetas observadas **sin atribuirles precisión**. Los gestos sobre cámara no necesitan video almacenado.
-7. Pulsar **Reiniciar cámara**: sidecar debe reconectarse con sesión nueva, el documento debe sobrevivir y el overlay no debe dejar manos fantasma.
+7. Pulsar **Restart camera**: sidecar debe reconectarse con sesión nueva, el documento debe sobrevivir y el overlay no debe dejar manos fantasma.
+8. Si existe un proyecto de pruebas con `handd.sqlite`, entrar a **Studio → Existing project workspace directory → Open workspace** usando su ruta local. Verificar que **Review** muestra conteos y Sample IDs reales, que **Accept/Reject/Drop/Restore** requieren clicks explícitos y que **Build Development Snapshot** no entrena ni incluye P003. No hacer acciones sobre un dataset real sin intención/backup. Sin proyecto, Studio debe mostrar un empty state honesto y Whiteboard debe seguir funcionando.
 
 ## Registro mínimo
 
@@ -46,6 +47,8 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 | Mouse, undo/redo, Wiggly, reduced-motion | No verificado | No verificado |
 | Borrador transparente: no tapa cámara ni controles, re-dibujo y Undo/Redo | No verificado | No verificado |
 | Sidecar restart, trazos conservados | No verificado | No verificado |
+| UI English-only: accessible controls and messages | No verificado | No verificado |
+| Existing workspace / manual review / Development Snapshot (test project only) | No verificado | No verificado |
 | Gestos reales / fluidez percibida | No verificado | No verificado |
 
 No compartir tokens del sidecar, seriales, fotos ni video; solo comandos, errores y medidas agregadas.

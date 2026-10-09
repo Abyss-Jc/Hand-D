@@ -17,6 +17,7 @@ struct SidecarReady {
     port: u16,
     token: String,
     runtime_session_id: String,
+    workspace: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -25,6 +26,7 @@ struct Supervisor {
     restart: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
     active_child: Arc<Mutex<Option<Child>>>,
+    workspace: Arc<Mutex<Option<PathBuf>>>,
 }
 
 #[tauri::command]
@@ -37,6 +39,20 @@ fn restart_sidecar(state: tauri::State<'_, Supervisor>) {
     state.restart.store(true, Ordering::SeqCst);
 }
 
+#[tauri::command]
+fn select_workspace(path: String, state: tauri::State<'_, Supervisor>) -> Result<String, String> {
+    // This command runs only from the trusted local Tauri webview. It does
+    // not create new databases and never changes a workspace implicitly.
+    let canonical = PathBuf::from(path).canonicalize()
+        .map_err(|_| "Workspace directory was not found".to_string())?;
+    if !canonical.is_dir() || !canonical.join("handd.sqlite").is_file() {
+        return Err("Select a Hand-D workspace containing handd.sqlite".into());
+    }
+    *state.workspace.lock().expect("workspace lock") = Some(canonical.clone());
+    state.restart.store(true, Ordering::SeqCst);
+    Ok(canonical.to_string_lossy().to_string())
+}
+
 fn spawn_supervisor(state: Supervisor) {
     thread::spawn(move || {
         let root: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -47,16 +63,19 @@ fn spawn_supervisor(state: Supervisor) {
             *state.ready.lock().expect("state lock") = None;
             // Kill the Python process directly, not a uv wrapper which could
             // leave its child orphaned when the desktop exits.
-            let started = Command::new(root.join(".venv/bin/python"))
-                .args([
+            let mut command = Command::new(root.join(".venv/bin/python"));
+            command.args([
                     "-u", "-m", "handd_core.sidecar_main",
                     "--legacy-checkpoint", "models/gesture_mlp.pth",
                 ])
                 .current_dir(&root)
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::inherit())
-                .spawn();
+                .stderr(Stdio::inherit());
+            if let Some(workspace) = state.workspace.lock().expect("workspace lock").clone() {
+                command.arg("--workspace").arg(workspace);
+            }
+            let started = command.spawn();
             match started {
                 Ok(mut child) => {
                     let stdout = child.stdout.take();
@@ -120,7 +139,9 @@ fn main() {
             spawn_supervisor(supervisor.clone());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![sidecar_status, restart_sidecar])
+        .invoke_handler(tauri::generate_handler![
+            sidecar_status, restart_sidecar, select_workspace
+        ])
         .build(tauri::generate_context!())
         .expect("error building Hand-D desktop")
         .run(move |_handle, event| {

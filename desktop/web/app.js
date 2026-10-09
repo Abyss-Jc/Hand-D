@@ -15,15 +15,18 @@ let gestureStroke = null;
 let ws = null;
 let sidecarKey = null;
 let previewUrl = null;
+let pendingWorkspace = null;
+let studioRequestNumber = 0;
+const studioRequests = new Map();
 
 function modelLabel(health) {
   switch (health?.model) {
-    case 'ready': return 'MODELO V2: LISTO';
+    case 'ready': return 'V2 MODEL: READY';
     case 'legacy_unverified':
-      return 'MODELO ANTIGUO ACTIVO · ETIQUETAS SIN VALIDACIÓN INDEPENDIENTE';
-    case 'error': return 'MODELO: ERROR DE INFERENCIA';
-    case 'unavailable': return 'MODELO NO CARGADO · SOLO TRACKING';
-    default: return 'MODELO: ESPERANDO SIDECAR';
+      return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED';
+    case 'error': return 'MODEL: INFERENCE ERROR';
+    case 'unavailable': return 'NO MODEL LOADED · TRACKING ONLY';
+    default: return 'MODEL: WAITING FOR SIDECAR';
   }
 }
 function displayHealth(health) {
@@ -68,12 +71,12 @@ function onRuntimeEvent(event) {
   const modifier = event.payload?.modifier ?? {};
   $('gesture').textContent = draw.stable_gesture || draw.raw_gesture || (
     event.payload?.health?.camera === 'tracking'
-      ? 'MANO DETECTADA · SIN CLASIFICACIÓN'
-      : 'SIN MANO DETECTADA'
+      ? 'HAND DETECTED · NO CLASSIFICATION'
+      : 'NO HAND DETECTED'
   );
-  $('tracking').textContent = 'Dibujar: ' + (draw.physical_hand || 'Right')
-    + ' / ' + (draw.action || 'sin acción') + ' · Modificar: '
-    + (modifier.action || 'inactivo');
+  $('tracking').textContent = 'Drawing: ' + (draw.physical_hand || 'Right')
+    + ' / ' + (draw.action || 'no action') + ' · Modifier: '
+    + (modifier.action || 'inactive');
   displayHealth(event.payload?.health);
   const point = draw.pointer;
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
@@ -158,13 +161,13 @@ function setHandsVisible(enabled) {
   handOverlay.setVisible(handsVisible);
   $('toggle-hands').classList.toggle('selected',handsVisible);
   $('toggle-hands').setAttribute('aria-pressed',String(handsVisible));
-  $('toggle-hands').textContent = handsVisible ? '✋ Ocultar manos' : '✋ Mostrar manos';
+  $('toggle-hands').textContent = handsVisible ? '✋ Hide hands' : '✋ Show hands';
 }
 $('view-camera').addEventListener('click',()=>setCameraMode(true));
 $('view-clean').addEventListener('click',()=>setCameraMode(false));
 $('toggle-hands').addEventListener('click',()=>setHandsVisible(!handsVisible));
 
-// No animated geometry is stored. 12 Hz deliberately decouples visual wiggle
+// No animated geometry is stored. 15 Hz deliberately decouples visual wiggle
 // from both MediaPipe and the browser's normal drawing render cadence.
 const reducedMotion = typeof matchMedia === 'function'
   ? matchMedia('(prefers-reduced-motion: reduce)') : {matches:false};
@@ -181,6 +184,96 @@ function navigate(view) {
 }
 $('nav-whiteboard').addEventListener('click', () => navigate('whiteboard'));
 $('nav-studio').addEventListener('click', () => navigate('studio'));
+
+function studioRequest(action, fields = {}) {
+  if (!ws || ws.readyState !== WebSocket.OPEN && ws.readyState !== 1) {
+    $('workspace-message').textContent = 'The sidecar is not connected.';
+    return;
+  }
+  const request_id = 'studio-' + (++studioRequestNumber);
+  studioRequests.set(request_id, action);
+  ws.send(JSON.stringify({type:'studio.request',request_id,action,...fields}));
+}
+function renderDataset(data) {
+  const counts = data.review_counts || {};
+  $('dataset-summary').textContent =
+    (data.sample_count || 0) + ' samples · '
+    + (counts.unreviewed || 0) + ' pending · '
+    + (counts.accepted || 0) + ' accepted · '
+    + (counts.rejected || 0) + ' rejected · '
+    + (data.eligible_count || 0) + ' eligible for Development';
+  const sampleSelect = $('review-sample');
+  const oldValue = sampleSelect.value;
+  sampleSelect.replaceChildren();
+  const items = data.samples || [];
+  for (const sample of items) {
+    const option = document.createElement('option');
+    option.value = sample.sample_id;
+    option.textContent = sample.sample_id + ' · ' + sample.gesture
+      + ' · ' + sample.review_status + ' / ' + sample.lifecycle_status;
+    sampleSelect.append(option);
+  }
+  sampleSelect.value = items.some(sample=>sample.sample_id===oldValue)
+    ? oldValue : (items[0]?.sample_id || '');
+  $('build-snapshot').disabled = !data.snapshot_ready || !data.eligible_count;
+  if (data.snapshot_blockers?.length) {
+    $('snapshot-result').textContent = 'Blocked: ' + data.snapshot_blockers.join(', ');
+  } else if (data.snapshot_warnings?.length) {
+    $('snapshot-result').textContent = 'Warnings: ' + data.snapshot_warnings.join(', ');
+  } else {
+    $('snapshot-result').textContent = 'Ready for an explicit Development Snapshot.';
+  }
+}
+function handleStudioResponse(message) {
+  const action = studioRequests.get(message.request_id);
+  if (!action) return;
+  studioRequests.delete(message.request_id);
+  if (!message.ok) {
+    const target = action === 'snapshot' ? $('snapshot-result') : $('workspace-message');
+    target.textContent = message.error || 'Studio operation failed.';
+    return;
+  }
+  if (action === 'overview') {
+    $('workspace-message').textContent = 'Connected workspace: ' + message.data.workspace;
+    renderDataset(message.data);
+  } else if (action === 'snapshot') {
+    $('snapshot-result').textContent = 'Snapshot created: '
+      + message.data.snapshot_id + ' (' + message.data.workspace_relative_path + ')';
+    studioRequest('overview');
+  } else {
+    $('workspace-message').textContent = 'Saved manual review for ' + message.data.sample_id;
+    studioRequest('overview');
+  }
+}
+$('select-workspace').addEventListener('click', async () => {
+  const path = $('workspace-path').value.trim();
+  if (!path) {
+    $('workspace-message').textContent = 'Enter an existing workspace directory.';
+    return;
+  }
+  try {
+    const selected = await window.__TAURI__?.core?.invoke('select_workspace', {path});
+    if (!selected) throw Error('Tauri is unavailable');
+    pendingWorkspace = selected;
+    $('workspace-message').textContent = 'Connecting workspace: ' + selected;
+    attachSidecar(null);
+  } catch (error) {
+    $('workspace-message').textContent = String(error);
+  }
+});
+$('refresh-dataset').addEventListener('click', () => studioRequest('overview'));
+for (const action of ['accept','reject','drop','restore']) {
+  $('review-' + action).addEventListener('click', () => {
+    const sample_id = $('review-sample').value;
+    if (sample_id) studioRequest(action, {sample_id});
+  });
+}
+$('build-snapshot').addEventListener('click', () => {
+  if ($('build-snapshot').disabled) return;
+  if (typeof window.confirm === 'function'
+      && !window.confirm('Create a new immutable Development Snapshot now?')) return;
+  studioRequest('snapshot', {note:'Created explicitly from Hand-D Studio'});
+});
 
 const normalParent = $('canvas-shell').parentElement;
 $('expand').addEventListener('click', () => {
@@ -219,15 +312,17 @@ function attachSidecar(status) {
   sidecarKey = key;
   releaseGesture();
   if (!status) {
+    studioRequests.clear();
     previewUrl = null;
     $('preview').removeAttribute('src');
     $('camera-fallback').hidden = false;
-    $('footer-session').textContent = 'Sin sesión conectada';
+    $('footer-session').textContent = 'No sidecar session';
     displayHealth(null);
-    connectionState(false, 'SIDECAR INICIANDO / RECONECTANDO');
+    connectionState(false, 'STARTING / RECONNECTING SIDECAR');
     return;
   }
   const host = '127.0.0.1:' + status.port;
+  if (status.workspace) $('workspace-path').value = status.workspace;
   const token = encodeURIComponent(status.token);
   const preview = $('preview');
   previewUrl = 'http://' + host + '/mjpeg?token=' + token;
@@ -243,8 +338,8 @@ function attachSidecar(status) {
   };
   preview.onerror = () => { $('camera-fallback').hidden = false; };
   updatePreview();
-  $('footer-session').textContent = 'SESIÓN ' + status.runtime_session_id.slice(0, 9);
-  connectionState(false, 'CONECTANDO WEBSOCKET…');
+  $('footer-session').textContent = 'SESSION ' + status.runtime_session_id.slice(0, 9);
+  connectionState(false, 'CONNECTING WEBSOCKET…');
   const socket = new WebSocket('ws://' + host + '/ws?token=' + token);
   ws = socket;
   socket.onmessage = message => {
@@ -254,31 +349,43 @@ function attachSidecar(status) {
       if (event.type === 'runtime.ready') {
         gate.install(event.snapshot);
         displayHealth(event.snapshot?.health);
-        connectionState(true, 'SIDECAR / CONECTADO');
+        connectionState(true, 'SIDECAR / CONNECTED');
+        if (status.workspace) studioRequest('overview');
+        else $('workspace-message').textContent =
+          'No workspace selected. Open an existing project to review samples.';
       } else if (event.type === 'runtime.update') onRuntimeEvent(event);
+      else if (event.type === 'studio.response') handleStudioResponse(event);
     } catch (error) {
       console.error('Invalid runtime message', error);
     }
   };
   socket.onclose = () => {
-    if (ws === socket) connectionState(false, 'SIDECAR RECONECTANDO');
+    if (ws === socket) connectionState(false, 'SIDECAR RECONNECTING');
   };
   socket.onerror = () => {
-    if (ws === socket) connectionState(false, 'SIDECAR / ERROR DE TRANSPORTE');
+    if (ws === socket) connectionState(false, 'SIDECAR / CONNECTION ERROR');
   };
 }
 async function poll() {
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) {
-    connectionState(false, 'SE REQUIERE TAURI PARA USAR LA CÁMARA');
+    connectionState(false, 'TAURI IS REQUIRED FOR CAMERA ACCESS');
     return;
   }
-  try { attachSidecar(await invoke('sidecar_status')); }
+  try {
+    const status = await invoke('sidecar_status');
+    if (pendingWorkspace && status?.workspace !== pendingWorkspace) {
+      attachSidecar(null);
+      return;
+    }
+    if (pendingWorkspace && status?.workspace === pendingWorkspace) pendingWorkspace = null;
+    attachSidecar(status);
+  }
   catch (error) { console.error(error); attachSidecar(null); }
 }
 $('restart').addEventListener('click', async () => {
   try {
-    connectionState(false, 'REINICIANDO SIDECAR…');
+    connectionState(false, 'RESTARTING SIDECAR…');
     await window.__TAURI__?.core?.invoke('restart_sidecar');
   } catch (error) { console.error(error); }
 });
@@ -290,4 +397,4 @@ setInterval(()=>{
     && (typeof document.hidden === 'undefined' || !document.hidden);
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   strokeRenderer.animateWiggly((now-animationStarted)/340,{enabled:animate});
-},85);
+},65);

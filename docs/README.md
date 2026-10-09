@@ -16,6 +16,7 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | What are we changing for the October 13 milestone, and in what order? | [v2 roadmap](changes/hand-d-v2-roadmap.md) |
 | What planning decisions have already been confirmed? | [Modernization change record](changes/hand-d-v2-modernization.md) |
 | Why did we make durable architectural choices? | [ADRs](adr/) |
+| What language must every desktop UI surface use? | [ADR 0005 — English-only product UI](adr/0005-english-only-product-ui.md) |
 | How should a developer prepare and verify the repository? | [Development runbook](runbook/development.md) |
 | What rules should coding agents and contributors follow? | [AGENTS.md](../AGENTS.md) |
 

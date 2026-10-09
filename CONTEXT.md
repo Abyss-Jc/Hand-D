@@ -4,6 +4,9 @@ Hand-D is a gesture-driven drawing system composed of a user-facing whiteboard a
 
 ## Language
 
+**Product UI Language**:
+All user-facing text in Hand-D Whiteboard and Studio, including buttons, system states, errors, accessibility labels, modals and empty states, must be **English**. Internal documents and development conversations may be bilingual. Source of truth: ADR 0005 and V2-142. Never introduce mixed-language UI text in desktop builds.
+
 **Hand-D App**:
 The user-facing real-time whiteboard experience. It consumes gesture results and drawing state; development tooling does not belong in this surface.
 _Avoid_: Visualizer App, main GUI

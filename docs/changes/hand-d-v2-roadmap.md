@@ -7,7 +7,7 @@ Deliver a technically credible Hand-D v2 tracer/vertical slice by October 13 wit
 ### Checkpoint — October 8, 2026
 
 - **HD-01..HD-08:** completados en sus alcances core/CLI/Linux; import legacy HD-06L añadido. Esto no significa accuracy real ni evaluación P003 certificada.
-- **HD-09 IN PROGRESS:** shell Tauri en Linux, Python supervisado, WS/MJPEG y recuperación implementados. Se añadió Camera-first con overlay de 21 landmarks por mano, toggle de manos, modo Lienzo limpio y pincel Wiggly opt-in con TDD. Siguen pendientes Studio Collect/Review/Snapshot, gestión activa de Candidate, exportación y packaging independiente.
+- **HD-09 IN PROGRESS:** shell Tauri en Linux, Python supervisado, WS/MJPEG y recuperación implementados. Camera-first, landmarks, toggle y Wiggly (movimiento reforzado) con TDD. Studio permite abrir explícitamente un workspace existente, auditar manualmente Review/Drop y generar Development Snapshots inmutables; faltan Studio Collect, selección de Active Candidate, selector nativo de carpeta, exportación y packaging independiente. La UI del producto es English-only (ADR 0005).
 - **HD-10 TODO:** un tracer real Sample→snapshot→entrenamiento→Model Artifact→Whiteboard con medición completa y procedencia honesta.
 - **Siguiente gate de plataformas:** Macs Apple Silicon el **9 de octubre**, mediante [runbook de laboratorio](../runbook/mac-lab-oct09.md). Son dispositivos **NO VERIFICADOS** hasta ejecutar los pasos; el preflight macOS no certifica cámara, rendimiento ni permisos TCC.
 

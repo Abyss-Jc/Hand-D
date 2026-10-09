@@ -31,3 +31,26 @@ test('wiggly style animates only its SVG geometry while keeping canonical points
   renderer.animateWiggly(2,{enabled:true});
   assert.equal(svg.children.length,1);
 });
+
+test('Wiggly displacement is clearly visible but bounded and reversible', () => {
+  const svg=new Node();
+  const renderer=new StrokeRenderer(svg,{createPath:()=>new Node(),scheduleFrame:cb=>cb()});
+  const points=Array.from({length:22},(_,i)=>({x:.12+i*.028,y:.5}));
+  const stroke={tool:'wiggly',points};
+  renderer.sync([stroke]);
+  const baseline=svg.children[0].attributes.d;
+  renderer.animateWiggly(1.7,{enabled:true});
+  const rendered=svg.children[0].attributes.d;
+  const nums=[...rendered.matchAll(/-?\d+(?:\.\d+)?/g)].map(x=>Number(x[0]));
+  const maxDisplacement=Math.max(...points.map((p,i)=>
+    Math.hypot(nums[2*i]-p.x*1000,nums[2*i+1]-p.y*600)));
+  assert.ok(maxDisplacement>=6,
+    'Wiggly should move at least 6 SVG pixels, rather than barely tremble');
+  assert.ok(maxDisplacement<=14,'Wiggly must remain near its editable path');
+  assert.notEqual(rendered,baseline);
+  renderer.animateWiggly(2.4,{enabled:true});
+  assert.notEqual(svg.children[0].attributes.d,rendered);
+  renderer.animateWiggly(3,{enabled:false});
+  assert.equal(svg.children[0].attributes.d,baseline);
+  assert.deepEqual(stroke.points,points);
+});
