@@ -23,25 +23,35 @@
         <div><p class="eyebrow">01 / LIENZO EN VIVO</p><h1>Tu mano.<br>Tu lienzo.</h1>
         <p>Usa el ratón o conecta el runtime Python. Tus trazos no se pierden si la cámara falla.</p></div>
         <div class="toolbar">
+          <button id="view-camera" class="selected" aria-pressed="true">◉ Sobre cámara</button>
+          <button id="view-clean" aria-pressed="false">▧ Lienzo limpio</button>
+          <button id="toggle-hands" aria-pressed="true">✋ Ocultar manos</button>
           <button id="undo">↶ Deshacer</button><button id="redo">↷ Rehacer</button>
           <button id="clear">Limpiar</button><button id="restart">↻ Reiniciar cámara</button>
         </div>
       </div>
       <div class="workspace">
         <div class="canvas-shell" id="canvas-shell">
-          <svg id="drawing" viewBox="0 0 1000 600" preserveAspectRatio="none" role="img"
-               aria-label="Whiteboard. Dibuja con ratón o mano derecha al conectar el modelo."></svg>
-          <div id="cursor" hidden></div>
+          <div class="camera-scene" id="camera-scene">
+            <img id="preview" alt="Cámara en vivo detrás de los trazos, sin grabación" />
+            <span id="camera-fallback">Esperando cámara…</span>
+            <svg id="hands-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"
+                 aria-label="Articulaciones de Drawing Hand y Modifier Hand" role="img"></svg>
+            <svg id="drawing" viewBox="0 0 1000 600" preserveAspectRatio="none" role="img"
+                 aria-label="Whiteboard. Dibuja con ratón o mano derecha al conectar el modelo."></svg>
+            <div id="cursor" hidden></div>
+          </div>
           <span class="canvas-tag" id="canvas-tag">WHITEBOARD · LIENZO LOCAL</span>
           <div class="tools">
             <button id="tool-pen" class="selected">✎ Dibujar</button>
             <button id="tool-eraser">⌫ Borrar</button>
+            <button id="tool-wiggly" aria-pressed="false">〰 Wiggly</button>
             <button id="expand" aria-label="Ampliar el lienzo">⛶ Ampliar</button>
           </div>
         </div>
         <aside class="camera-panel">
-          <div class="camera-label">CÁMARA · PREVIEW / MJPEG</div>
-          <div class="camera-preview"><img id="preview" alt="Vista de la cámara en vivo; no se graba" /><span id="camera-fallback">Esperando cámara…</span></div>
+          <div class="camera-label">CÁMARA · MANOS DETECTADAS</div>
+          <p class="mini">Verde lima = Drawing Hand. Azul = Modifier Hand. El dibujo y sus puntos permanecen al cambiar de vista.</p>
           <p class="eyebrow">GESTO ACTUAL</p>
           <strong id="gesture">SIN DETECCIÓN</strong>
           <p id="tracking">Drawing: derecha · Modifier: izquierda</p>

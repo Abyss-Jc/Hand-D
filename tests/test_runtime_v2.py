@@ -44,6 +44,32 @@ class FakePredictor:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_all_21_landmarks_per_physical_role_and_safe_release(self):
+        runtime = GestureRuntime(predictor=FakePredictor(), stable_frames=1, stable_ms=0)
+        result = observation('Left', 'Right', x=.34, y=.62)
+        first = runtime.process_result(result, 100)
+        for role, physical in (('drawing', 'Right'), ('modifier', 'Left')):
+            hand = first['payload'][role]
+            self.assertEqual(hand['physical_hand'], physical)
+            self.assertEqual(len(hand['landmarks']), 21)
+            self.assertEqual(hand['landmarks'][8], {'x': .34, 'y': .62})
+        self.assertEqual(first['payload']['landmark_contract'], 'handd.v2.image21.xy.1')
+        gone = runtime.process_result(observation(), 140)
+        self.assertIsNone(gone['payload']['drawing']['landmarks'])
+        self.assertIsNone(gone['payload']['modifier']['landmarks'])
+        stale = runtime.expire_if_stale(500)
+        self.assertIsNone(stale['payload']['drawing']['landmarks'])
+
+    def test_invalid_outlier_image_points_are_safe_for_rendering(self):
+        runtime = GestureRuntime(predictor=FakePredictor(), stable_frames=1, stable_ms=0)
+        result = observation('Left')
+        result.hand_landmarks[0][3].x = 1.08
+        packet = runtime.process_result(result, 100)
+        self.assertEqual(packet['payload']['drawing']['landmarks'][3]['x'], 1.0)
+        invalid = observation('Left')
+        invalid.hand_landmarks[0][3].x = float('nan')
+        self.assertIsNone(runtime.process_result(invalid, 150)['payload']['drawing']['landmarks'])
+
     def build_artifact(self, folder: Path) -> Path:
         folder.mkdir()
         model = GestureMLP(5)

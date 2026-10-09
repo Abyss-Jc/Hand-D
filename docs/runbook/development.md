@@ -324,6 +324,16 @@ Una prueba adicional de cámara legacy de 16 s con preview reportó **29,47 FPS 
 
 **Prueba manual solicitada al usuario:** en la app abierta, dibujar un trazo rápido y largo con ratón; comprobar Undo/Redo. Después mostrar manos derecha/izquierda y distinguir claramente si se siente entrecortado el **video**, el **cursor** o el **trazo**. Si persiste jank, capturar telemetría de WebKit y timestamp de IPC antes de otra modificación. Mantener el cambio ajeno de UX fuera de este ticket.
 
+### HD-09 Camera-first + landmarks + Wiggly y preparación de Macs (2026-10-08)
+
+El Whiteboard tiene ahora un único plano de imagen (video MJPEG, esqueleto, SVG y puntero) centrado sin distorsión de aspect ratio. Los controles Sobre cámara / Lienzo limpio conservan trazos y undo, y al ocultar el video desconectan el consumidor MJPEG mientras LIVE_STREAM/WS continúan. Mostrar/Ocultar manos afecta únicamente al overlay. Runtime v2 añade `handd.v2.image21.xy.1` con 21 puntos x/y normalizados por rol y limpia datos al desaparecer la detección; no se guardan en SQLite. Los colores son lima Drawing, azul Modifier; en pérdida de Drawing Hand continúa el overlay de Modifier Hand. Los 21 puntos tienen 20 conexiones del trazado ligero.
+
+El pincel Wiggly original, opt-in, hace oscilar la representación de los trazos azules a ~12 Hz, con como máximo 320 puntos muestreados para la animación de cada trazo; no muta la geometría editable ni cambia la precisión del clasificador. Respeta prefers-reduced-motion y pausa el movimiento al ocultar el documento. Sin sonidos, GIF ni exportación de cámara. Export limpio/Save/Open siguen un slice futuro.
+
+**TDD y ejecución comprobada en Linux:** 104 tests Python + 15 tests JavaScript, benchmark SVG sintético y `cargo check --locked`. Un sidecar temporal con webcam publicó durante ~7 s **203 updates por WS con manos**, **406 roles con arrays válidos de 21 landmarks**, dos manos presentes en 203 updates, sin grabar imágenes ni video. Tauri arrancó en Niri, Rust lanzó Python con el checkpoint legacy etiquetado como no validado y WebKit conectó al puerto localhost de ese sidecar. No se midió p95 de alineación cámara↔puntos en pantalla ni accuracy de gestos. El usuario debe revisar visualmente Cámara/Limpio, overlay, modal y Wiggly.
+
+**Prueba en Mac Apple Silicon:** [guía macOS, checklist y comandos](mac-lab-oct09.md). El preflight `bash scripts/mac-preflight.sh` no abre cámara; `desktop/src-tauri/Info.plist` declara un motivo de acceso a cámara. Preparación del desarrollo **no implica compilación, sandbox/permissions ni webcam ya verificados en macOS**. El empaquetado independiente de la app no existe aún.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

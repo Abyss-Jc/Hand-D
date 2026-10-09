@@ -196,7 +196,8 @@ class GestureRuntime:
             if item is None:
                 state.reset()
                 role_data[role] = dict(physical_hand=physical_hand, pointer=None,
-                                       raw_gesture=None, stable_gesture=None, action=None)
+                                       landmarks=None, raw_gesture=None,
+                                       stable_gesture=None, action=None)
                 continue
             image, features = item
             tip = image[8, :2]
@@ -216,8 +217,11 @@ class GestureRuntime:
             else:
                 state.reset()
                 stable = None
+            landmark_xy = np.clip(image[:, :2], 0., 1.)
             role_data[role] = dict(
-                physical_hand=physical_hand, pointer=pointer, raw_gesture=raw,
+                physical_hand=physical_hand, pointer=pointer,
+                landmarks=[{'x': float(x), 'y': float(y)} for x, y in landmark_xy],
+                raw_gesture=raw,
                 stable_gesture=stable,
                 action=self._actions[role].get(stable),
             )
@@ -231,7 +235,8 @@ class GestureRuntime:
         return {
             'runtime_session_id': self.runtime_session_id, 'seq': self._seq,
             'timestamp_ms': timestamp_ms, 'type': 'runtime.update',
-            'payload': {**role_data, 'health': self._health()},
+            'payload': {**role_data, 'landmark_contract': 'handd.v2.image21.xy.1',
+                        'health': self._health()},
         }
 
     def expire_if_stale(self, now_ms: int, *, max_gap_ms: int = 250) -> dict | None:
@@ -252,8 +257,10 @@ class GestureRuntime:
             'seq': self._seq, 'timestamp_ms': now_ms, 'type': 'runtime.update',
             'payload': {
                 'drawing': {'physical_hand': self.drawing_hand, 'pointer': None,
+                            'landmarks': None,
                             'raw_gesture': None, 'stable_gesture': None, 'action': None},
                 'modifier': {'physical_hand': self.modifier_hand, 'pointer': None,
+                             'landmarks': None,
                              'raw_gesture': None, 'stable_gesture': None, 'action': None},
                 'health': self._health(),
             },

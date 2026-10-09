@@ -4,6 +4,13 @@
 
 Deliver a technically credible Hand-D v2 tracer/vertical slice by October 13 without pretending the whole target product is complete. The milestone should prove the central path end-to-end: canonical collection -> SQLite/review -> immutable snapshot -> reproducible training/evaluation -> Model Artifact -> fresh real-time inference -> minimal Tauri integration.
 
+### Checkpoint — October 8, 2026
+
+- **HD-01..HD-08:** completados en sus alcances core/CLI/Linux; import legacy HD-06L añadido. Esto no significa accuracy real ni evaluación P003 certificada.
+- **HD-09 IN PROGRESS:** shell Tauri en Linux, Python supervisado, WS/MJPEG y recuperación implementados. Se añadió Camera-first con overlay de 21 landmarks por mano, toggle de manos, modo Lienzo limpio y pincel Wiggly opt-in con TDD. Siguen pendientes Studio Collect/Review/Snapshot, gestión activa de Candidate, exportación y packaging independiente.
+- **HD-10 TODO:** un tracer real Sample→snapshot→entrenamiento→Model Artifact→Whiteboard con medición completa y procedencia honesta.
+- **Siguiente gate de plataformas:** Macs Apple Silicon el **9 de octubre**, mediante [runbook de laboratorio](../runbook/mac-lab-oct09.md). Son dispositivos **NO VERIFICADOS** hasta ejecutar los pasos; el preflight macOS no certifica cámara, rendimiento ni permisos TCC.
+
 The broader Hand-D v2 architecture remains intentionally larger than this milestone. Confirmed features such as the complete Studio information architecture, Easy Mode polish, extensible gesture UX, release/CD polish, and Tier-1 validation on every desktop OS may continue after October 13 without being considered architectural reversals.
 
 ## No-objetivo

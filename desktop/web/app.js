@@ -1,15 +1,20 @@
 import {RuntimeGate, Strokes} from './runtime-state.mjs';
 import {StrokeRenderer} from './stroke-renderer.mjs';
+import {HandOverlay,fitScene} from './hand-overlay.mjs';
 
 const $ = id => document.getElementById(id);
 const strokes = new Strokes();
 const strokeRenderer = new StrokeRenderer($('drawing'));
+const handOverlay = new HandOverlay($('hands-overlay'));
 const gate = new RuntimeGate();
 let tool = 'draw';
+let cameraMode = true;
+let handsVisible = true;
 let pointerStroke = null;
 let gestureStroke = null;
 let ws = null;
 let sidecarKey = null;
+let previewUrl = null;
 
 function modelLabel(health) {
   switch (health?.model) {
@@ -44,17 +49,21 @@ function extendStroke(path, point) {
   strokeRenderer.pointAdded(path);
 }
 function setTool(action) {
-  if (action !== 'draw' && action !== 'erase') return;
+  if (!['draw','erase','wiggly'].includes(action)) return;
   tool = action;
   $('tool-pen').classList.toggle('selected', action === 'draw');
   $('tool-eraser').classList.toggle('selected', action === 'erase');
+  $('tool-wiggly').classList.toggle('selected', action === 'wiggly');
+  $('tool-wiggly').setAttribute('aria-pressed',String(action === 'wiggly'));
 }
-function releaseGesture() {
+function releaseGesture(clearHands = true) {
   gestureStroke = null;
   $('cursor').hidden = true;
+  if (clearHands) handOverlay.clear();
 }
 function onRuntimeEvent(event) {
   if (!gate.accept(event)) return;
+  handOverlay.update(event.payload);
   const draw = event.payload?.drawing ?? {};
   const modifier = event.payload?.modifier ?? {};
   $('gesture').textContent = draw.stable_gesture || draw.raw_gesture || (
@@ -69,20 +78,20 @@ function onRuntimeEvent(event) {
   const point = draw.pointer;
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
       || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
-    releaseGesture();
+    releaseGesture(false); // keep Modifier landmarks if Drawing Hand disappears
     return;
   }
-  const bounds = $('drawing').getBoundingClientRect();
   $('cursor').hidden = false;
-  $('cursor').style.left = (point.x * bounds.width) + 'px';
-  $('cursor').style.top = (point.y * bounds.height) + 'px';
+  $('cursor').style.left = (point.x * 100) + '%';
+  $('cursor').style.top = (point.y * 100) + '%';
   const action = draw.action;
   if (action !== 'draw' && action !== 'erase') {
     gestureStroke = null;
     return;
   }
-  if (!gestureStroke || gestureStroke.tool !== action)
-    gestureStroke = beginStroke(point, 'gesture', action);
+  const effectiveTool = action === 'draw' && tool === 'wiggly' ? 'wiggly' : action;
+  if (!gestureStroke || gestureStroke.tool !== effectiveTool)
+    gestureStroke = beginStroke(point, 'gesture', effectiveTool);
   else
     extendStroke(gestureStroke, point);
 }
@@ -109,6 +118,57 @@ $('redo').addEventListener('click', () => { strokes.redo(); redraw(); });
 $('clear').addEventListener('click', () => { strokes.clear(); redraw(); });
 $('tool-pen').addEventListener('click', () => setTool('draw'));
 $('tool-eraser').addEventListener('click', () => setTool('erase'));
+$('tool-wiggly').addEventListener('click', () => setTool('wiggly'));
+
+// A single undistorted camera-plane coordinate system for the image, points,
+// cursor and strokes; letterboxes stay outside this scene.
+let cameraWidth = 640, cameraHeight = 480;
+function layoutScene() {
+  const canvasBox = $('canvas-shell').getBoundingClientRect();
+  const fit = fitScene(canvasBox.width,canvasBox.height,cameraWidth,cameraHeight);
+  const scene = $('camera-scene');
+  scene.style.left = fit.left + 'px';
+  scene.style.top = fit.top + 'px';
+  scene.style.width = fit.width + 'px';
+  scene.style.height = fit.height + 'px';
+}
+if (typeof ResizeObserver !== 'undefined')
+  new ResizeObserver(layoutScene).observe($('canvas-shell'));
+layoutScene();
+
+function updatePreview() {
+  const preview = $('preview');
+  if (!cameraMode || !previewUrl) {
+    preview.removeAttribute('src');
+    return; // MJPEG disconnect allows Python to suspend its JPEG encoder
+  }
+  if (preview.getAttribute?.('src') !== previewUrl) preview.src = previewUrl;
+}
+function setCameraMode(enabled) {
+  cameraMode = Boolean(enabled);
+  $('canvas-shell').classList.toggle('clean',!cameraMode);
+  $('view-camera').classList.toggle('selected',cameraMode);
+  $('view-clean').classList.toggle('selected',!cameraMode);
+  $('view-camera').setAttribute('aria-pressed',String(cameraMode));
+  $('view-clean').setAttribute('aria-pressed',String(!cameraMode));
+  updatePreview();
+}
+function setHandsVisible(enabled) {
+  handsVisible = Boolean(enabled);
+  handOverlay.setVisible(handsVisible);
+  $('toggle-hands').classList.toggle('selected',handsVisible);
+  $('toggle-hands').setAttribute('aria-pressed',String(handsVisible));
+  $('toggle-hands').textContent = handsVisible ? '✋ Ocultar manos' : '✋ Mostrar manos';
+}
+$('view-camera').addEventListener('click',()=>setCameraMode(true));
+$('view-clean').addEventListener('click',()=>setCameraMode(false));
+$('toggle-hands').addEventListener('click',()=>setHandsVisible(!handsVisible));
+
+// No animated geometry is stored. 12 Hz deliberately decouples visual wiggle
+// from both MediaPipe and the browser's normal drawing render cadence.
+const reducedMotion = typeof matchMedia === 'function'
+  ? matchMedia('(prefers-reduced-motion: reduce)') : {matches:false};
+let animationStarted = typeof performance !== 'undefined' ? performance.now() : 0;
 
 function navigate(view) {
   const whiteboard = view === 'whiteboard';
@@ -127,12 +187,14 @@ $('expand').addEventListener('click', () => {
   $('modal-canvas-slot').append($('canvas-shell'));
   $('full-overlay').hidden = false;
   $('close-expand').focus();
+  layoutScene();
 });
 function collapse() {
   if ($('full-overlay').hidden) return;
   normalParent.prepend($('canvas-shell'));
   $('full-overlay').hidden = true;
   $('expand').focus();
+  layoutScene();
 }
 $('close-expand').addEventListener('click', collapse);
 document.addEventListener('keydown', event => {
@@ -157,6 +219,7 @@ function attachSidecar(status) {
   sidecarKey = key;
   releaseGesture();
   if (!status) {
+    previewUrl = null;
     $('preview').removeAttribute('src');
     $('camera-fallback').hidden = false;
     $('footer-session').textContent = 'Sin sesión conectada';
@@ -167,9 +230,19 @@ function attachSidecar(status) {
   const host = '127.0.0.1:' + status.port;
   const token = encodeURIComponent(status.token);
   const preview = $('preview');
-  preview.src = 'http://' + host + '/mjpeg?token=' + token;
-  preview.onload = () => { $('camera-fallback').hidden = true; };
+  previewUrl = 'http://' + host + '/mjpeg?token=' + token;
+  preview.onload = () => {
+    $('camera-fallback').hidden = true;
+    if (preview.naturalWidth && preview.naturalHeight
+        && (cameraWidth !== preview.naturalWidth
+            || cameraHeight !== preview.naturalHeight)) {
+      cameraWidth = preview.naturalWidth;
+      cameraHeight = preview.naturalHeight;
+      layoutScene();
+    }
+  };
   preview.onerror = () => { $('camera-fallback').hidden = false; };
+  updatePreview();
   $('footer-session').textContent = 'SESIÓN ' + status.runtime_session_id.slice(0, 9);
   connectionState(false, 'CONECTANDO WEBSOCKET…');
   const socket = new WebSocket('ws://' + host + '/ws?token=' + token);
@@ -211,3 +284,10 @@ $('restart').addEventListener('click', async () => {
 });
 setInterval(poll, 1200);
 poll();
+setInterval(()=>{
+  const animate = !reducedMotion.matches
+    && !$('whiteboard').hidden
+    && (typeof document.hidden === 'undefined' || !document.hidden);
+  const now = typeof performance !== 'undefined' ? performance.now() : 0;
+  strokeRenderer.animateWiggly((now-animationStarted)/340,{enabled:animate});
+},85);

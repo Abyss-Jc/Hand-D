@@ -5,7 +5,8 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'nav-whiteboard','nav-studio','whiteboard','studio','canvas-shell',
   'modal-canvas-slot','full-overlay','close-expand','expand','camera-fallback',
   'preview','footer-session','status','lamp','gesture','tracking','diagnostics',
-  'cursor','restart','model-status'];
+  'cursor','restart','model-status','camera-scene','hands-overlay',
+  'view-camera','view-clean','toggle-hands','tool-wiggly'];
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
@@ -15,6 +16,7 @@ class Element {
   addEventListener(key, cb) { this.listeners[key] = cb; }
   setAttribute(key, val) { this.attributes[key] = val; }
   removeAttribute(key) { delete this.attributes[key]; }
+  getAttribute(key) { return this.attributes[key] ?? null; }
   append(node) { this.children.push(node); node.parentElement = this; }
   prepend(node) { this.children.unshift(node); node.parentElement = this; }
   replaceChildren() { this.children = []; }
@@ -40,6 +42,8 @@ globalThis.document = {
 globalThis.window = {};
 const timers = [];
 globalThis.setInterval = callback => { timers.push(callback); };
+let reducedMotion = false;
+globalThis.matchMedia = () => ({get matches(){return reducedMotion;}});
 const connections = [];
 globalThis.WebSocket = class {
   static CLOSED = 3;
@@ -76,6 +80,28 @@ test('Whiteboard and Studio navigation does not erase canvas', () => {
   assert.equal(elements.drawing.children.length, 1);
 });
 
+test('camera/clean mode, skeletal visibility and Wiggly style preserve strokes', async()=>{
+  elements['view-clean'].emit('click');
+  assert.equal(elements['canvas-shell'].classList.selected, undefined);
+  assert.equal(elements['view-clean'].attributes['aria-pressed'],'true');
+  elements['view-camera'].emit('click');
+  assert.equal(elements['view-camera'].attributes['aria-pressed'],'true');
+  elements['toggle-hands'].emit('click');
+  assert.equal(elements['hands-overlay'].style.display,'none');
+  elements['toggle-hands'].emit('click');
+  assert.equal(elements['hands-overlay'].style.display,'');
+  elements['tool-wiggly'].emit('click');
+  assert.equal(elements['tool-wiggly'].attributes['aria-pressed'],'true');
+  elements.drawing.emit('pointerdown',{button:0,pointerId:1,clientX:150,clientY:200});
+  elements.drawing.emit('pointermove',{clientX:300,clientY:400});
+  await Promise.resolve();
+  assert.equal(elements.drawing.children.at(-1).attributes.stroke,'#5263e6');
+  elements.undo.emit('click');
+  elements.redo.emit('click');
+  await Promise.resolve();
+  assert.equal(elements.drawing.children.at(-1).attributes.stroke,'#5263e6');
+});
+
 test('connection READY distinguishes legacy model from unavailable model', async () => {
   const meta = {port: 39001, token: 'synthetic-test-token', runtime_session_id: 'session-a'};
   window.__TAURI__ = {core: {invoke: async command => {
@@ -102,4 +128,35 @@ test('connection READY distinguishes legacy model from unavailable model', async
   });
   assert.equal(elements.gesture.textContent, 'Index_Finger');
   assert.match(elements['model-status'].textContent, /SIN VALIDACIÓN/);
+});
+
+test('Modifier skeleton stays visible when Drawing Hand is absent',()=>{
+  const points=Array.from({length:21},(_,i)=>({x:i/40,y:.4}));
+  connections.at(-1).sendEvent({
+    type:'runtime.update',runtime_session_id:'session-a',seq:2,timestamp_ms:20,
+    payload:{
+      drawing:{physical_hand:'Right',pointer:null,landmarks:null,action:null},
+      modifier:{physical_hand:'Left',pointer:null,landmarks:points,action:null},
+      health:{model:'legacy_unverified',camera:'tracking'},
+    },
+  });
+  assert.equal(elements['hands-overlay'].children[0].style.display,'none');
+  assert.equal(elements['hands-overlay'].children[1].style.display,'');
+});
+
+test('reduced-motion restores Wiggly to static path without altering strokes',async()=>{
+  elements['tool-wiggly'].emit('click');
+  elements.drawing.emit('pointerdown',{button:0,pointerId:1,clientX:130,clientY:110});
+  for(let i=0;i<8;i++)
+    elements.drawing.emit('pointermove',{clientX:155+i*16,clientY:160+i*7});
+  await Promise.resolve();
+  const path=elements.drawing.children.at(-1);
+  const stable=path.attributes.d;
+  timers[1](); // Wiggly presentation timer; transport poll is timers[0].
+  assert.notEqual(path.attributes.d,stable);
+  reducedMotion=true;
+  timers[1]();
+  assert.equal(path.attributes.d,stable);
+  reducedMotion=false;
+  elements.drawing.emit('pointerup',{});
 });

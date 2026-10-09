@@ -8,7 +8,8 @@ const ids = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'nav-whiteboard','nav-studio','whiteboard','studio','canvas-shell',
   'modal-canvas-slot','full-overlay','close-expand','expand','camera-fallback',
   'preview','footer-session','status','lamp','gesture','tracking','diagnostics',
-  'cursor','restart','model-status'];
+  'cursor','restart','model-status','camera-scene','hands-overlay',
+  'view-camera','view-clean','toggle-hands','tool-wiggly'];
 const counters = {nodesCreated:0, replaceChildren:0, pathUpdates:0, svgAppend:0};
 const frameTasks = [];
 globalThis.requestAnimationFrame = cb => { frameTasks.push(cb); return frameTasks.length; };
