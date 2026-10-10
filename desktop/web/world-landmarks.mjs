@@ -1,5 +1,6 @@
 /** Orthographic view of a stored MediaPipe world-space hand; display only. */
-export function projectWorldLandmarks(points, yawDegrees=0, pitchDegrees=0) {
+export function projectWorldLandmarks(points, yawDegrees=0, pitchDegrees=0,
+                                      wristDown=false) {
   if (!Array.isArray(points)||points.length!==21||
       points.some(p=>!Array.isArray(p)||p.length!==3||p.some(v=>!Number.isFinite(v))))
     return null;
@@ -17,6 +18,7 @@ export function projectWorldLandmarks(points, yawDegrees=0, pitchDegrees=0) {
   const centerY=(Math.min(...ys)+Math.max(...ys))/2;
   return rotated.map(p=>({
     x:Math.max(0,Math.min(1,0.5+(p.x-centerX)/extent*0.8)),
-    y:Math.max(0,Math.min(1,0.5+(p.y-centerY)/extent*0.8)),
+    // Canonical +Y points from wrist to knuckles; SVG +Y points DOWN.
+    y:Math.max(0,Math.min(1,0.5+(wristDown?-1:1)*(p.y-centerY)/extent*0.8)),
   }));
 }

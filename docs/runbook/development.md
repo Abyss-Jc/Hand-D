@@ -501,6 +501,38 @@ interim. Native Tauri/WebKit visual inspection, physical capture, and truthful
 per-gesture model-accuracy validation still require a human operator. The
 synthetic tracer verifies **contracts**, not gesture correctness.
 
+**HD-10Q — visual wrist orientation and capture quality (2026-10-09):** The
+69-feature canonical transform deliberately points +Y from wrist to middle
+MCP, but SVG screen +Y points **down**. Review now inverts *only the canonical
+view's screen-space Y* so the wrist (joint 0) stays at the bottom in front
+view, while retaining independent X/Y rotation and a raw-world comparison.
+The canonical feature contract, all Samples and training Snapshots are
+unchanged. Studio Collect rejects tracking with any of the 21 image-space
+X/Y positions outside [0,1], nonfinite/degenerate hand geometry and wrong
+physical handedness before SQLite persistence. It does **not** decrement the
+target for skipped input. Status includes aggregated reasons
+(`no_hand`, `outside_frame`, `bad_tracking`, `wrong_hand`,
+`sampling_interval`) and sends bounded feedback from the existing
+camera loop every 500 ms while collecting. The UI distinguishes intentional
+interval sampling from invalid observations, with advice to recenter hands.
+It does not retain video or falsely promise lossless MediaPipe callbacks:
+the latest-only mailbox intentionally supersedes old callbacks under
+backpressure for latency safety. **Dropped** in Browse is different: it is
+only the explicit reversible lifecycle status, not a tracking skip. This
+code gate requires a real camera session to assess whether it rejects too
+many borderline but valid poses; relax or tune from observed measurements,
+not an invented image-quality score.
+
+**Linux verification:** `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q`
+(**138/138 Python**), `node --test desktop/tests/*.test.mjs` (**45/45 JS**),
+`cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked -q`
+(**7/7 Rust**), `uv lock --check`, JS syntax and `git diff --check`
+passed. Fixture image-space landmarks in existing tests were corrected
+to represent *actual on-screen image coordinates* rather than negative
+world-space coordinates; unchanged raw world fixtures still exercise
+the legacy-compatible canonical transform. Native camera behavior and
+the rejection rate of partially occluded real hands remain unverified.
+
 **Studio visual inspection restoration for HD-10.** Studio → **Collect** now
 shows the same authenticated camera preview and live 21-joint drawing/modifier
 overlays as Whiteboard. Navigation enables the MJPEG consumer only for the

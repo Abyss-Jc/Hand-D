@@ -22,7 +22,8 @@ class CaptureSamplingTests(unittest.TestCase):
         self.store.create_session('S001', 'P001')
         self.store.create_capture('C001', 'S001', 'Index_Finger', 'Right', target=3)
         self.world = landmark_fixture()
-        self.image = self.world / 2
+        self.image = self.world.copy()
+        self.image[:, :2] = .5 + self.world[:, :2]
 
     def sampler(self, interval_ms=100):
         return CaptureSampler(
@@ -66,6 +67,19 @@ class CaptureSamplingTests(unittest.TestCase):
         self.assertEqual(sampler.count, 1)
         self.assertEqual(self.store.count_samples(), 1)
         self.assertEqual(self.store.get_sample(sample_id)['provenance']['actual_handedness'], 'Right')
+
+    def test_cropped_tracking_is_not_saved_and_reports_why_until_full_hand_returns(self):
+        sampler=self.sampler()
+        image=self.image.copy()
+        image[8,0]=1.08
+        self.assertIsNone(self.offer(sampler,0,0,image=image))
+        self.assertEqual(sampler.last_skip_reason,'outside_frame')
+        self.assertEqual(sampler.count,0)
+        self.assertIsNone(self.offer(sampler,1,10,world=np.zeros((21,3))))
+        self.assertEqual(sampler.last_skip_reason,'bad_tracking')
+        self.assertIsNotNone(self.offer(sampler,2,20))
+        self.assertIsNone(sampler.last_skip_reason)
+        self.assertEqual(sampler.count,1)
 
     def test_pause_resume_and_reopening_capture_preserves_time_window_and_quota(self):
         sampler = self.sampler()

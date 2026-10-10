@@ -27,6 +27,7 @@ names.push('browse-inspect','review-suggested-sample','review-suggested-open',
 names.push('review-sample-scrub');
 names.push('workspace-active-label');
 names.push('collect-progress-bar','collect-go-review');
+names.push('collect-quality-status');
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
   names.push('studio-pane-'+section);
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
@@ -464,6 +465,12 @@ test('Studio Collect starts only on explicit action and exposes Pause Resume Fin
     capture_id:'C-NEW'
   }});
   assert.match(elements['collect-progress'].textContent,/0\s*\/\s*2/);
+  socket.sendEvent({type:'studio.collection',data:{
+    state:'capturing',count:0,target:2,capture_id:'C-NEW',
+    quality_skips:{outside_frame:3,no_hand:2},last_skip_reason:'outside_frame',
+  }});
+  assert.match(elements['collect-quality-status'].textContent,/5 incomplete tracking/);
+  assert.match(elements['collect-quality-status'].textContent,/Hand clipped/);
   elements['collect-pause'].emit('click');
   assert.equal(elements['collect-go-review'].disabled,true);
   assert.equal(elements['collect-progress-bar'].max,2);

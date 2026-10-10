@@ -130,6 +130,7 @@
           </div>
           <p id="collect-progress" role="status">Idle · select an existing workspace to begin.</p>
           <progress id="collect-progress-bar" max="120" value="0" aria-label="Captured samples progress"></progress>
+          <p id="collect-quality-status" role="status" class="mini">Only valid, fully visible hands are stored. Capture keeps waiting until the target is reached.</p>
           <button id="collect-go-review" disabled>Review this Capture →</button>
           <p class="mini">P003 Final Test collection is intentionally excluded from this development control.</p>
         </article>
@@ -187,7 +188,7 @@
           </div>
               </div>
               <div>
-                <p class="mini">Canonical 3D landmarks · drag to rotate</p>
+                <p class="mini">Canonical 3D landmarks · wrist down · drag to rotate</p>
           <div class="studio-visual review-visual">
             <svg id="review-world" viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet"
                  role="img" aria-label="Rotatable canonical hand landmarks"></svg>

@@ -7,6 +7,7 @@ No camera frame or video is retained or persisted.
 from __future__ import annotations
 
 from pathlib import Path
+from collections import Counter
 from uuid import uuid4
 
 from handd_core.capture_sampling import CaptureSampler
@@ -28,6 +29,8 @@ class StudioCollection:
         self._capture_id: str | None = None
         self._gesture: str | None = None
         self._participant: str | None = None
+        self._quality_skips: Counter[str] = Counter()
+        self._last_skip_reason: str | None = None
 
     def status(self) -> dict:
         return {
@@ -36,6 +39,8 @@ class StudioCollection:
             'target': int(self._sampler._progress['target']) if self._sampler else 0,
             'session_id': self._session_id, 'capture_id': self._capture_id,
             'participant': self._participant, 'gesture': self._gesture,
+            'quality_skips': dict(self._quality_skips),
+            'last_skip_reason': self._last_skip_reason,
         }
 
     def start(self, *, participant: str, gesture: str, hand: str,
@@ -78,6 +83,8 @@ class StudioCollection:
         self._frame_index = 0
         self._session_id, self._capture_id = session_id, capture_id
         self._participant, self._gesture = participant, gesture
+        self._quality_skips.clear()
+        self._last_skip_reason = None
         self._state = 'capturing'
         return self.status()
 
@@ -109,12 +116,15 @@ class StudioCollection:
         self._frame_index += 1
         frame_idx = self._frame_index
         if not result.hand_landmarks:
+            self._mark_skip('no_hand')
             return None
         from numpy import array, float64
+        reasons = []
         for raw_handedness, image_points, world_points in zip(
             result.handedness, result.hand_landmarks, result.hand_world_landmarks,
         ):
             if not raw_handedness:
+                reasons.append('bad_tracking')
                 continue
             try:
                 make_array = lambda points: array(
@@ -126,13 +136,23 @@ class StudioCollection:
                     world_landmarks=make_array(world_points),
                 )
             except (ValueError, TypeError, AttributeError, OverflowError):
+                reasons.append('bad_tracking')
                 continue  # bad tracking data does not stop the live camera
             if sample_id is not None:
+                self._last_skip_reason = None
                 if self._sampler.finished:
                     self._state = 'complete'
                     self.close()
                 return sample_id
+            reasons.append(self._sampler.last_skip_reason or 'bad_tracking')
+        # One discarded observation batch counts once, not once per hand.
+        priority=('outside_frame','bad_tracking','wrong_hand','sampling_interval','stale')
+        self._mark_skip(next((reason for reason in priority if reason in reasons),'no_hand'))
         return None
+
+    def _mark_skip(self, reason: str) -> None:
+        self._last_skip_reason = reason
+        self._quality_skips[reason] += 1
 
     def fail(self) -> dict:
         """A disk/SQLite write error halts capture without crashing inference."""

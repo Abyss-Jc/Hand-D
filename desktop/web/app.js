@@ -497,7 +497,8 @@ function renderReviewWorld() {
   const selected=$('review-world-mode').value==='raw'
     ? selectedReviewWorld : selectedReviewCanonical;
   const points=projectWorldLandmarks(selected,Number($('review-angle').value),
-                                    Number($('review-pitch').value));
+                                    Number($('review-pitch').value),
+                                    $('review-world-mode').value==='canonical');
   if (points) worldOverlay.update({drawing:{landmarks:points}});
 }
 $('review-angle').addEventListener('input',renderReviewWorld);
@@ -567,6 +568,19 @@ function renderCollection(data) {
     + ' / ' + (data.target ?? 0) + ' samples'
     + (data.gesture ? ' · ' + data.gesture : '')
     + (data.error ? ' · ' + data.error : '');
+  const reasons = data.quality_skips || {};
+  const rejected=(reasons.no_hand||0)+(reasons.bad_tracking||0)
+    +(reasons.outside_frame||0)+(reasons.wrong_hand||0);
+  const hints={
+    no_hand:'No hand detected. Move into the camera view.',
+    outside_frame:'Hand clipped by camera edge. Center the entire hand.',
+    bad_tracking:'Tracking is incomplete. Hold the hand steady briefly.',
+    wrong_hand:'Use the selected physical hand.',
+    sampling_interval:'Waiting for the sampling interval (normal).',
+    stale:'Outdated observation ignored (normal).',
+  };
+  $('collect-quality-status').textContent = rejected+' incomplete tracking results skipped, not saved. '
+    +(hints[data.last_skip_reason]||'Valid observations count toward the target.');
   $('collect-start').disabled = ['capturing','paused'].includes(data.state);
   $('collect-pause').disabled = data.state !== 'capturing';
   $('collect-resume').disabled = data.state !== 'paused';

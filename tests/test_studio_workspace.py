@@ -39,6 +39,9 @@ class StudioWorkspaceTests(unittest.TestCase):
         details = StudioWorkspace(self.path).sample_detail('SAMPLE0')
         self.assertEqual(len(details['canonical_landmarks']), 21)
         self.assertEqual(details['canonical_landmarks'][0], [0.0, 0.0, 0.0])
+        self.assertGreater(details['canonical_landmarks'][9][1],
+                           details['canonical_landmarks'][0][1],
+                           'canonical Y must point from wrist toward the knuckles')
 
     def test_review_queue_can_reach_samples_after_first_page(self):
         points = landmark_fixture()

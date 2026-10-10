@@ -91,4 +91,8 @@ class StudioCollectionTests(unittest.TestCase):
         )
         self.assertIsNone(self.controller.offer_result(bad, 100))
         self.assertEqual(self.controller.status()['state'], 'capturing')
+        self.assertEqual(self.controller.status()['quality_skips']['bad_tracking'],1)
+        self.assertIsNone(self.controller.offer_result(observation(),150))
+        self.assertEqual(self.controller.status()['quality_skips']['no_hand'],1)
         self.assertIsNotNone(self.controller.offer_result(observation('Left'), 200))
+        self.assertEqual(self.controller.status()['last_skip_reason'],None)

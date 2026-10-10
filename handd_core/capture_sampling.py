@@ -58,7 +58,12 @@ class CaptureSampler:
         self.camera = camera
         self.software = dict(software)
         self.paused = False
+        self.last_skip_reason: str | None = None
         self._progress = store.get_capture_progress(capture_id)
+
+    def _skip(self, reason: str) -> None:
+        self.last_skip_reason = reason
+        return None
 
     @property
     def count(self) -> int:
@@ -79,7 +84,7 @@ class CaptureSampler:
               world_landmarks: np.ndarray) -> str | None:
         """Persist one eligible observation and return its ID; otherwise None."""
         if self.paused or self.finished:
-            return None
+            return self._skip('inactive')
         if type(frame_index) is not int or frame_index < 0:
             raise ValueError('frame_index must be a nonnegative integer')
         if type(timestamp_ms) is not int or timestamp_ms < 0:
@@ -87,25 +92,29 @@ class CaptureSampler:
         last_frame = self._progress['last_frame_index']
         last_ms = self._progress['last_timestamp_ms']
         if last_frame is not None and frame_index <= last_frame:
-            return None  # stale/replayed result
+            return self._skip('stale')
         if last_ms is not None and timestamp_ms < last_ms + self.interval_ms:
-            return None
+            return self._skip('sampling_interval')
         if raw_mp_handedness not in ('Left', 'Right'):
-            return None
+            return self._skip('bad_tracking')
         # Existing mirrored-camera contract, to be independently tested on
         # hardware before trusting collection handedness as real-world fact.
         actual_hand = 'Right' if raw_mp_handedness == 'Left' else 'Left'
         if self._progress['hand'] not in ('Any', actual_hand):
-            return None
+            return self._skip('wrong_hand')
         try:
             image = np.asarray(image_landmarks, dtype=np.float64)
             world = np.asarray(world_landmarks, dtype=np.float64)
             if image.shape != (21, 3) or not np.isfinite(image).all():
-                return None
+                return self._skip('bad_tracking')
+            # Reject edge-clipped hands before storing: no reconstructable
+            # camera frame exists later to repair these observations.
+            if np.any(image[:, :2] < 0) or np.any(image[:, :2] > 1):
+                return self._skip('outside_frame')
             if canonicalize_world_landmarks(world, raw_mp_handedness) is None:
-                return None
+                return self._skip('bad_tracking')
         except (ValueError, TypeError, OverflowError):
-            return None
+            return self._skip('bad_tracking')
         sample_id = uuid4().hex
         self.store.add_sample(
             sample_id, self.capture_id, frame_index, image, world,
@@ -119,4 +128,5 @@ class CaptureSampler:
         self._progress['count'] += 1
         self._progress['last_frame_index'] = frame_index
         self._progress['last_timestamp_ms'] = timestamp_ms
+        self.last_skip_reason = None
         return sample_id

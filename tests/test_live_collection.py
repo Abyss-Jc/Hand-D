@@ -17,7 +17,8 @@ from tests.test_feature_transform import landmark_fixture
 
 def mock_result(raw_hands):
     world = landmark_fixture()
-    image = world / 2
+    image = world.copy()
+    image[:, :2] = .5 + world[:, :2]
     points = lambda arr: [SimpleNamespace(x=float(x), y=float(y), z=float(z))
                           for x, y, z in arr]
     return SimpleNamespace(

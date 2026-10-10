@@ -66,6 +66,7 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
     timestamp = -1
     loop = asyncio.get_running_loop()
     started = loop.time()
+    last_collection_feedback_ms = -1000
     try:
         with vision.HandLandmarker.create_from_options(options) as detector:
             while not shutdown.is_set():
@@ -106,6 +107,16 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
                         'type':'studio.collection',
                         'data':server.collection.status(),
                     })
+                elif (event is not None and server.collection is not None
+                      and now - last_collection_feedback_ms >= 500):
+                    status=server.collection.status()
+                    if status['state']=='capturing':
+                        # Tell Collect why a batch was skipped without sending
+                        # camera frames or flooding the websocket.
+                        await server.publish_event({
+                            'type':'studio.collection', 'data':status,
+                        })
+                        last_collection_feedback_ms=now
                 if capture_error:
                     await server.publish_event({
                         'type':'studio.collection', 'data':capture_error[0],
