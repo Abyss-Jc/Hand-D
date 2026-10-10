@@ -435,7 +435,7 @@ Browse can filter by gesture, participant, and review state with full
 pagination, preserving read-only 2D/3D Sample inspection. Review operates on
 a selected P001/P002 Capture and reproducibly draws a small random QC
 subset (5% up to five Samples). An operator must explicitly accept/reject
-each QC Sample through Browse; a rejected QC observation blocks batch
+each QC Sample in the unified Review inspector; a rejected QC observation blocks batch
 acceptance of that Capture and prompts individual inspection. If all selected
 QC Samples are accepted, **Accept remaining batch** requires an explicit
 confirmation and atomically records one immutable Review Event per accepted
@@ -443,16 +443,63 @@ Sample. Changed database state invalidates the presented batch token, so the
 operator must refresh before applying changes. No Sample data or video is
 deleted/relabelled; Snapshot eligibility remains accepted AND active.
 
-**Important incomplete part:** without a verified model/out-of-sample
-assessment, the first Capture has **no trustworthy suspicious-sample
-ranking**. Review states this explicitly; it must not call the remainder
-automatically `clean`. The approved next curator tranche persists versioned
-Model Assessments, extracts authoritative held-out-Session OOF predictions
-or genuinely out-of-training Active Model predictions, and ranks Suggested
-for Review by disagreement then top-two score margin with validated
-thresholds. Until this exists, QC + explicit batch acceptance are a
-**human-confirmed bootstrap workflow**, not automatic validation.
-Physical Linux/WebKit UX acceptance remains not verified by these tests.
+**Assisted review implementation (2026-10-09; Linux contract):** Once a verified
+Active Candidate exists and its training Development Snapshot can be checked,
+Review evaluates **new Samples not in that Snapshot's training membership**.
+It ranks disagreements first and ambiguous scores next. The ambiguity margin
+cutoff is the 10th percentile of correctly classified held-out-Session
+out-of-fold margins in the Candidate's validated metrics; no cutoff is
+fabricated if that reference set is empty. Scores are uncalibrated, not a
+probability of correctness. Versioned, immutable derived histories with
+artifact/weights/metrics/Snapshot provenance are stored under
+`workspace/assessments/*.json`. These are not canonical Samples and never
+modify SQLite review state. Changed Candidate or Capture membership yields a
+new history file rather than overwriting prior evidence. An unverified or
+incompatible Active Model blocks assisted batch decisions; custom gestures
+not yet present in the model use explicitly labeled QC-only bootstrap.
+Suggested items and invalid feature geometry must be individually resolved
+before the remaining group can be batch-accepted. The original random QC
+subset stays deterministic as Review Status changes; a rejected QC Sample
+still blocks batch acceptance. **The first Capture still needs independent
+operator-provided ground-truth and QC**; there is no model until suitable
+training data have been reviewed, frozen, and used to train a Candidate.
+
+**2026-10-09 verification:** `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q`
+(**137/137**), `node --test desktop/tests/*.test.mjs` (**44/44**),
+`cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked -q`
+(**7/7**), `uv lock --check`, JS syntax, HTML ID/section structure
+and `git diff --check` passed on Linux. The synthetic HD-10 tracer now
+proves that a trained Candidate flags NEW contradictory observations,
+persists version-attributed immutable assessments, rejects corrupt
+assessment history and never treats a new unsupported gesture as a
+known-class prediction. These are synthetic contract tests, not human
+gesture accuracy or native Tauri/WebKit visual acceptance.
+
+**UX (2026-10-09):** Open / change workspace now launches the native directory
+picker, with the connected project's name prominent in a compact workspace
+header; `Use entered path` is under optional advanced details. Collect is
+guided through gesture/hand selection, camera tracking feedback, and explicit
+capture controls; the sampling quota/interval live under Advanced Settings,
+with a progress bar and a Review this Capture action upon completion. Browse filters the
+whole dataset, but Review keeps the suggested queue, QC, direct
+Accept/Reject/Drop/Restore, previous/next controls (including crossing 40-row
+pages), a per-page scrub bar and the 2D + canonical 3D inspector together on
+one screen. The canonical 3D representation is produced by the existing
+versioned v1 Feature Transform (wrist-centered, size-normalized, palm-aligned,
+handedness-corrected), with independent Y and X rotation, pointer dragging,
+Reset View and a comparison to the original world landmarks. Raw stored
+observations are never rewritten, and images/video are not saved. Accept is
+disabled for samples with invalid canonical geometry.
+
+**Remaining HD-10CUR scope:** Historical Development OOF assessments for
+Samples already in a model's training Snapshot have not yet been ingested
+as authoritative held-out-Session review evidence; those Samples are NEVER
+evaluated with the final-refit Candidate as if it had not trained on them.
+The derived assessments are not yet materialized as SQLite Model Assessment
+rows; the append-only JSON histories preserve version attribution in the
+interim. Native Tauri/WebKit visual inspection, physical capture, and truthful
+per-gesture model-accuracy validation still require a human operator. The
+synthetic tracer verifies **contracts**, not gesture correctness.
 
 **Studio visual inspection restoration for HD-10.** Studio → **Collect** now
 shows the same authenticated camera preview and live 21-joint drawing/modifier
@@ -460,13 +507,13 @@ overlays as Whiteboard. Navigation enables the MJPEG consumer only for the
 visible screen; the camera tracker remains alive during either view. It does
 not instantiate a second camera or save camera images. Gesture tracking while
 Studio is visible never draws on the hidden Whiteboard. Studio → **Review**
-selects a canonical Sample, requests its stored image/world landmarks through
-the authenticated `sample_detail` WebSocket action, and renders the 2D
-image-space hand and a rotatable orthographic projection of its 3D world-space
-hand. No photo is reconstructed or persisted. Review navigates datasets in
-pages of 40 rather than hiding Samples beyond the previous fixed first 40;
-Accept remains disabled until the selected Sample's image landmarks are valid
-and displayed. Changes of selection discard the old preview; late responses
+requests its stored image/world landmarks through the authenticated
+`sample_detail` WebSocket action, shows original image landmarks (2D) plus
+the legacy-compatible canonical (3D) landmarks with two independent rotations.
+No photo is reconstructed or persisted. Browse navigates datasets in
+pages of 40, while Review's Previous/Next also traverse page boundaries.
+Accept remains disabled until the selected Sample's image and canonical
+geometry are valid. Changes of selection discard the old preview; late responses
 for a different Sample are ignored. `tests/test_studio_transport.py`,
 `tests/test_studio_workspace.py`, `desktop/tests/app-ui.test.mjs` and
 `desktop/tests/world-landmarks.test.mjs` cover transport, paging, rendering,
@@ -482,7 +529,7 @@ Run `uv run --frozen python -m unittest tests.test_hd10_tracer -v` from the repo
 
 The 2026-10-09 Linux full regression (**130 Python / 35 JavaScript / 7 Rust PASS**) included 17 of 20 synthetic Samples eligible in the original Snapshot; the later review change excluded one more without modifying the immutable earlier Snapshot. The test invokes `python -m handd_core.train_cli` in a real subprocess, not a mocked training routine. Eight runtime updates gave **1.044 ms p95** for in-process event publication to the test's WS client, and **1.183 ms p95** for the separately reported post-landmarker Python compute segment. This is a tiny non-production sample, **not full end-to-end latency**. The verified Candidate was recovered by a new real Python sidecar process with `--no-camera`; no native Tauri or WebKit claim.
 
-**HD-10 remaining acceptance:** On Linux with a cooperating human operator, capture independently verified gesture labels for P001/P002 across distinct Sessions using the existing Studio Collect flow (see above), explicitly review each Sample, build a new immutable Development Snapshot, train with `uv run --frozen python -m handd_core.train_cli --workspace /path/to/test-workspace --snapshot dev-SNAPSHOT_ID`, activate the compatible Candidate in Studio, and observe actual gestures, Whiteboard drawing/erasing and measured full callback→IPC→frontend latency in a real Tauri window. Preserve Sample/source membership hashes, actual Macro F1, per-class errors, runtime/IPC measurements and limitations in the report; do not reuse this synthetic test as model quality evidence. Keep P003 sealed if available and do not claim generalization without a real unseen-participant test. Mac/Windows hardware validation stays separate.
+**HD-10 remaining acceptance:** On Linux with a cooperating human operator, capture independently verified gesture labels for P001/P002 across distinct Sessions using Studio Collect. For the first untrained Capture, explicitly inspect the QC subset and batch-accept only after confirming capture labels; once a validated Candidate exists, inspect model-flagged Samples and the QC subset before consciously accepting the remainder (never assume scores are truth). Build a new immutable Development Snapshot, train with `uv run --frozen python -m handd_core.train_cli --workspace /path/to/test-workspace --snapshot dev-SNAPSHOT_ID`, activate the compatible Candidate in Studio, and observe actual gestures, Whiteboard drawing/erasing and measured full callback→IPC→frontend latency in a real Tauri window. Preserve Sample/source membership hashes, actual Macro F1, per-class errors, runtime/IPC measurements and limitations in the report; do not reuse this synthetic test as model quality evidence. Keep P003 sealed if available and do not claim generalization without a real unseen-participant test. Mac/Windows hardware validation stays separate.
 
 ## Recuperación
 

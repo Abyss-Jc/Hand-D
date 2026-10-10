@@ -19,3 +19,13 @@ test('review does not render malformed world landmarks',()=>{
   assert.equal(projectWorldLandmarks(Array.from({length:21},()=>[0,0,0]),0),null);
   assert.equal(projectWorldLandmarks(Array.from({length:21},()=>[0,NaN,1]),30),null);
 });
+
+test('independent yaw and pitch allow real two-axis inspection',()=>{
+  const points=Array.from({length:21},(_,i)=>[.03*i,.01*(i%4),.02*(i%6)]);
+  const front=projectWorldLandmarks(points,0,0);
+  const yaw=projectWorldLandmarks(points,50,0);
+  const pitch=projectWorldLandmarks(points,0,50);
+  assert.notDeepEqual(front,yaw);
+  assert.notDeepEqual(front,pitch);
+  assert.notDeepEqual(yaw,pitch);
+});

@@ -68,14 +68,23 @@
       <div class="heading"><div><p class="eyebrow">02 / DATA & MODELS</p>
       <h1>Studio.</h1><p>Collection, review and snapshot workflows for Hand-D v2.</p></div></div>
       <div class="workspace-selector">
-        <label for="workspace-path">Existing project workspace directory</label>
-        <div class="workspace-selector-row">
-          <input id="workspace-path" type="text" autocomplete="off" spellcheck="false"
-                 placeholder="/path/to/your/Hand-D/project" aria-describedby="workspace-message">
-          <button id="select-workspace">Open workspace</button>
-          <button id="browse-workspace">Browse…</button>
+        <div class="workspace-primary">
+          <div class="workspace-context">
+            <span class="mini">CURRENT WORKSPACE</span>
+            <strong id="workspace-active-label">No workspace open</strong>
+          </div>
+          <button id="select-workspace">Open / change workspace…</button>
           <button id="create-workspace">Create workspace…</button>
         </div>
+        <details class="workspace-advanced">
+          <summary>Open using an existing folder path</summary>
+          <label for="workspace-path">Workspace folder path</label>
+          <div class="workspace-selector-row">
+            <input id="workspace-path" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="/path/to/your/Hand-D/project" aria-describedby="workspace-message">
+            <button id="browse-workspace">Use entered path</button>
+          </div>
+        </details>
         <p id="workspace-message" role="status">No workspace selected. Whiteboard remains available.</p>
       </div>
       <nav class="studio-tabs" role="tablist" aria-label="Studio sections">
@@ -89,23 +98,30 @@
       <div class="studio-grid">
         <article id="studio-pane-collect" role="tabpanel" aria-labelledby="studio-tab-collect">
           <span class="marker">01</span><h2>Collect</h2>
-          <p>Capture landmarks from the same live camera stream. Samples are always unreviewed until you review them.</p>
-          <div class="studio-visual" id="collect-visual">
-            <img id="collect-preview" alt="Live camera preview for capture, not recorded" />
-            <svg id="collect-hands" viewBox="0 0 1 1" preserveAspectRatio="none"
-                 role="img" aria-label="Live hand landmarks, 21 joints per detected hand"></svg>
-            <span id="collect-visual-status" role="status">Waiting for live camera and landmarks</span>
-          </div>
+          <p>Choose the gesture, position your hand in the live preview, then capture. The observations are stored without video and await human review.</p>
+          <h3 class="studio-step">1 · Choose what to capture</h3>
           <label for="collect-participant">Participant (development only)</label>
           <select id="collect-participant"><option value="P001">P001</option><option value="P002">P002</option></select>
           <label for="collect-gesture">Intended gesture</label>
           <input id="collect-gesture" type="text" value="Index_Finger" maxlength="64">
           <label for="collect-hand">Physical hand</label>
           <select id="collect-hand"><option value="Right">Right</option><option value="Left">Left</option><option value="Any">Either hand</option></select>
+          <h3 class="studio-step">2 · Check your hand in the preview</h3>
+          <p class="mini">Make sure the 21 joints are visible, then hold the selected gesture with natural variation in angle and distance.</p>
+          <div class="studio-visual" id="collect-visual">
+            <img id="collect-preview" alt="Live camera preview for capture, not recorded" />
+            <svg id="collect-hands" viewBox="0 0 1 1" preserveAspectRatio="none"
+                 role="img" aria-label="Live hand landmarks, 21 joints per detected hand"></svg>
+            <span id="collect-visual-status" role="status">Waiting for live camera and landmarks</span>
+          </div>
+          <details class="capture-advanced">
+            <summary>Advanced capture settings</summary>
           <label for="collect-target">Target samples</label>
           <input id="collect-target" type="number" min="1" max="10000" value="120">
           <label for="collect-interval">Sampling interval (ms)</label>
           <input id="collect-interval" type="number" min="20" max="10000" value="100">
+          </details>
+          <h3 class="studio-step">3 · Capture and inspect</h3>
           <div class="studio-actions">
             <button id="collect-start">Start Capture</button>
             <button id="collect-pause" disabled>Pause</button>
@@ -113,6 +129,8 @@
             <button id="collect-finish" disabled>Finish</button>
           </div>
           <p id="collect-progress" role="status">Idle · select an existing workspace to begin.</p>
+          <progress id="collect-progress-bar" max="120" value="0" aria-label="Captured samples progress"></progress>
+          <button id="collect-go-review" disabled>Review this Capture →</button>
           <p class="mini">P003 Final Test collection is intentionally excluded from this development control.</p>
         </article>
         <article id="studio-pane-browse" role="tabpanel" aria-labelledby="studio-tab-browse" hidden>
@@ -133,17 +151,58 @@
             <span id="review-page" aria-live="polite">No samples</span>
             <button id="review-next" disabled>Next 40</button>
           </div>
+          <button id="browse-inspect">Inspect selected sample</button>
+        </article>
+        <article id="studio-pane-review" role="tabpanel" aria-labelledby="studio-tab-review" hidden>
+          <span class="marker">03</span><h2>Review · Suggested + Quality Check</h2>
+          <p>Inspect flagged observations first, then verify a random subset and accept the rest explicitly. No automatic labeling or acceptance.</p>
+          <label for="review-capture">Capture to inspect</label>
+          <select id="review-capture" aria-label="Choose Capture for review"></select>
+          <p id="review-queue-status" role="status" class="mini">Choose a Capture to see model evidence and pending quality checks.</p>
+          <label for="review-suggested-sample">Suggested for Review</label>
+          <select id="review-suggested-sample" aria-label="Choose a model-flagged sample"></select>
+          <button id="review-suggested-open">Inspect flagged sample</button>
+          <label for="review-qc-sample">Random quality-check sample</label>
+          <select id="review-qc-sample" aria-label="Select sample in quality-check subset"></select>
+          <div class="studio-actions">
+            <button id="review-qc-open">Inspect QC sample</button>
+            <button id="review-batch-accept" disabled>Accept remaining batch</button>
+          </div>
+          <p class="mini">A rejected QC sample blocks batch acceptance. Without a verified model, only the initial QC flow is available.</p>
+          <section class="sample-inspector" aria-label="Selected hand observation">
+            <div class="studio-actions">
+              <button id="review-sample-prev">Previous sample</button>
+              <strong id="review-sample-position">No sample selected</strong>
+              <button id="review-sample-next">Next sample</button>
+            </div>
+            <label for="review-sample-scrub">Scrub samples on the current page</label>
+            <input id="review-sample-scrub" type="range" min="0" max="0" step="1" value="0"
+                   aria-label="Scrub samples on the current page">
+            <div class="inspection-views">
+              <div>
+                <p class="mini">Original image landmarks · 2D</p>
           <div class="studio-visual review-visual">
             <svg id="review-hands" viewBox="0 0 1 1" preserveAspectRatio="none"
                  role="img" aria-label="Stored sample landmark reconstruction, not a camera photo"></svg>
           </div>
-          <p class="mini">Stored image-space landmarks (2D)</p>
+              </div>
+              <div>
+                <p class="mini">Canonical 3D landmarks · drag to rotate</p>
           <div class="studio-visual review-visual">
             <svg id="review-world" viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet"
-                 role="img" aria-label="Rotatable 3D world landmark skeleton projection"></svg>
+                 role="img" aria-label="Rotatable canonical hand landmarks"></svg>
           </div>
-          <label for="review-angle">3D view rotation</label>
-          <input id="review-angle" type="range" min="-90" max="90" step="5" value="25">
+              </div>
+            </div>
+            <div class="studio-actions">
+              <label for="review-world-mode">3D coordinates</label>
+              <select id="review-world-mode"><option value="canonical">Canonical (normalized)</option><option value="raw">Original world landmarks</option></select>
+              <label for="review-angle">Rotate Y</label>
+              <input id="review-angle" type="range" min="-180" max="180" step="5" value="25">
+              <label for="review-pitch">Rotate X</label>
+              <input id="review-pitch" type="range" min="-90" max="90" step="5" value="0">
+              <button id="review-reset-view">Reset view</button>
+            </div>
           <p id="review-visual-status" role="status" class="mini">Select a sample to inspect its stored landmarks before reviewing.</p>
           <p class="mini">Landmark reconstruction only. No photo or video is stored, so verify the label during collection.</p>
           <div class="studio-actions">
@@ -151,20 +210,7 @@
             <button id="review-drop">Drop</button><button id="review-restore">Restore</button>
             <button id="refresh-dataset">Refresh</button>
           </div>
-        </article>
-        <article id="studio-pane-review" role="tabpanel" aria-labelledby="studio-tab-review" hidden>
-          <span class="marker">03</span><h2>Review · Quality Check</h2>
-          <p>Review a small random sample from each Capture, then intentionally accept its remaining pending observations. No model assessment means no automatic suspicion ranking.</p>
-          <label for="review-capture">Capture to inspect</label>
-          <select id="review-capture" aria-label="Choose Capture for quality check"></select>
-          <p id="review-queue-status" role="status" class="mini">Select an existing Capture. Model-backed suggestions are not yet available.</p>
-          <label for="review-qc-sample">Random quality-check sample</label>
-          <select id="review-qc-sample" aria-label="Select sample in quality-check subset"></select>
-          <div class="studio-actions">
-            <button id="review-qc-open">Inspect this sample</button>
-            <button id="review-batch-accept" disabled>Accept remaining batch</button>
-          </div>
-          <p class="mini">You must review the quality-check subset first. Batch acceptance is an explicit human decision, never an automatic prediction.</p>
+          </section>
         </article>
         <article id="studio-pane-snapshots" role="tabpanel" aria-labelledby="studio-tab-snapshots" hidden>
           <span class="marker">04</span><h2>Snapshots</h2>

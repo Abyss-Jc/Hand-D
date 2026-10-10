@@ -36,6 +36,9 @@ class StudioWorkspaceTests(unittest.TestCase):
         self.assertEqual(len(summary['samples']), 3)
         self.assertFalse(summary['snapshot_ready'])
         self.assertNotIn('world_landmarks', json.dumps(summary))
+        details = StudioWorkspace(self.path).sample_detail('SAMPLE0')
+        self.assertEqual(len(details['canonical_landmarks']), 21)
+        self.assertEqual(details['canonical_landmarks'][0], [0.0, 0.0, 0.0])
 
     def test_review_queue_can_reach_samples_after_first_page(self):
         points = landmark_fixture()
@@ -144,3 +147,15 @@ class StudioWorkspaceTests(unittest.TestCase):
         self.assertEqual(studio.overview(gesture='Fist')['browse_total'], 0)
         with self.assertRaises(ValueError):
             studio.overview(review_status='malformed')
+
+    def test_corrupt_active_selection_cannot_disguise_missing_assessment_as_clean_qc(self):
+        (self.path/'models').mkdir()
+        (self.path/'models'/'.active-model.json').write_text('{corrupt')
+        studio=StudioWorkspace(self.path)
+        plan=studio.review_plan('C001')
+        self.assertEqual(plan['assessment_state'],'assessment_unavailable')
+        studio.transition(plan['qc_sample_ids'][0],'accept')
+        refreshed=studio.review_plan('C001')
+        self.assertFalse(refreshed['can_batch_accept'])
+        with self.assertRaises(ValueError):
+            studio.batch_accept('C001',refreshed['token'])

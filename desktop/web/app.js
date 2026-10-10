@@ -26,7 +26,12 @@ let studioRequestNumber = 0;
 const studioRequests = new Map();
 let reviewOffset = 0;
 let qualityPlan = null;
+let selectedReviewCanonical = null;
+let reviewSamples = [];
+let reviewNextPage = false;
+let pendingReviewPage = null;
 let collectState = 'idle';
+let latestCaptureId = null;
 let activeModelId = null;
 let modelChoices = new Map();
 let drawingDirty = false;
@@ -290,10 +295,13 @@ function requestBrowse(offset=0) {
   studioRequest('overview',{offset,...browseFilters()});
 }
 function renderDataset(data) {
+  $('workspace-active-label').textContent =
+    data.workspace?.split(/[\\/]/).filter(Boolean).at(-1)||'Workspace open';
   reviewOffset=data.review_offset??0;
   const pageSize=data.review_page_size??40;
   const total=data.browse_total??data.sample_count??0;
   const shown=(data.samples??[]).length;
+  reviewNextPage=reviewOffset+shown<total;
   $('review-prev').disabled=reviewOffset===0;
   $('review-next').disabled=reviewOffset+shown>=total;
   $('review-page').textContent=shown
@@ -324,6 +332,10 @@ function renderDataset(data) {
   const oldValue = sampleSelect.value;
   sampleSelect.replaceChildren();
   const items = data.samples || [];
+  reviewSamples = items.map(item=>item.sample_id);
+  const scrub=$('review-sample-scrub');
+  scrub.max=String(Math.max(0,reviewSamples.length-1));
+  scrub.disabled=reviewSamples.length<2;
   for (const sample of items) {
     const option = document.createElement('option');
     option.value = sample.sample_id;
@@ -331,8 +343,11 @@ function renderDataset(data) {
       + ' · ' + sample.review_status + ' / ' + sample.lifecycle_status;
     sampleSelect.append(option);
   }
-  sampleSelect.value = items.some(sample=>sample.sample_id===oldValue)
-    ? oldValue : (items[0]?.sample_id || '');
+  sampleSelect.value = pendingReviewPage
+    ? (pendingReviewPage==='last'?items.at(-1)?.sample_id:items[0]?.sample_id)||''
+    : items.some(sample=>sample.sample_id===oldValue)
+      ? oldValue : (items[0]?.sample_id || '');
+  pendingReviewPage=null;
   requestReviewSample();
   $('build-snapshot').disabled = !data.snapshot_ready || !data.eligible_count;
   if (data.snapshot_blockers?.length) {
@@ -350,10 +365,16 @@ $('review-next').addEventListener('click',()=>{
   if (!$('review-next').disabled) requestBrowse(reviewOffset+40);
 });
 $('browse-apply').addEventListener('click',()=>requestBrowse(0));
+$('browse-inspect').addEventListener('click',()=>{
+  if (!$('review-sample').value) return;
+  selectStudioTab('review');
+  requestReviewSample();
+});
 function requestQualityPlan() {
   qualityPlan=null;
   $('review-batch-accept').disabled=true;
   $('review-qc-sample').replaceChildren();
+  $('review-suggested-sample').replaceChildren();
   const capture_id=$('review-capture').value;
   if(!capture_id) {
     $('review-queue-status').textContent='No Development Capture selected.';
@@ -366,6 +387,23 @@ $('review-capture').addEventListener('change',requestQualityPlan);
 function renderQualityPlan(data) {
   if(!data||data.capture_id!==$('review-capture').value)return;
   qualityPlan=data;
+  const suggested=$('review-suggested-sample');
+  suggested.replaceChildren();
+  for (const row of (data.suggested||[]).filter(r=>r.review_status!=='accepted'
+                                                 && r.review_status!=='rejected')) {
+    const option=document.createElement('option');
+    option.value=row.sample_id;
+    option.textContent=row.sample_id+' · '+row.reason.replaceAll('_',' ')
+      +' · '+row.predicted_label;
+    suggested.append(option);
+  }
+  suggested.value=suggested.children[0]?.value||'';
+  if (!suggested.children.length) {
+    const option=document.createElement('option');
+    option.value='';
+    option.textContent='No model-flagged observations';
+    suggested.append(option);
+  }
   const select=$('review-qc-sample');
   select.replaceChildren();
   for(const id of data.qc_sample_ids||[]) {
@@ -377,13 +415,20 @@ function renderQualityPlan(data) {
   select.value=data.qc_sample_ids?.[0]||'';
   $('review-batch-accept').disabled=!data.can_batch_accept;
   const qcRejected=data.qc_rejected?.length||0;
+  const evidence=data.assessment_state==='model_assessed'
+    ? (data.assessment_model_id+' · '+(data.assessed_count||0)
+      +' out-of-training assessed · '+(data.suggested_pending||0)+' flagged to inspect')
+    : data.assessment_state==='assessment_unavailable'
+      ? 'Model assessment unavailable: '+(data.assessment_error||'invalid evidence')
+      : data.assessment_state==='unsupported_gesture'
+        ? 'Gesture is not in the Active Model — QC-only bootstrap'
+      : 'No verified model evidence yet — QC-only bootstrap';
   $('review-queue-status').textContent=(data.pending||0)+' pending · '
-    +(data.qc_unreviewed?.length||0)+' QC observations need review. '
-    +(qcRejected ? qcRejected+' QC rejected: inspect this Capture individually; batch acceptance blocked. ' : '')
-    +'No model-backed review suggestions available yet.';
+    +(data.qc_unreviewed?.length||0)+' QC observations need review · '+evidence+'. '
+    +(data.unassessable_pending ? data.unassessable_pending+' invalid geometry observations need individual review. ' : '')
+    +(qcRejected ? qcRejected+' QC rejected: inspect this Capture individually; batch acceptance blocked.' : '');
 }
-$('review-qc-open').addEventListener('click',()=>{
-  const sample_id=$('review-qc-sample').value;
+function inspectSample(sample_id) {
   if(!sample_id)return;
   const select=$('review-sample');
   if(![...select.children].some(option=>option.value===sample_id)) {
@@ -393,9 +438,11 @@ $('review-qc-open').addEventListener('click',()=>{
     select.append(option);
   }
   select.value=sample_id;
-  selectStudioTab('browse');
+  selectStudioTab('review');
   requestReviewSample();
-});
+}
+$('review-qc-open').addEventListener('click',()=>inspectSample($('review-qc-sample').value));
+$('review-suggested-open').addEventListener('click',()=>inspectSample($('review-suggested-sample').value));
 $('review-batch-accept').addEventListener('click',()=>{
   const plan=qualityPlan;
   if(!plan?.can_batch_accept||plan.capture_id!==$('review-capture').value)return;
@@ -411,18 +458,74 @@ function requestReviewSample() {
   reviewOverlay.clear();
   worldOverlay.clear();
   selectedReviewWorld=null;
+  selectedReviewCanonical=null;
   $('review-accept').disabled=true;
+  const position=reviewSamples.indexOf(sample_id);
+  $('review-sample-scrub').value=String(Math.max(0,position));
+  $('review-sample-position').textContent=sample_id
+    ? sample_id+(position>=0?' · '+(reviewOffset+position+1)+' / filtered results':' · flagged/QC')
+    : 'No sample selected';
   $('review-visual-status').textContent=sample_id
     ? 'Loading stored landmarks for '+sample_id : 'No sample selected';
   if (sample_id) studioRequest('sample_detail',{sample_id});
 }
 $('review-sample').addEventListener('change',requestReviewSample);
+function stepReview(direction) {
+  const current=reviewSamples.indexOf($('review-sample').value);
+  const next=current+direction;
+  if (next<0&&reviewOffset>0) {
+    pendingReviewPage='last';
+    requestBrowse(Math.max(0,reviewOffset-40));
+    return;
+  }
+  if (next>=reviewSamples.length&&reviewNextPage) {
+    pendingReviewPage='first';
+    requestBrowse(reviewOffset+40);
+    return;
+  }
+  if (next<0||next>=reviewSamples.length)return;
+  inspectSample(reviewSamples[next]);
+}
+$('review-sample-prev').addEventListener('click',()=>stepReview(-1));
+$('review-sample-next').addEventListener('click',()=>stepReview(1));
+$('review-sample-scrub').addEventListener('change',()=>{
+  const sample_id=reviewSamples[Number($('review-sample-scrub').value)];
+  if(sample_id)inspectSample(sample_id);
+});
 function renderReviewWorld() {
   worldOverlay.clear();
-  const points=projectWorldLandmarks(selectedReviewWorld,Number($('review-angle').value));
+  const selected=$('review-world-mode').value==='raw'
+    ? selectedReviewWorld : selectedReviewCanonical;
+  const points=projectWorldLandmarks(selected,Number($('review-angle').value),
+                                    Number($('review-pitch').value));
   if (points) worldOverlay.update({drawing:{landmarks:points}});
 }
 $('review-angle').addEventListener('input',renderReviewWorld);
+$('review-pitch').addEventListener('input',renderReviewWorld);
+$('review-world-mode').addEventListener('change',renderReviewWorld);
+$('review-reset-view').addEventListener('click',()=>{
+  $('review-angle').value='25';
+  $('review-pitch').value='0';
+  renderReviewWorld();
+});
+let dragReview=null;
+$('review-world').addEventListener('pointerdown',event=>{
+  if (!Number.isFinite(event.clientX)||!Number.isFinite(event.clientY))return;
+  dragReview={x:event.clientX,y:event.clientY};
+  $('review-world').setPointerCapture?.(event.pointerId);
+});
+$('review-world').addEventListener('pointermove',event=>{
+  if (!dragReview)return;
+  const dx=event.clientX-dragReview.x,dy=event.clientY-dragReview.y;
+  dragReview={x:event.clientX,y:event.clientY};
+  $('review-angle').value=String(Math.max(-180,Math.min(180,
+    Number($('review-angle').value)+dx*.5)));
+  $('review-pitch').value=String(Math.max(-90,Math.min(90,
+    Number($('review-pitch').value)+dy*.5)));
+  renderReviewWorld();
+});
+for (const type of ['pointerup','pointercancel'])
+  $('review-world').addEventListener(type,()=>{dragReview=null;});
 function renderSampleDetail(data) {
   if (!data || data.sample_id !== $('review-sample').value) return;
   const points=data.image_landmarks;
@@ -435,18 +538,30 @@ function renderSampleDetail(data) {
     $('review-visual-status').textContent='Invalid stored image landmarks; do not accept blindly.';
     return;
   }
-  $('review-accept').disabled=false;
+  const canonical=data.canonical_landmarks;
+  const canonicalValid=Array.isArray(canonical)&&canonical.length===21&&
+    canonical.every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite));
+  $('review-accept').disabled=!canonicalValid;
   const role=data.raw_mp_handedness==='Left'?'drawing':'modifier';
   reviewOverlay.update({[role]:{landmarks:points.map(p=>({x:p[0],y:p[1]}))}});
   selectedReviewWorld=data.world_landmarks;
+  selectedReviewCanonical=canonicalValid?canonical:null;
   renderReviewWorld();
   $('review-visual-status').textContent='Stored 21 joints · '+data.gesture
     +' · '+data.hand+' hand · '+data.review_status+' / '+data.lifecycle_status
+    +(canonicalValid ? ' · canonical view available'
+      : ' · invalid canonical geometry: reject or drop, not Accept')
     +' · not a camera photo';
 }
 function renderCollection(data) {
   if (!data || typeof data.state !== 'string') return;
   collectState = data.state;
+  latestCaptureId = data.capture_id || latestCaptureId;
+  const count=Math.max(0,Number(data.count)||0),target=Math.max(1,Number(data.target)||1);
+  $('collect-progress-bar').max=target;
+  $('collect-progress-bar').value=Math.min(count,target);
+  $('collect-go-review').disabled=!(latestCaptureId&&
+    ['complete','finished'].includes(data.state)&&count>0);
   $('collect-progress').textContent =
     data.state.toUpperCase() + ' · ' + (data.count ?? 0)
     + ' / ' + (data.target ?? 0) + ' samples'
@@ -457,6 +572,19 @@ function renderCollection(data) {
   $('collect-resume').disabled = data.state !== 'paused';
   $('collect-finish').disabled = !['capturing','paused'].includes(data.state);
 }
+$('collect-go-review').addEventListener('click',()=>{
+  if ($('collect-go-review').disabled||!latestCaptureId)return;
+  const select=$('review-capture');
+  if(![...select.children].some(row=>row.value===latestCaptureId)){
+    const option=document.createElement('option');
+    option.value=latestCaptureId;
+    option.textContent='Just captured · '+latestCaptureId.slice(0,8);
+    select.append(option);
+  }
+  select.value=latestCaptureId;
+  selectStudioTab('review');
+  requestQualityPlan();
+});
 function renderModels(data) {
   activeModelId = data.active_model_id || null;
   const selected = $('models-list');
@@ -535,7 +663,7 @@ function handleStudioResponse(message) {
     requestBrowse(reviewOffset);
   }
 }
-$('select-workspace').addEventListener('click', async () => {
+$('browse-workspace').addEventListener('click', async () => {
   const path = $('workspace-path').value.trim();
   if (!path) {
     $('workspace-message').textContent = 'Enter an existing workspace directory.';
@@ -563,7 +691,7 @@ async function nativeWorkspaceDialog(command) {
     $('workspace-message').textContent=String(error);
   }
 }
-$('browse-workspace').addEventListener('click',()=>nativeWorkspaceDialog('pick_workspace'));
+$('select-workspace').addEventListener('click',()=>nativeWorkspaceDialog('pick_workspace'));
 $('create-workspace').addEventListener('click',()=>{
   if(typeof window.confirm==='function'&&!window.confirm(
     'Initialize a new Hand-D Project Workspace in an empty folder?'))return;

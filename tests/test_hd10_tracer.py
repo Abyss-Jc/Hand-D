@@ -16,9 +16,12 @@ from aiohttp import ClientSession
 from numpy import percentile
 
 from handd_core.dataset_store import DatasetStore
+from handd_core.feature_transform import canonicalize_world_landmarks
 from handd_core.runtime_v2 import GestureRuntime, RuntimeEventGate
 from handd_core.sidecar_ipc import SidecarServer
 from handd_core.snapshot_builder import verify_snapshot
+from handd_core.studio_models import StudioModels
+from tests.test_feature_transform import landmark_fixture
 from tests.test_runtime_v2 import observation
 
 
@@ -130,6 +133,74 @@ class HD10TracerTests(unittest.IsolatedAsyncioTestCase):
                         activated_event = await ws.receive_json(timeout=5)
                         self.assertEqual(activated_event["type"], "studio.model")
                         self.assertEqual(activated_event["snapshot"]["health"]["model"], "ready")
+
+                        # Only NEW observations may be flagged by final-refit
+                        # Candidate, never training members from the snapshot.
+                        points = landmark_fixture()
+                        predictor, _ = StudioModels(workspace)._load(model_dir.name)
+                        predicted = predictor.predict(
+                            canonicalize_world_landmarks(points, "Left").reshape(1, -1))[0]
+                        intended = next(label for label in labels if label != predicted)
+                        additional = DatasetStore(workspace / "handd.sqlite")
+                        try:
+                            additional.create_session("NEW-SESSION", "P001")
+                            additional.create_capture("NEW-CAPTURE", "NEW-SESSION",
+                                                      intended, "Right")
+                            for index in range(2):
+                                additional.add_sample(
+                                    f"NEW-{index}", "NEW-CAPTURE", index, points, points,
+                                    raw_mp_handedness="Left", timestamp_ms=9000 + index,
+                                    provenance={"test": "synthetic review probe"},
+                                )
+                        finally:
+                            additional.close()
+                        proposed = await request("review_plan", capture_id="NEW-CAPTURE")
+                        self.assertEqual(proposed["assessment_state"], "model_assessed")
+                        self.assertEqual(proposed["assessment_model_id"], model_dir.name)
+                        self.assertEqual(proposed["assessed_count"], 2)
+                        self.assertEqual({r["sample_id"] for r in proposed["suggested"]},
+                                         {"NEW-0", "NEW-1"})
+                        self.assertTrue(all(
+                            row["reason"] == "model_disagreement"
+                            and not row["trained_on_this_sample"]
+                            for row in proposed["suggested"]))
+                        self.assertFalse(proposed["can_batch_accept"])
+                        history = list((workspace / "assessments").glob("*.json"))
+                        self.assertEqual(len(history), 1)
+                        provenance = json.loads(history[0].read_text())
+                        self.assertEqual(provenance["model_artifact_id"], model_dir.name)
+                        self.assertEqual(provenance["source_snapshot_id"], frozen["snapshot_id"])
+                        self.assertEqual(len(provenance["assessments"]), 2)
+                        immutable_bytes = history[0].read_bytes()
+                        history[0].write_text('{"invalid":"cache"}')
+                        corrupt = await request("review_plan", capture_id="NEW-CAPTURE")
+                        self.assertEqual(corrupt["assessment_state"], "assessment_unavailable")
+                        self.assertFalse(corrupt["can_batch_accept"])
+                        history[0].write_bytes(immutable_bytes)
+                        for sample_id in ("NEW-0", "NEW-1"):
+                            await request("accept", sample_id=sample_id)
+                        resolved = await request("review_plan", capture_id="NEW-CAPTURE")
+                        self.assertEqual(resolved["suggested_pending"], 0)
+                        self.assertEqual(history[0].read_bytes(), immutable_bytes)
+                        self.assertEqual(len(list((workspace / "assessments").glob("*.json"))), 1)
+
+                        # A novel gesture is collectable before retraining,
+                        # but five-class predictions must not condemn it.
+                        custom = DatasetStore(workspace / "handd.sqlite")
+                        try:
+                            custom.create_capture("CUSTOM-CAPTURE", "NEW-SESSION",
+                                                  "Future_Gesture", "Right")
+                            custom.add_sample(
+                                "CUSTOM-0", "CUSTOM-CAPTURE", 0, points, points,
+                                raw_mp_handedness="Left", timestamp_ms=9100,
+                                provenance={"test": "new gesture"},
+                            )
+                        finally:
+                            custom.close()
+                        unsupported = await request("review_plan", capture_id="CUSTOM-CAPTURE")
+                        self.assertEqual(unsupported["assessment_state"], "unsupported_gesture")
+                        self.assertEqual(unsupported["suggested"], [])
+                        self.assertFalse(unsupported["can_batch_accept"])
 
                         # Real loopback delivery of runtime updates from the new
                         # model; no claim about camera-to-WebKit/browser latency.

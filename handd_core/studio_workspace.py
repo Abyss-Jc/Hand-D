@@ -79,11 +79,22 @@ class StudioWorkspace:
             store.close()
 
     @staticmethod
-    def _quality_plan(rows: list, capture_id: str) -> dict:
+    def _quality_plan(rows: list, capture_id: str, assessment: dict | None = None) -> dict:
+        assessment = assessment or {
+            'assessment_state': 'no_model_assessment', 'suggested': [],
+            'assessment_model_id': None,
+        }
         data=[(row['sample_id'],row['review_status'],row['lifecycle_status']) for row in rows]
-        token=hashlib.sha256(json.dumps(data,separators=(',',':')).encode()).hexdigest()
+        token=hashlib.sha256(json.dumps({
+            'rows':data,
+            'model':assessment.get('assessment_model_id'),
+            'revision':assessment.get('assessment_revision'),
+            'state':assessment['assessment_state'],
+            'suggestions':[(r['sample_id'],r['reason']) for r in assessment['suggested']],
+        },sort_keys=True,separators=(',',':')).encode()).hexdigest()
         active=[r for r in rows if r['lifecycle_status']=='active']
-        ids=sorted(r['sample_id'] for r in active)
+        suspicious={r['sample_id'] for r in assessment['suggested']}
+        ids=sorted(r['sample_id'] for r in active if r['sample_id'] not in suspicious)
         seed=int.from_bytes(hashlib.sha256(
             (capture_id+'|'+','.join(ids)).encode()).digest()[:8],'big')
         chosen=set(random.Random(seed).sample(
@@ -94,18 +105,32 @@ class StudioWorkspace:
         qc_rejected=[r['sample_id'] for r in active if
                      r['sample_id'] in chosen and r['review_status']=='rejected']
         pending=sum(r['review_status']=='unreviewed' for r in active)
+        suggested_pending=[row for row in assessment['suggested']
+                           if any(r['sample_id']==row['sample_id'] and
+                                  r['review_status']=='unreviewed' for r in active)]
+        unassessable_pending = [
+            r['sample_id'] for r in active
+            if r['sample_id'] in assessment.get('unassessable', ())
+            and r['review_status']=='unreviewed'
+        ]
         return {
             'capture_id':capture_id,'token':token,'pending':pending,
             'qc_sample_ids':qc_ids,'qc_unreviewed':qc_unreviewed,
             'qc_rejected':qc_rejected,
-            'can_batch_accept':pending>0 and not qc_unreviewed and not qc_rejected,
-            'assessment_state':'no_model_assessment','suggested':[],
+            'can_batch_accept':(pending>0 and not qc_unreviewed and not qc_rejected
+                                and not suggested_pending
+                                and not unassessable_pending
+                                and assessment['assessment_state'] != 'assessment_unavailable'),
+            'suggested_pending':len(suggested_pending),
+            'unassessable_pending':len(unassessable_pending),
+            **assessment,
         }
 
     @staticmethod
     def _capture_rows(store, capture_id):
         rows=store.conn.execute(
-            '''SELECT s.sample_id,s.review_status,s.lifecycle_status
+            '''SELECT s.sample_id,s.review_status,s.lifecycle_status,
+                      s.world_landmarks,s.raw_mp_handedness,c.gesture
                FROM samples s JOIN captures c USING(capture_id)
                JOIN collection_sessions cs USING(session_id)
                WHERE c.capture_id=? AND cs.participant_id IN ('P001','P002')
@@ -119,7 +144,10 @@ class StudioWorkspace:
             raise ValueError('Invalid Capture ID')
         store=DatasetStore(self.path/'handd.sqlite')
         try:
-            return self._quality_plan(self._capture_rows(store,capture_id),capture_id)
+            rows=self._capture_rows(store,capture_id)
+            from handd_core.review_assessment import assess_capture
+            assessment=assess_capture(self.path,rows,capture_id)
+            return self._quality_plan(rows,capture_id,assessment)
         finally:
             store.close()
 
@@ -128,12 +156,20 @@ class StudioWorkspace:
             raise ValueError('Invalid batch request')
         store=DatasetStore(self.path/'handd.sqlite')
         try:
+            # Do expensive Candidate validation/inference before the SQLite
+            # write lock; the token detects any intervening Capture changes.
+            rows=self._capture_rows(store,capture_id)
+            from handd_core.review_assessment import assess_capture
+            assessment=assess_capture(self.path,rows,capture_id)
             with store.conn:
                 store.conn.execute('BEGIN IMMEDIATE')
                 rows=self._capture_rows(store,capture_id)
-                plan=self._quality_plan(rows,capture_id)
+                plan=self._quality_plan(rows,capture_id,assessment)
                 if token!=plan['token']:
                     raise ValueError('Capture changed; refresh Quality Check before batch acceptance')
+                from handd_core.studio_models import StudioModels
+                if StudioModels(self.path).listed_active_id()!=assessment.get('assessment_model_id'):
+                    raise ValueError('Active Model changed; refresh Quality Check')
                 if not plan['can_batch_accept']:
                     raise ValueError('Resolve random QC; rejected QC requires individual review of the Capture')
                 pending=[r['sample_id'] for r in rows if
@@ -178,6 +214,9 @@ class StudioWorkspace:
         store = DatasetStore(self.path / 'handd.sqlite')
         try:
             sample = store.get_sample(sample_id)
+            from handd_core.feature_transform import canonicalize_world_landmarks
+            canonical = canonicalize_world_landmarks(
+                sample['world_landmarks'], sample['raw_mp_handedness'])
             return {
                 'sample_id': sample['sample_id'], 'gesture': sample['gesture'],
                 'hand': sample['hand'], 'raw_mp_handedness': sample['raw_mp_handedness'],
@@ -185,6 +224,8 @@ class StudioWorkspace:
                 'lifecycle_status': sample['lifecycle_status'],
                 'image_landmarks': sample['image_landmarks'].tolist(),
                 'world_landmarks': sample['world_landmarks'].tolist(),
+                'canonical_landmarks': (
+                    canonical[:63].reshape(21,3).tolist() if canonical is not None else None),
             }
         finally:
             store.close()

@@ -21,6 +21,12 @@ names.push('collect-preview','collect-hands','collect-visual-status',
 names.push('browse-gesture','browse-participant','browse-review-status','browse-apply',
   'review-capture','review-qc-sample','review-qc-open','review-batch-accept',
   'review-queue-status');
+names.push('browse-inspect','review-suggested-sample','review-suggested-open',
+  'review-sample-prev','review-sample-next','review-sample-position',
+  'review-world-mode','review-pitch','review-reset-view');
+names.push('review-sample-scrub');
+names.push('workspace-active-label');
+names.push('collect-progress-bar','collect-go-review');
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
   names.push('studio-pane-'+section);
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
@@ -51,6 +57,9 @@ class Element {
   emit(type, event = {}) { this.listeners[type]?.(event); }
 }
 const elements = Object.fromEntries(names.map(name => [name, new Element(name)]));
+elements['review-world-mode'].value='canonical';
+elements['review-angle'].value='25';
+elements['review-pitch'].value='0';
 elements.drawing.parentElement = elements['canvas-shell'];
 elements['canvas-shell'].parentElement = new Element('workspace');
 globalThis.document = {
@@ -228,7 +237,7 @@ test('Studio uses explicit workspace and manual review/immutable snapshot comman
     };
     throw Error(command);
   }}};
-  elements['select-workspace'].emit('click');
+  elements['browse-workspace'].emit('click');
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(selected,'/tmp/handd-user-workspace');
   await timers[0]();
@@ -246,6 +255,7 @@ test('Studio uses explicit workspace and manual review/immutable snapshot comman
                 lifecycle_status:'active'}],snapshot_ready:true,eligible_count:1,
       snapshot_blockers:[],snapshot_warnings:[]}});
   assert.equal(elements['review-sample'].children.length,1);
+  assert.equal(elements['workspace-active-label'].textContent,'handd-user-workspace');
   assert.equal(elements['review-next'].disabled,true);
   assert.match(elements['review-page'].textContent,/1 of 1/);
   assert.equal(socket.sent.at(-1).action,'sample_detail');
@@ -256,7 +266,8 @@ test('Studio uses explicit workspace and manual review/immutable snapshot comman
     data:{sample_id:'SAMPLE0',gesture:'Fist',hand:'Right',raw_mp_handedness:'Left',
       review_status:'unreviewed',lifecycle_status:'active',
       image_landmarks:Array.from({length:21},(_,i)=>[.2+i*.02,.35,0]),
-      world_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01])}});
+      world_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01]),
+      canonical_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01])}});
   assert.equal(elements['review-hands'].children[0].style.display,'');
   assert.equal(elements['review-hands'].children[0].children.length,41);
   assert.match(elements['review-visual-status'].textContent,/Stored 21 joints/);
@@ -354,7 +365,7 @@ test('Browse filters and deliberate QC gate batch accept; no invented model sugg
       suggested:[],qc_sample_ids:['SAMPLE0'],qc_unreviewed:['SAMPLE0'],qc_rejected:[],
       can_batch_accept:false}});
   assert.equal(elements['review-batch-accept'].disabled,true);
-  assert.match(elements['review-queue-status'].textContent,/No model-backed/);
+  assert.match(elements['review-queue-status'].textContent,/No verified model evidence/);
   elements['review-qc-open'].emit('click');
   assert.equal(socket.sent.at(-1).action,'sample_detail');
   assert.equal(socket.sent.at(-1).sample_id,'SAMPLE0');
@@ -362,7 +373,8 @@ test('Browse filters and deliberate QC gate batch accept; no invented model sugg
     data:{sample_id:'SAMPLE0',gesture:'Fist',hand:'Right',raw_mp_handedness:'Left',
       review_status:'unreviewed',lifecycle_status:'active',
       image_landmarks:Array.from({length:21},(_,i)=>[.1+i*.025,.3,0]),
-      world_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01])}});
+      world_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01]),
+      canonical_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01])}});
   elements['review-accept'].emit('click');
   const accept=socket.sent.at(-1);
   assert.equal(accept.action,'accept');
@@ -394,6 +406,44 @@ test('Browse filters and deliberate QC gate batch accept; no invented model sugg
   assert.equal(socket.sent.at(-1).token,'v2');
 });
 
+test('Review keeps flagged predictions and sample inspection on the same screen',()=>{
+  const socket=connections.at(-1);
+  elements['review-capture'].emit('change');
+  const next=socket.sent.at(-1);
+  assert.equal(next.action,'review_plan');
+  socket.sendEvent({type:'studio.response',request_id:next.request_id,ok:true,
+    data:{capture_id:'C001',pending:2,token:'v3',assessment_state:'model_assessed',
+      assessment_model_id:'candidate-test',assessed_count:2,
+      suggested_pending:1,can_batch_accept:false,
+      suggested:[{sample_id:'SAMPLE1',reason:'model_disagreement',
+        predicted_label:'Idle',review_status:'unreviewed'}],
+      qc_sample_ids:['SAMPLE0'],qc_unreviewed:[],qc_rejected:[]}});
+  assert.match(elements['review-queue-status'].textContent,/1 flagged/);
+  assert.equal(elements['review-batch-accept'].disabled,true);
+  elements['review-suggested-open'].emit('click');
+  assert.equal(elements['studio-pane-review'].hidden,false);
+  assert.equal(elements['studio-pane-browse'].hidden,true);
+  assert.equal(socket.sent.at(-1).action,'sample_detail');
+  assert.equal(socket.sent.at(-1).sample_id,'SAMPLE1');
+  const xyz=Array.from({length:21},(_,i)=>[i*.02,(i%5)*.02,(i%7)*.01]);
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+    ok:true,data:{sample_id:'SAMPLE1',gesture:'Fist',hand:'Right',
+      raw_mp_handedness:'Left',review_status:'unreviewed',lifecycle_status:'active',
+      image_landmarks:xyz,world_landmarks:xyz,canonical_landmarks:xyz}});
+  assert.equal(elements['review-accept'].disabled,false);
+  const original=elements['review-world'].children[0].children[0].attributes.x1;
+  elements['review-pitch'].value='50';
+  elements['review-pitch'].emit('input');
+  assert.notEqual(elements['review-world'].children[0].children[0].attributes.x1,original);
+  elements['review-world'].emit('pointerdown',{clientX:50,clientY:50,pointerId:1});
+  elements['review-world'].emit('pointermove',{clientX:90,clientY:70});
+  elements['review-world'].emit('pointerup',{});
+  assert.notEqual(Number(elements['review-angle'].value),25);
+  elements['review-reset-view'].emit('click');
+  assert.equal(elements['review-pitch'].value,'0');
+  assert.equal(elements['review-angle'].value,'25');
+});
+
 test('Studio Collect starts only on explicit action and exposes Pause Resume Finish',async()=>{
   // Existing Studio WebSocket connected by previous test.
   const socket=connections.at(-1);
@@ -410,10 +460,13 @@ test('Studio Collect starts only on explicit action and exposes Pause Resume Fin
   assert.equal(socket.sent.at(-1).target,2);
   const request_id=socket.sent.at(-1).request_id;
   socket.sendEvent({type:'studio.response',request_id,ok:true,data:{
-    state:'capturing',count:0,target:2,participant:'P001',gesture:'Fist'
+    state:'capturing',count:0,target:2,participant:'P001',gesture:'Fist',
+    capture_id:'C-NEW'
   }});
   assert.match(elements['collect-progress'].textContent,/0\s*\/\s*2/);
   elements['collect-pause'].emit('click');
+  assert.equal(elements['collect-go-review'].disabled,true);
+  assert.equal(elements['collect-progress-bar'].max,2);
   assert.equal(socket.sent.at(-1).action,'collect_pause');
   socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
     ok:true,data:{state:'paused',count:1,target:2}});
@@ -421,6 +474,14 @@ test('Studio Collect starts only on explicit action and exposes Pause Resume Fin
   assert.equal(socket.sent.at(-1).action,'collect_resume');
   elements['collect-finish'].emit('click');
   assert.equal(socket.sent.at(-1).action,'collect_finish');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
+    ok:true,data:{state:'finished',capture_id:'C-NEW',count:2,target:2}});
+  assert.equal(elements['collect-progress-bar'].value,2);
+  assert.equal(elements['collect-go-review'].disabled,false);
+  elements['collect-go-review'].emit('click');
+  assert.equal(elements['studio-pane-review'].hidden,false);
+  assert.equal(socket.sent.at(-1).action,'review_plan');
+  assert.equal(socket.sent.at(-1).capture_id,'C-NEW');
 });
 
 test('Studio activates only selected compatible candidate, shows Active Model on Whiteboard',()=>{
@@ -484,13 +545,13 @@ test('Save/Open preserves editable strokes; Export emits camera-free SVG; cancel
   assert.match(elements['document-status'].textContent,/ink.svg/);
 });
 
-test('Browse/Create Workspace invoke native picker, not arbitrary frontend directory access',async()=>{
+test('Open/Create Workspace use native picker; typed path is explicit alternative',async()=>{
   let kind;
   window.__TAURI__={core:{invoke:async command=>{
     kind=command;
     return '/tmp/native-user-project';
   }}};
-  elements['browse-workspace'].emit('click');
+  elements['select-workspace'].emit('click');
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(kind,'pick_workspace');
   assert.equal(elements['workspace-path'].value,'/tmp/native-user-project');

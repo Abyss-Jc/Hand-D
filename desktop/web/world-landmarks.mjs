@@ -1,13 +1,14 @@
 /** Orthographic view of a stored MediaPipe world-space hand; display only. */
-export function projectWorldLandmarks(points, degrees=0) {
+export function projectWorldLandmarks(points, yawDegrees=0, pitchDegrees=0) {
   if (!Array.isArray(points)||points.length!==21||
       points.some(p=>!Array.isArray(p)||p.length!==3||p.some(v=>!Number.isFinite(v))))
     return null;
-  const radians=degrees*Math.PI/180;
-  const cosine=Math.cos(radians),sine=Math.sin(radians);
-  const rotated=points.map(([x,y,z])=>({
-    x:x*cosine+z*sine, y, depth:z*cosine-x*sine,
-  }));
+  const yaw=yawDegrees*Math.PI/180,pitch=pitchDegrees*Math.PI/180;
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cx=Math.cos(pitch),sx=Math.sin(pitch);
+  const rotated=points.map(([x,y,z])=>{
+    const nx=x*cy+z*sy, nz=z*cy-x*sy;
+    return {x:nx,y:y*cx-nz*sx,depth:y*sx+nz*cx};
+  });
   const xs=rotated.map(p=>p.x),ys=rotated.map(p=>p.y);
   const minX=Math.min(...xs),minY=Math.min(...ys);
   const extent=Math.max(Math.max(...xs)-minX,Math.max(...ys)-minY);
