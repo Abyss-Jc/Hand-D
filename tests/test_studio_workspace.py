@@ -103,3 +103,44 @@ class StudioWorkspaceTests(unittest.TestCase):
                          'P003 samples are reserved for the sealed Final Test')
         with self.assertRaises(ValueError):
             studio.build_snapshot()
+
+    def test_capture_quality_check_gates_atomic_batch_accept_and_keeps_events(self):
+        studio = StudioWorkspace(self.path)
+        plan = studio.review_plan('C001')
+        self.assertEqual(plan['assessment_state'], 'no_model_assessment')
+        self.assertEqual(plan['suggested'], [])
+        self.assertEqual(len(plan['qc_sample_ids']), 1)
+        self.assertFalse(plan['can_batch_accept'])
+        with self.assertRaises(ValueError):
+            studio.batch_accept('C001', plan['token'])
+        qc_id = plan['qc_sample_ids'][0]
+        studio.transition(qc_id, 'reject')
+        refreshed = studio.review_plan('C001')
+        self.assertFalse(refreshed['can_batch_accept'])
+        self.assertEqual(refreshed['qc_rejected'],[qc_id])
+        with self.assertRaises(ValueError):
+            studio.batch_accept('C001', plan['token'])
+        with self.assertRaises(ValueError):
+            studio.batch_accept('C001', refreshed['token'])
+        studio.transition(qc_id, 'accept')
+        refreshed=studio.review_plan('C001')
+        self.assertTrue(refreshed['can_batch_accept'])
+        result = studio.batch_accept('C001', refreshed['token'])
+        self.assertEqual(result['accepted_count'], 2)
+        self.assertEqual(self.store.get_sample(qc_id)['review_status'], 'accepted')
+        others = [f'SAMPLE{i}' for i in range(3) if f'SAMPLE{i}' != qc_id]
+        for sample_id in others:
+            self.assertEqual(self.store.get_sample(sample_id)['review_status'], 'accepted')
+            self.assertIn('batch', self.store.list_review_events(sample_id)[0]['reason'])
+        self.assertEqual(studio.review_plan('C001')['pending'], 0)
+
+    def test_browse_filters_without_mutating_canonical_samples(self):
+        studio = StudioWorkspace(self.path)
+        self.store.set_review_status('SAMPLE0', 'rejected')
+        filtered = studio.overview(gesture='Index_Finger', review_status='unreviewed',
+                                   participant='P001')
+        self.assertEqual(filtered['browse_total'], 2)
+        self.assertEqual(len(filtered['samples']), 2)
+        self.assertEqual(studio.overview(gesture='Fist')['browse_total'], 0)
+        with self.assertRaises(ValueError):
+            studio.overview(review_status='malformed')

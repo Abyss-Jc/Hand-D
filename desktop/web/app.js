@@ -25,6 +25,7 @@ let pendingWorkspace = null;
 let studioRequestNumber = 0;
 const studioRequests = new Map();
 let reviewOffset = 0;
+let qualityPlan = null;
 let collectState = 'idle';
 let activeModelId = null;
 let modelChoices = new Map();
@@ -260,6 +261,14 @@ function navigate(view) {
 }
 $('nav-whiteboard').addEventListener('click', () => navigate('whiteboard'));
 $('nav-studio').addEventListener('click', () => navigate('studio'));
+function selectStudioTab(tab) {
+  for (const name of ['collect','browse','review','snapshots','models','runtime']) {
+    $('studio-pane-'+name).hidden=name!==tab;
+    $('studio-tab-'+name).setAttribute('aria-selected',String(name===tab));
+  }
+}
+for (const tab of ['collect','browse','review','snapshots','models','runtime'])
+  $('studio-tab-'+tab).addEventListener('click',()=>selectStudioTab(tab));
 
 function studioRequest(action, fields = {}) {
   if (!ws || ws.readyState !== WebSocket.OPEN && ws.readyState !== 1) {
@@ -270,10 +279,20 @@ function studioRequest(action, fields = {}) {
   studioRequests.set(request_id, action);
   ws.send(JSON.stringify({type:'studio.request',request_id,action,...fields}));
 }
+function browseFilters() {
+  return {
+    gesture:$('browse-gesture').value.trim()||null,
+    participant:$('browse-participant').value||null,
+    review_status:$('browse-review-status').value||null,
+  };
+}
+function requestBrowse(offset=0) {
+  studioRequest('overview',{offset,...browseFilters()});
+}
 function renderDataset(data) {
   reviewOffset=data.review_offset??0;
   const pageSize=data.review_page_size??40;
-  const total=data.sample_count??0;
+  const total=data.browse_total??data.sample_count??0;
   const shown=(data.samples??[]).length;
   $('review-prev').disabled=reviewOffset===0;
   $('review-next').disabled=reviewOffset+shown>=total;
@@ -286,7 +305,21 @@ function renderDataset(data) {
     + (counts.unreviewed || 0) + ' pending · '
     + (counts.accepted || 0) + ' accepted · '
     + (counts.rejected || 0) + ' rejected · '
-    + (data.eligible_count || 0) + ' eligible for Development';
+    + (data.eligible_count || 0) + ' eligible for Development · '
+    + total + ' match filters';
+  const captureSelect=$('review-capture');
+  const oldCapture=captureSelect.value;
+  captureSelect.replaceChildren();
+  for(const capture of data.captures||[]) {
+    const option=document.createElement('option');
+    option.value=capture.capture_id;
+    option.textContent=capture.participant_id+' / '+capture.gesture
+      +' / '+capture.sample_count+' samples · '+capture.capture_id.slice(0,8);
+    captureSelect.append(option);
+  }
+  captureSelect.value=(data.captures||[]).some(c=>c.capture_id===oldCapture)
+    ? oldCapture:(data.captures?.[0]?.capture_id||'');
+  requestQualityPlan();
   const sampleSelect = $('review-sample');
   const oldValue = sampleSelect.value;
   sampleSelect.replaceChildren();
@@ -311,10 +344,67 @@ function renderDataset(data) {
   }
 }
 $('review-prev').addEventListener('click',()=>{
-  if (reviewOffset>0) studioRequest('overview',{offset:Math.max(0,reviewOffset-40)});
+  if (reviewOffset>0) requestBrowse(Math.max(0,reviewOffset-40));
 });
 $('review-next').addEventListener('click',()=>{
-  if (!$('review-next').disabled) studioRequest('overview',{offset:reviewOffset+40});
+  if (!$('review-next').disabled) requestBrowse(reviewOffset+40);
+});
+$('browse-apply').addEventListener('click',()=>requestBrowse(0));
+function requestQualityPlan() {
+  qualityPlan=null;
+  $('review-batch-accept').disabled=true;
+  $('review-qc-sample').replaceChildren();
+  const capture_id=$('review-capture').value;
+  if(!capture_id) {
+    $('review-queue-status').textContent='No Development Capture selected.';
+    return;
+  }
+  $('review-queue-status').textContent='Loading Quality Check…';
+  studioRequest('review_plan',{capture_id});
+}
+$('review-capture').addEventListener('change',requestQualityPlan);
+function renderQualityPlan(data) {
+  if(!data||data.capture_id!==$('review-capture').value)return;
+  qualityPlan=data;
+  const select=$('review-qc-sample');
+  select.replaceChildren();
+  for(const id of data.qc_sample_ids||[]) {
+    const option=document.createElement('option');
+    option.value=id;
+    option.textContent=id+(data.qc_unreviewed?.includes(id)?' · needs review':' · reviewed');
+    select.append(option);
+  }
+  select.value=data.qc_sample_ids?.[0]||'';
+  $('review-batch-accept').disabled=!data.can_batch_accept;
+  const qcRejected=data.qc_rejected?.length||0;
+  $('review-queue-status').textContent=(data.pending||0)+' pending · '
+    +(data.qc_unreviewed?.length||0)+' QC observations need review. '
+    +(qcRejected ? qcRejected+' QC rejected: inspect this Capture individually; batch acceptance blocked. ' : '')
+    +'No model-backed review suggestions available yet.';
+}
+$('review-qc-open').addEventListener('click',()=>{
+  const sample_id=$('review-qc-sample').value;
+  if(!sample_id)return;
+  const select=$('review-sample');
+  if(![...select.children].some(option=>option.value===sample_id)) {
+    const option=document.createElement('option');
+    option.value=sample_id;
+    option.textContent=sample_id+' · Quality Check';
+    select.append(option);
+  }
+  select.value=sample_id;
+  selectStudioTab('browse');
+  requestReviewSample();
+});
+$('review-batch-accept').addEventListener('click',()=>{
+  const plan=qualityPlan;
+  if(!plan?.can_batch_accept||plan.capture_id!==$('review-capture').value)return;
+  if(typeof window.confirm==='function'&&!window.confirm(
+    'You reviewed the QC subset and confirmed the intended gesture while collecting. '
+    +'Accept the remaining unreviewed, active observations in this Capture? '
+    +'Every acceptance is recorded in the audit trail.'))return;
+  $('review-batch-accept').disabled=true;
+  studioRequest('batch_accept',{capture_id:plan.capture_id,token:plan.token});
 });
 function requestReviewSample() {
   const sample_id=$('review-sample').value;
@@ -407,7 +497,9 @@ function handleStudioResponse(message) {
   if (!action) return;
   studioRequests.delete(message.request_id);
   if (!message.ok) {
-    const target = action === 'sample_detail' ? $('review-visual-status')
+    const target = ['review_plan','batch_accept'].includes(action)
+      ? $('review-queue-status')
+      : action === 'sample_detail' ? $('review-visual-status')
       : ['models','model_activate'].includes(action) ? $('models-status')
       : action === 'snapshot' ? $('snapshot-result')
       : action.startsWith('collect_') ? $('collect-progress') : $('workspace-message');
@@ -416,6 +508,12 @@ function handleStudioResponse(message) {
   }
   if (action === 'models') {
     renderModels(message.data);
+  } else if (action === 'review_plan') {
+    renderQualityPlan(message.data);
+  } else if (action === 'batch_accept') {
+    $('review-queue-status').textContent='Accepted '+message.data.accepted_count
+      +' remaining observations. Review events saved.';
+    requestBrowse(reviewOffset);
   } else if (action === 'model_activate') {
     activeModelId = message.data.artifact_id;
     $('models-status').textContent = 'Active: ' + activeModelId + ' · verified and loaded';
@@ -428,13 +526,13 @@ function handleStudioResponse(message) {
   } else if (action === 'snapshot') {
     $('snapshot-result').textContent = 'Snapshot created: '
       + message.data.snapshot_id + ' (' + message.data.workspace_relative_path + ')';
-    studioRequest('overview');
+    requestBrowse(reviewOffset);
   } else if (action.startsWith('collect_')) {
     renderCollection(message.data);
-    if (['complete','finished'].includes(message.data.state)) studioRequest('overview');
+    if (['complete','finished'].includes(message.data.state)) requestBrowse(0);
   } else {
     $('workspace-message').textContent = 'Saved manual review for ' + message.data.sample_id;
-    studioRequest('overview',{offset:reviewOffset});
+    requestBrowse(reviewOffset);
   }
 }
 $('select-workspace').addEventListener('click', async () => {
@@ -471,7 +569,7 @@ $('create-workspace').addEventListener('click',()=>{
     'Initialize a new Hand-D Project Workspace in an empty folder?'))return;
   nativeWorkspaceDialog('create_workspace');
 });
-$('refresh-dataset').addEventListener('click', () => studioRequest('overview',{offset:reviewOffset}));
+$('refresh-dataset').addEventListener('click', () => requestBrowse(reviewOffset));
 for (const action of ['accept','reject','drop','restore']) {
   $('review-' + action).addEventListener('click', () => {
     if (action==='accept' && $('review-accept').disabled) return;

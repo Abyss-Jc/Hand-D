@@ -68,6 +68,33 @@ class StudioTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(forbidden['ok'])
         await ws.close()
 
+    async def test_capture_quality_check_and_explicit_batch_accept_over_websocket(self):
+        store=DatasetStore(self.workspace/'handd.sqlite')
+        try:
+            points=landmark_fixture()
+            store.add_sample('SAMPLE1','C001',1,points,points,
+                             raw_mp_handedness='Left',timestamp_ms=101,provenance={})
+        finally:
+            store.close()
+        ws=await self.client.ws_connect(
+            f'http://127.0.0.1:{self.port}/ws?token={self.server.token}')
+        await ws.receive_json(timeout=3)
+        async def request(action,**fields):
+            await ws.send_json({'type':'studio.request','request_id':action,'action':action,**fields})
+            return await ws.receive_json(timeout=3)
+        first=(await request('review_plan',capture_id='C001'))['data']
+        blocked=await request('batch_accept',capture_id='C001',token=first['token'])
+        self.assertFalse(blocked['ok'])
+        qc=first['qc_sample_ids'][0]
+        accepted=await request('accept',sample_id=qc)
+        self.assertTrue(accepted['ok'])
+        new_plan=(await request('review_plan',capture_id='C001'))['data']
+        self.assertTrue(new_plan['can_batch_accept'])
+        result=await request('batch_accept',capture_id='C001',token=new_plan['token'])
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['data']['accepted_count'],1)
+        await ws.close()
+
     async def test_without_workspace_is_safe_and_reports_unconfigured(self):
         server=SidecarServer(runtime=GestureRuntime())
         port=await server.start()

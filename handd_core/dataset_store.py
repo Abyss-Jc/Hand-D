@@ -305,6 +305,8 @@ class DatasetStore:
         return counts
 
     def list_samples_overview(self, *, review_status: str | None = None,
+                              gesture: str | None = None,
+                              participant: str | None = None,
                               limit: int = 100,
                               offset: int = 0,
                               include_dropped: bool = False) -> list[dict[str, Any]]:
@@ -314,14 +316,17 @@ class DatasetStore:
         if type(limit) is not int or limit <= 0 or type(offset) is not int or offset < 0:
             raise ValueError('limit and offset must be valid positive page parameters')
         return [dict(row) for row in self.conn.execute(
-            '''SELECT s.sample_id, c.gesture, c.session_id, cs.participant_id,
+            '''SELECT s.sample_id, s.capture_id, c.gesture, c.session_id, cs.participant_id,
                       s.review_status, s.lifecycle_status, s.timestamp_ms
                FROM samples s JOIN captures c ON c.capture_id=s.capture_id
                JOIN collection_sessions cs ON cs.session_id=c.session_id
                WHERE (? IS NULL OR s.review_status=?)
                  AND (? OR s.lifecycle_status='active')
+                 AND (? IS NULL OR c.gesture=?)
+                 AND (? IS NULL OR cs.participant_id=?)
                ORDER BY s.recorded_at, s.sample_id LIMIT ? OFFSET ?''',
-            (review_status, review_status, include_dropped, limit, offset),
+            (review_status, review_status, include_dropped, gesture, gesture,
+             participant, participant, limit, offset),
         ).fetchall()]
 
     def _transition(self, sample_id: str, new_status: str, *, field: str,

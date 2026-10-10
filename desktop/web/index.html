@@ -78,8 +78,16 @@
         </div>
         <p id="workspace-message" role="status">No workspace selected. Whiteboard remains available.</p>
       </div>
+      <nav class="studio-tabs" role="tablist" aria-label="Studio sections">
+        <button id="studio-tab-collect" role="tab" aria-selected="true" aria-controls="studio-pane-collect">Collect</button>
+        <button id="studio-tab-browse" role="tab" aria-selected="false" aria-controls="studio-pane-browse">Browse</button>
+        <button id="studio-tab-review" role="tab" aria-selected="false" aria-controls="studio-pane-review">Review</button>
+        <button id="studio-tab-snapshots" role="tab" aria-selected="false" aria-controls="studio-pane-snapshots">Snapshots</button>
+        <button id="studio-tab-models" role="tab" aria-selected="false" aria-controls="studio-pane-models">Models</button>
+        <button id="studio-tab-runtime" role="tab" aria-selected="false" aria-controls="studio-pane-runtime">Runtime</button>
+      </nav>
       <div class="studio-grid">
-        <article>
+        <article id="studio-pane-collect" role="tabpanel" aria-labelledby="studio-tab-collect">
           <span class="marker">01</span><h2>Collect</h2>
           <p>Capture landmarks from the same live camera stream. Samples are always unreviewed until you review them.</p>
           <div class="studio-visual" id="collect-visual">
@@ -107,10 +115,17 @@
           <p id="collect-progress" role="status">Idle · select an existing workspace to begin.</p>
           <p class="mini">P003 Final Test collection is intentionally excluded from this development control.</p>
         </article>
-        <article>
-          <span class="marker">02</span><h2>Review</h2>
-          <p>Manual Accept / Reject and Drop / Restore with a canonical SQLite audit trail.</p>
+        <article id="studio-pane-browse" role="tabpanel" aria-labelledby="studio-tab-browse" hidden>
+          <span class="marker">02</span><h2>Dataset · Browse</h2>
+          <p>Explore every recorded sample, not just the ones suggested for review. Stored landmarks are not camera photos.</p>
           <div id="dataset-summary" aria-live="polite">Open an existing workspace to inspect samples.</div>
+          <label for="browse-gesture">Filter by gesture</label>
+          <input id="browse-gesture" type="text" maxlength="64" placeholder="All gestures">
+          <label for="browse-participant">Participant</label>
+          <select id="browse-participant"><option value="">All participants</option><option value="P001">P001</option><option value="P002">P002</option><option value="P003">P003</option></select>
+          <label for="browse-review-status">Review status</label>
+          <select id="browse-review-status"><option value="">All statuses</option><option value="unreviewed">Unreviewed</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option></select>
+          <button id="browse-apply">Apply filters</button>
           <label for="review-sample">Sample</label>
           <select id="review-sample" aria-label="Select sample for manual review"></select>
           <div class="studio-actions">
@@ -137,13 +152,27 @@
             <button id="refresh-dataset">Refresh</button>
           </div>
         </article>
-        <article>
-          <span class="marker">03</span><h2>Snapshots</h2>
+        <article id="studio-pane-review" role="tabpanel" aria-labelledby="studio-tab-review" hidden>
+          <span class="marker">03</span><h2>Review · Quality Check</h2>
+          <p>Review a small random sample from each Capture, then intentionally accept its remaining pending observations. No model assessment means no automatic suspicion ranking.</p>
+          <label for="review-capture">Capture to inspect</label>
+          <select id="review-capture" aria-label="Choose Capture for quality check"></select>
+          <p id="review-queue-status" role="status" class="mini">Select an existing Capture. Model-backed suggestions are not yet available.</p>
+          <label for="review-qc-sample">Random quality-check sample</label>
+          <select id="review-qc-sample" aria-label="Select sample in quality-check subset"></select>
+          <div class="studio-actions">
+            <button id="review-qc-open">Inspect this sample</button>
+            <button id="review-batch-accept" disabled>Accept remaining batch</button>
+          </div>
+          <p class="mini">You must review the quality-check subset first. Batch acceptance is an explicit human decision, never an automatic prediction.</p>
+        </article>
+        <article id="studio-pane-snapshots" role="tabpanel" aria-labelledby="studio-tab-snapshots" hidden>
+          <span class="marker">04</span><h2>Snapshots</h2>
           <p>Immutable Development Snapshots. Only accepted, active P001/P002 samples qualify.</p>
           <button id="build-snapshot" disabled>Build Development Snapshot</button>
           <p id="snapshot-result" role="status">Open a workspace and review samples first.</p>
         </article>
-        <article class="wide">
+        <article id="studio-pane-models" role="tabpanel" aria-labelledby="studio-tab-models" class="wide" hidden>
           <span class="marker">04</span><h2>Model Artifacts</h2>
           <p>Only verified final-refit Candidates from this workspace can become Active. Training remains an explicit CLI step.</p>
           <label for="models-list">Workspace Candidates</label>
@@ -154,7 +183,7 @@
           </div>
           <p id="models-status" role="status">Open a workspace to inspect Model Artifacts.</p>
         </article>
-        <article class="wide"><span class="marker">●</span><h2>Live runtime status</h2>
+        <article id="studio-pane-runtime" role="tabpanel" aria-labelledby="studio-tab-runtime" class="wide" hidden><span class="marker">●</span><h2>Live runtime status</h2>
           <pre id="diagnostics">The sidecar has not reported its status yet.</pre>
           <p class="mini">This view does not simulate training results. Desktop integration is still in progress under HD-09.</p></article>
       </div>

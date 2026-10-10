@@ -18,6 +18,13 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
 names.push('collect-preview','collect-hands','collect-visual-status',
   'review-hands','review-visual-status','review-prev','review-next','review-page',
   'review-world','review-angle','collect-visual');
+names.push('browse-gesture','browse-participant','browse-review-status','browse-apply',
+  'review-capture','review-qc-sample','review-qc-open','review-batch-accept',
+  'review-queue-status');
+for(const section of ['collect','browse','review','snapshots','models','runtime'])
+  names.push('studio-pane-'+section);
+for(const section of ['collect','browse','review','snapshots','models','runtime'])
+  names.push('studio-tab-'+section);
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
@@ -105,6 +112,22 @@ test('Whiteboard and Studio navigation does not erase canvas', () => {
   elements['nav-whiteboard'].emit('click');
   assert.equal(elements.whiteboard.hidden, false);
   assert.equal(elements.drawing.children.length, 1);
+});
+
+test('Studio uses separate task tabs instead of forcing all panels into one screen',()=>{
+  elements['nav-studio'].emit('click');
+  elements['studio-tab-review'].emit('click');
+  assert.equal(elements['studio-pane-review'].hidden,false);
+  assert.equal(elements['studio-pane-collect'].hidden,true);
+  assert.equal(elements['studio-tab-review'].attributes['aria-selected'],'true');
+  elements['studio-tab-browse'].emit('click');
+  assert.equal(elements['studio-pane-browse'].hidden,false);
+  assert.equal(elements['studio-pane-review'].hidden,true);
+  elements['studio-tab-runtime'].emit('click');
+  assert.equal(elements['studio-pane-runtime'].hidden,false,
+    'runtime health must remain accessible after splitting Studio views');
+  elements['studio-tab-collect'].emit('click');
+  elements['nav-whiteboard'].emit('click');
 });
 
 test('camera/clean mode, skeletal visibility and Wiggly style preserve strokes', async()=>{
@@ -303,6 +326,72 @@ test('Review navigates beyond the first 40 samples instead of silently truncatin
         gesture:'Fist',review_status:'unreviewed',lifecycle_status:'active'}))}});
   assert.equal(elements['review-sample'].children[0].value,'S40');
   assert.match(elements['review-page'].textContent,/41–80 of 85/);
+});
+
+test('Browse filters and deliberate QC gate batch accept; no invented model suggestions',()=>{
+  const socket=connections.at(-1);
+  elements['browse-gesture'].value='Fist';
+  elements['browse-participant'].value='P001';
+  elements['browse-review-status'].value='';
+  elements['browse-apply'].emit('click');
+  const filter=socket.sent.at(-1);
+  assert.equal(filter.action,'overview');
+  assert.equal(filter.gesture,'Fist');
+  assert.equal(filter.participant,'P001');
+  const overview=(statuses)=>({
+    workspace:'/tmp/handd-user-workspace',sample_count:2,browse_total:2,
+    review_offset:0,review_page_size:40,review_counts:{unreviewed:1,accepted:1},
+    captures:[{capture_id:'C001',gesture:'Fist',participant_id:'P001',sample_count:2}],
+    samples:statuses.map((review_status,i)=>({sample_id:'SAMPLE'+i,capture_id:'C001',
+      gesture:'Fist',review_status,lifecycle_status:'active'})),
+  });
+  socket.sendEvent({type:'studio.response',request_id:filter.request_id,
+    ok:true,data:overview(['unreviewed','unreviewed'])});
+  const planRequest=socket.sent.filter(r=>r.action==='review_plan').at(-1);
+  assert.equal(planRequest.capture_id,'C001');
+  socket.sendEvent({type:'studio.response',request_id:planRequest.request_id,ok:true,
+    data:{capture_id:'C001',pending:2,token:'v1',assessment_state:'no_model_assessment',
+      suggested:[],qc_sample_ids:['SAMPLE0'],qc_unreviewed:['SAMPLE0'],qc_rejected:[],
+      can_batch_accept:false}});
+  assert.equal(elements['review-batch-accept'].disabled,true);
+  assert.match(elements['review-queue-status'].textContent,/No model-backed/);
+  elements['review-qc-open'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'sample_detail');
+  assert.equal(socket.sent.at(-1).sample_id,'SAMPLE0');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,ok:true,
+    data:{sample_id:'SAMPLE0',gesture:'Fist',hand:'Right',raw_mp_handedness:'Left',
+      review_status:'unreviewed',lifecycle_status:'active',
+      image_landmarks:Array.from({length:21},(_,i)=>[.1+i*.025,.3,0]),
+      world_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01])}});
+  elements['review-accept'].emit('click');
+  const accept=socket.sent.at(-1);
+  assert.equal(accept.action,'accept');
+  socket.sendEvent({type:'studio.response',request_id:accept.request_id,
+    ok:true,data:{sample_id:'SAMPLE0',review_status:'accepted'}});
+  const refresh=socket.sent.at(-1);
+  socket.sendEvent({type:'studio.response',request_id:refresh.request_id,ok:true,
+    data:overview(['accepted','unreviewed'])});
+  const newRequest=socket.sent.filter(r=>r.action==='review_plan').at(-1);
+  socket.sendEvent({type:'studio.response',request_id:newRequest.request_id,ok:true,
+    data:{capture_id:'C001',pending:1,token:'v1-rejected',assessment_state:'no_model_assessment',
+      suggested:[],qc_sample_ids:['SAMPLE0'],qc_unreviewed:[],qc_rejected:['SAMPLE0'],
+      can_batch_accept:false}});
+  assert.equal(elements['review-batch-accept'].disabled,true);
+  assert.match(elements['review-queue-status'].textContent,/batch acceptance blocked/);
+  // After resolving a bad QC observation with a new documented human decision,
+  // server supplies a new revision token before batch acceptance.
+  elements['refresh-dataset'].emit('click');
+  const qcRefresh=socket.sent.at(-1);
+  socket.sendEvent({type:'studio.response',request_id:qcRefresh.request_id,ok:true,
+    data:overview(['accepted','unreviewed'])});
+  const clearRequest=socket.sent.filter(r=>r.action==='review_plan').at(-1);
+  socket.sendEvent({type:'studio.response',request_id:clearRequest.request_id,ok:true,
+    data:{capture_id:'C001',pending:1,token:'v2',assessment_state:'no_model_assessment',
+      suggested:[],qc_sample_ids:['SAMPLE0'],qc_unreviewed:[],qc_rejected:[],can_batch_accept:true}});
+  assert.equal(elements['review-batch-accept'].disabled,false);
+  elements['review-batch-accept'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'batch_accept');
+  assert.equal(socket.sent.at(-1).token,'v2');
 });
 
 test('Studio Collect starts only on explicit action and exposes Pause Resume Finish',async()=>{

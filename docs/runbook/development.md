@@ -424,6 +424,36 @@ The freezer uses PyInstaller **onedir**, bundling canonical Python, Torch CPU, O
 
 ### HD-10 integrated synthetic preflight (2026-10-09; not final acceptance)
 
+**HD-10 curator UX correction (source + automated contract, Linux):** Product
+requirements already require **Dataset Browse** for all Samples and a separate
+**Suggested for Review** work queue followed by random quality checks and
+deliberate batch acceptance (see `docs/requirements/hand-d-v2.md:26-38`
+and `docs/design/hand-d-v2-ux-shape.md:55-60`). The initial HD-09 thin Studio
+instead presented per-Sample manual Accept as its main workflow. Studio now
+has dedicated Collect / Browse / Review / Snapshots / Models sections, and
+Browse can filter by gesture, participant, and review state with full
+pagination, preserving read-only 2D/3D Sample inspection. Review operates on
+a selected P001/P002 Capture and reproducibly draws a small random QC
+subset (5% up to five Samples). An operator must explicitly accept/reject
+each QC Sample through Browse; a rejected QC observation blocks batch
+acceptance of that Capture and prompts individual inspection. If all selected
+QC Samples are accepted, **Accept remaining batch** requires an explicit
+confirmation and atomically records one immutable Review Event per accepted
+Sample. Changed database state invalidates the presented batch token, so the
+operator must refresh before applying changes. No Sample data or video is
+deleted/relabelled; Snapshot eligibility remains accepted AND active.
+
+**Important incomplete part:** without a verified model/out-of-sample
+assessment, the first Capture has **no trustworthy suspicious-sample
+ranking**. Review states this explicitly; it must not call the remainder
+automatically `clean`. The approved next curator tranche persists versioned
+Model Assessments, extracts authoritative held-out-Session OOF predictions
+or genuinely out-of-training Active Model predictions, and ranks Suggested
+for Review by disagreement then top-two score margin with validated
+thresholds. Until this exists, QC + explicit batch acceptance are a
+**human-confirmed bootstrap workflow**, not automatic validation.
+Physical Linux/WebKit UX acceptance remains not verified by these tests.
+
 **Studio visual inspection restoration for HD-10.** Studio → **Collect** now
 shows the same authenticated camera preview and live 21-joint drawing/modifier
 overlays as Whiteboard. Navigation enables the MJPEG consumer only for the
