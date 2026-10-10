@@ -169,10 +169,14 @@ class SidecarServer:
         try:
             async with self._studio_lock:
                 if action == 'overview':
-                    data = await asyncio.to_thread(self.studio.overview)
+                    data = await asyncio.to_thread(
+                        self.studio.overview, offset=command.get('offset', 0))
                 elif action in ('accept','reject','drop','restore'):
                     data = await asyncio.to_thread(
                         self.studio.transition, command.get('sample_id'), action)
+                elif action == 'sample_detail':
+                    data = await asyncio.to_thread(
+                        self.studio.sample_detail, command.get('sample_id'))
                 elif action == 'snapshot':
                     data = await asyncio.to_thread(
                         self.studio.build_snapshot, note=command.get('note', ''))

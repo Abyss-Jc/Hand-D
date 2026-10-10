@@ -424,6 +424,30 @@ The freezer uses PyInstaller **onedir**, bundling canonical Python, Torch CPU, O
 
 ### HD-10 integrated synthetic preflight (2026-10-09; not final acceptance)
 
+**Studio visual inspection restoration for HD-10.** Studio → **Collect** now
+shows the same authenticated camera preview and live 21-joint drawing/modifier
+overlays as Whiteboard. Navigation enables the MJPEG consumer only for the
+visible screen; the camera tracker remains alive during either view. It does
+not instantiate a second camera or save camera images. Gesture tracking while
+Studio is visible never draws on the hidden Whiteboard. Studio → **Review**
+selects a canonical Sample, requests its stored image/world landmarks through
+the authenticated `sample_detail` WebSocket action, and renders the 2D
+image-space hand and a rotatable orthographic projection of its 3D world-space
+hand. No photo is reconstructed or persisted. Review navigates datasets in
+pages of 40 rather than hiding Samples beyond the previous fixed first 40;
+Accept remains disabled until the selected Sample's image landmarks are valid
+and displayed. Changes of selection discard the old preview; late responses
+for a different Sample are ignored. `tests/test_studio_transport.py`,
+`tests/test_studio_workspace.py`, `desktop/tests/app-ui.test.mjs` and
+`desktop/tests/world-landmarks.test.mjs` cover transport, paging, rendering,
+rotation, valid-preview gating and hidden-Whiteboard protection.
+**Linux contract suite: 131 Python / 40 JS / 7 Rust PASS**; the 40th JS test
+protects against accidental canvas edits during Studio collection. **Human
+visual smoke in native Tauri/WebKit remains
+unverified.** The shape alone is not an independent truth label: human review
+must compare the intended gesture with observations while collecting; no
+stored camera frame exists for retrospective pose verification.
+
 Run `uv run --frozen python -m unittest tests.test_hd10_tracer -v` from the repo root. The test creates an isolated temporary workspace, drives authenticated Studio collection/review/snapshot requests using **synthetic landmark fixtures**, trains a genuine CPU Candidate on frozen inputs, explicitly activates that model, verifies runtime events over a real loopback WebSocket, and restarts the Python sidecar as a real child process to verify Active Model restoration. It removes temporary inputs/artifacts on exit. It does **not** use the camera, Tauri WebKit UI, production datasets or a real operator, and it intentionally does not treat fabricated intended labels as accuracy evidence.
 
 The 2026-10-09 Linux full regression (**130 Python / 35 JavaScript / 7 Rust PASS**) included 17 of 20 synthetic Samples eligible in the original Snapshot; the later review change excluded one more without modifying the immutable earlier Snapshot. The test invokes `python -m handd_core.train_cli` in a real subprocess, not a mocked training routine. Eight runtime updates gave **1.044 ms p95** for in-process event publication to the test's WS client, and **1.183 ms p95** for the separately reported post-landmarker Python compute segment. This is a tiny non-production sample, **not full end-to-end latency**. The verified Candidate was recovered by a new real Python sidecar process with `--no-camera`; no native Tauri or WebKit claim.

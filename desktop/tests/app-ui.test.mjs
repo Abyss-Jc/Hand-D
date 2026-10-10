@@ -15,6 +15,9 @@ const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'collect-finish','collect-progress','models-list','models-refresh',
   'models-activate','models-status','browse-workspace','create-workspace',
   'save-drawing','open-drawing','export-drawing','document-status'];
+names.push('collect-preview','collect-hands','collect-visual-status',
+  'review-hands','review-visual-status','review-prev','review-next','review-page',
+  'review-world','review-angle','collect-visual');
 class Element {
   constructor(id) {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
@@ -215,16 +218,91 @@ test('Studio uses explicit workspace and manual review/immutable snapshot comman
   socket.sendEvent({type:'studio.response',request_id:overviewRequest.request_id,
     ok:true,data:{workspace:'/tmp/handd-user-workspace',
       sample_count:1,review_counts:{unreviewed:0,accepted:1,rejected:0},
+      review_offset:0,review_page_size:40,
       samples:[{sample_id:'SAMPLE0',gesture:'Fist',review_status:'unreviewed',
                 lifecycle_status:'active'}],snapshot_ready:true,eligible_count:1,
       snapshot_blockers:[],snapshot_warnings:[]}});
   assert.equal(elements['review-sample'].children.length,1);
+  assert.equal(elements['review-next'].disabled,true);
+  assert.match(elements['review-page'].textContent,/1 of 1/);
+  assert.equal(socket.sent.at(-1).action,'sample_detail');
+  assert.equal(socket.sent.at(-1).sample_id,'SAMPLE0');
+  assert.equal(elements['review-accept'].disabled,true,
+    'accept must wait for a valid stored landmark preview');
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,ok:true,
+    data:{sample_id:'SAMPLE0',gesture:'Fist',hand:'Right',raw_mp_handedness:'Left',
+      review_status:'unreviewed',lifecycle_status:'active',
+      image_landmarks:Array.from({length:21},(_,i)=>[.2+i*.02,.35,0]),
+      world_landmarks:Array.from({length:21},(_,i)=>[i*.01,(i%5)*.02,(i%7)*.01])}});
+  assert.equal(elements['review-hands'].children[0].style.display,'');
+  assert.equal(elements['review-hands'].children[0].children.length,41);
+  assert.match(elements['review-visual-status'].textContent,/Stored 21 joints/);
+  assert.equal(elements['review-accept'].disabled,false);
+  assert.equal(elements['review-world'].children[0].style.display,'');
+  const beforeRotation=elements['review-world'].children[0].children[0].attributes.x1;
+  elements['review-angle'].value='-60';
+  elements['review-angle'].emit('input');
+  assert.notEqual(elements['review-world'].children[0].children[0].attributes.x1,beforeRotation);
   elements['review-sample'].value='SAMPLE0';
   elements['review-accept'].emit('click');
   assert.equal(socket.sent.at(-1).action,'accept');
   assert.equal(socket.sent.at(-1).sample_id,'SAMPLE0');
   elements['build-snapshot'].emit('click');
   assert.equal(socket.sent.at(-1).action,'snapshot');
+});
+
+test('Studio Collect reuses the same authenticated camera preview and live landmarks',()=>{
+  elements['nav-studio'].emit('click');
+  const socket=connections.at(-1);
+  elements['collect-preview'].naturalWidth=1280;
+  elements['collect-preview'].naturalHeight=720;
+  elements['collect-preview'].onload();
+  assert.equal(elements['collect-visual'].style.aspectRatio,'1280/720');
+  assert.equal(elements['collect-preview'].src,
+    'http://127.0.0.1:39009/mjpeg?token=synthetic-token');
+  assert.equal(elements.preview.getAttribute('src'),null,
+    'the hidden Whiteboard should not consume a second MJPEG stream');
+  const pts=Array.from({length:21},(_,i)=>({x:.2+i*.02,y:.35}));
+  socket.sendEvent({type:'runtime.update',runtime_session_id:'studio-session',
+    seq:1,timestamp_ms:100,payload:{drawing:{physical_hand:'Right',landmarks:pts,
+      pointer:{x:.3,y:.35},raw_gesture:'Index_Finger'},modifier:{physical_hand:'Left'}}});
+  assert.equal(elements['collect-hands'].children[0].style.display,'');
+  assert.match(elements['collect-visual-status'].textContent,/Index_Finger/);
+});
+
+test('Studio camera tracking never draws accidentally on the hidden Whiteboard',()=>{
+  const socket=connections.at(-1);
+  const previous=elements.drawing.children.length;
+  socket.sendEvent({type:'runtime.update',runtime_session_id:'studio-session',
+    seq:2,timestamp_ms:180,payload:{
+      drawing:{physical_hand:'Right',pointer:{x:.4,y:.5},action:'draw'},
+      modifier:{physical_hand:'Left'},
+    }});
+  assert.equal(elements.drawing.children.length,previous);
+  assert.equal(elements.cursor.hidden,true);
+});
+
+test('Review navigates beyond the first 40 samples instead of silently truncating',()=>{
+  const socket=connections.at(-1);
+  elements['refresh-dataset'].emit('click');
+  const current=socket.sent.at(-1);
+  assert.equal(current.action,'overview');
+  socket.sendEvent({type:'studio.response',request_id:current.request_id,ok:true,
+    data:{workspace:'/tmp/handd-user-workspace',sample_count:85,
+      review_offset:0,review_page_size:40,review_counts:{unreviewed:85},
+      samples:Array.from({length:40},(_,i)=>({sample_id:'S'+i,gesture:'Fist',
+        review_status:'unreviewed',lifecycle_status:'active'}))}});
+  assert.equal(elements['review-next'].disabled,false);
+  elements['review-next'].emit('click');
+  assert.equal(socket.sent.at(-1).action,'overview');
+  assert.equal(socket.sent.at(-1).offset,40);
+  socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,ok:true,
+    data:{workspace:'/tmp/handd-user-workspace',sample_count:85,
+      review_offset:40,review_page_size:40,review_counts:{unreviewed:85},
+      samples:Array.from({length:40},(_,i)=>({sample_id:'S'+(40+i),
+        gesture:'Fist',review_status:'unreviewed',lifecycle_status:'active'}))}});
+  assert.equal(elements['review-sample'].children[0].value,'S40');
+  assert.match(elements['review-page'].textContent,/41–80 of 85/);
 });
 
 test('Studio Collect starts only on explicit action and exposes Pause Resume Finish',async()=>{

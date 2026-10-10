@@ -37,6 +37,28 @@ class StudioWorkspaceTests(unittest.TestCase):
         self.assertFalse(summary['snapshot_ready'])
         self.assertNotIn('world_landmarks', json.dumps(summary))
 
+    def test_review_queue_can_reach_samples_after_first_page(self):
+        points = landmark_fixture()
+        for i in range(3, 47):
+            self.store.add_sample(
+                f'SAMPLE{i:03d}', 'C001', i, points, points,
+                raw_mp_handedness='Left', timestamp_ms=100*i, provenance={},
+            )
+        studio = StudioWorkspace(self.path)
+        first = studio.overview(offset=0)
+        second = studio.overview(offset=40)
+        self.assertEqual(first['review_page_size'], 40)
+        self.assertEqual(first['review_offset'], 0)
+        self.assertEqual(len(first['samples']), 40)
+        self.assertEqual(second['review_offset'], 40)
+        self.assertEqual(len(second['samples']), 7)
+        self.assertFalse(
+            {row['sample_id'] for row in first['samples']}
+            & {row['sample_id'] for row in second['samples']}
+        )
+        with self.assertRaises(ValueError):
+            studio.overview(offset=-1)
+
     def test_manual_review_drop_restore_and_explicit_snapshot(self):
         studio = StudioWorkspace(self.path)
         studio.transition('SAMPLE0', 'accept')

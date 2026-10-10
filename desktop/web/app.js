@@ -1,12 +1,17 @@
 import {RuntimeGate, Strokes} from './runtime-state.mjs';
 import {StrokeRenderer} from './stroke-renderer.mjs';
 import {HandOverlay,fitScene} from './hand-overlay.mjs';
+import {projectWorldLandmarks} from './world-landmarks.mjs';
 import {encodeWhiteboard,decodeWhiteboard,exportCleanSvg} from './drawing-document.mjs';
 
 const $ = id => document.getElementById(id);
 const strokes = new Strokes();
 const strokeRenderer = new StrokeRenderer($('drawing'));
 const handOverlay = new HandOverlay($('hands-overlay'));
+const collectOverlay = new HandOverlay($('collect-hands'));
+const reviewOverlay = new HandOverlay($('review-hands'));
+const worldOverlay = new HandOverlay($('review-world'));
+let selectedReviewWorld = null;
 const gate = new RuntimeGate();
 let tool = 'draw';
 let cameraMode = true;
@@ -19,6 +24,7 @@ let previewUrl = null;
 let pendingWorkspace = null;
 let studioRequestNumber = 0;
 const studioRequests = new Map();
+let reviewOffset = 0;
 let collectState = 'idle';
 let activeModelId = null;
 let modelChoices = new Map();
@@ -79,6 +85,11 @@ function releaseGesture(clearHands = true) {
 function onRuntimeEvent(event) {
   if (!gate.accept(event)) return;
   handOverlay.update(event.payload);
+  collectOverlay.update(event.payload);
+  const tracked = ['drawing','modifier'].filter(role=>event.payload?.[role]?.landmarks?.length===21);
+  $('collect-visual-status').textContent = tracked.length
+    ? tracked.map(role=>role+' hand: '+(event.payload[role].raw_gesture || 'tracking')).join(' · ')
+    : 'No tracked hand';
   const draw = event.payload?.drawing ?? {};
   const modifier = event.payload?.modifier ?? {};
   $('gesture').textContent = draw.stable_gesture || draw.raw_gesture || (
@@ -90,6 +101,11 @@ function onRuntimeEvent(event) {
     + ' / ' + (draw.action || 'no action') + ' · Modifier: '
     + (modifier.action || 'inactive');
   displayHealth(event.payload?.health);
+  if ($('whiteboard').hidden) {
+    // Studio observes gestures but must never edit the hidden Whiteboard.
+    releaseGesture(false);
+    return;
+  }
   const point = draw.pointer;
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
       || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
@@ -194,11 +210,17 @@ layoutScene();
 
 function updatePreview() {
   const preview = $('preview');
-  if (!cameraMode || !previewUrl) {
+  if (!cameraMode || !previewUrl || $('whiteboard').hidden) {
     preview.removeAttribute('src');
-    return; // MJPEG disconnect allows Python to suspend its JPEG encoder
+  } else if (preview.getAttribute?.('src') !== previewUrl) {
+    preview.src = previewUrl;
   }
-  if (preview.getAttribute?.('src') !== previewUrl) preview.src = previewUrl;
+  const collect=$('collect-preview');
+  if (!previewUrl || $('studio').hidden) {
+    collect.removeAttribute('src');
+  } else if (collect.getAttribute?.('src') !== previewUrl) {
+    collect.src=previewUrl;
+  }
 }
 function setCameraMode(enabled) {
   cameraMode = Boolean(enabled);
@@ -234,6 +256,7 @@ function navigate(view) {
   $('nav-studio').classList.toggle('selected', !whiteboard);
   $('nav-whiteboard').setAttribute('aria-selected', String(whiteboard));
   $('nav-studio').setAttribute('aria-selected', String(!whiteboard));
+  updatePreview(); // At most one MJPEG consumer; camera inference keeps running.
 }
 $('nav-whiteboard').addEventListener('click', () => navigate('whiteboard'));
 $('nav-studio').addEventListener('click', () => navigate('studio'));
@@ -248,6 +271,15 @@ function studioRequest(action, fields = {}) {
   ws.send(JSON.stringify({type:'studio.request',request_id,action,...fields}));
 }
 function renderDataset(data) {
+  reviewOffset=data.review_offset??0;
+  const pageSize=data.review_page_size??40;
+  const total=data.sample_count??0;
+  const shown=(data.samples??[]).length;
+  $('review-prev').disabled=reviewOffset===0;
+  $('review-next').disabled=reviewOffset+shown>=total;
+  $('review-page').textContent=shown
+    ? (reviewOffset+1)+'–'+(reviewOffset+shown)+' of '+total
+    : 'No samples on this page';
   const counts = data.review_counts || {};
   $('dataset-summary').textContent =
     (data.sample_count || 0) + ' samples · '
@@ -268,6 +300,7 @@ function renderDataset(data) {
   }
   sampleSelect.value = items.some(sample=>sample.sample_id===oldValue)
     ? oldValue : (items[0]?.sample_id || '');
+  requestReviewSample();
   $('build-snapshot').disabled = !data.snapshot_ready || !data.eligible_count;
   if (data.snapshot_blockers?.length) {
     $('snapshot-result').textContent = 'Blocked: ' + data.snapshot_blockers.join(', ');
@@ -276,6 +309,50 @@ function renderDataset(data) {
   } else {
     $('snapshot-result').textContent = 'Ready for an explicit Development Snapshot.';
   }
+}
+$('review-prev').addEventListener('click',()=>{
+  if (reviewOffset>0) studioRequest('overview',{offset:Math.max(0,reviewOffset-40)});
+});
+$('review-next').addEventListener('click',()=>{
+  if (!$('review-next').disabled) studioRequest('overview',{offset:reviewOffset+40});
+});
+function requestReviewSample() {
+  const sample_id=$('review-sample').value;
+  reviewOverlay.clear();
+  worldOverlay.clear();
+  selectedReviewWorld=null;
+  $('review-accept').disabled=true;
+  $('review-visual-status').textContent=sample_id
+    ? 'Loading stored landmarks for '+sample_id : 'No sample selected';
+  if (sample_id) studioRequest('sample_detail',{sample_id});
+}
+$('review-sample').addEventListener('change',requestReviewSample);
+function renderReviewWorld() {
+  worldOverlay.clear();
+  const points=projectWorldLandmarks(selectedReviewWorld,Number($('review-angle').value));
+  if (points) worldOverlay.update({drawing:{landmarks:points}});
+}
+$('review-angle').addEventListener('input',renderReviewWorld);
+function renderSampleDetail(data) {
+  if (!data || data.sample_id !== $('review-sample').value) return;
+  const points=data.image_landmarks;
+  const valid=Array.isArray(points)&&points.length===21
+    && points.every(p=>Array.isArray(p)&&p.length===3
+      && Number.isFinite(p[0])&&Number.isFinite(p[1])
+      && p[0]>=0&&p[0]<=1&&p[1]>=0&&p[1]<=1);
+  reviewOverlay.clear();
+  if (!valid) {
+    $('review-visual-status').textContent='Invalid stored image landmarks; do not accept blindly.';
+    return;
+  }
+  $('review-accept').disabled=false;
+  const role=data.raw_mp_handedness==='Left'?'drawing':'modifier';
+  reviewOverlay.update({[role]:{landmarks:points.map(p=>({x:p[0],y:p[1]}))}});
+  selectedReviewWorld=data.world_landmarks;
+  renderReviewWorld();
+  $('review-visual-status').textContent='Stored 21 joints · '+data.gesture
+    +' · '+data.hand+' hand · '+data.review_status+' / '+data.lifecycle_status
+    +' · not a camera photo';
 }
 function renderCollection(data) {
   if (!data || typeof data.state !== 'string') return;
@@ -330,7 +407,8 @@ function handleStudioResponse(message) {
   if (!action) return;
   studioRequests.delete(message.request_id);
   if (!message.ok) {
-    const target = ['models','model_activate'].includes(action) ? $('models-status')
+    const target = action === 'sample_detail' ? $('review-visual-status')
+      : ['models','model_activate'].includes(action) ? $('models-status')
       : action === 'snapshot' ? $('snapshot-result')
       : action.startsWith('collect_') ? $('collect-progress') : $('workspace-message');
     target.textContent = message.error || 'Studio operation failed.';
@@ -342,6 +420,8 @@ function handleStudioResponse(message) {
     activeModelId = message.data.artifact_id;
     $('models-status').textContent = 'Active: ' + activeModelId + ' · verified and loaded';
     studioRequest('models');
+  } else if (action === 'sample_detail') {
+    renderSampleDetail(message.data);
   } else if (action === 'overview') {
     $('workspace-message').textContent = 'Connected workspace: ' + message.data.workspace;
     renderDataset(message.data);
@@ -354,7 +434,7 @@ function handleStudioResponse(message) {
     if (['complete','finished'].includes(message.data.state)) studioRequest('overview');
   } else {
     $('workspace-message').textContent = 'Saved manual review for ' + message.data.sample_id;
-    studioRequest('overview');
+    studioRequest('overview',{offset:reviewOffset});
   }
 }
 $('select-workspace').addEventListener('click', async () => {
@@ -391,9 +471,10 @@ $('create-workspace').addEventListener('click',()=>{
     'Initialize a new Hand-D Project Workspace in an empty folder?'))return;
   nativeWorkspaceDialog('create_workspace');
 });
-$('refresh-dataset').addEventListener('click', () => studioRequest('overview'));
+$('refresh-dataset').addEventListener('click', () => studioRequest('overview',{offset:reviewOffset}));
 for (const action of ['accept','reject','drop','restore']) {
   $('review-' + action).addEventListener('click', () => {
+    if (action==='accept' && $('review-accept').disabled) return;
     const sample_id = $('review-sample').value;
     if (sample_id) studioRequest(action, {sample_id});
   });
@@ -463,6 +544,15 @@ function attachSidecar(status) {
     renderCollection({state:'idle',count:0,target:0});
     previewUrl = null;
     $('preview').removeAttribute('src');
+    $('collect-preview').removeAttribute('src');
+    collectOverlay.clear();
+    $('collect-visual-status').textContent='Waiting for camera connection';
+    reviewOverlay.clear();
+    worldOverlay.clear();
+    selectedReviewWorld=null;
+    $('review-accept').disabled=true;
+    $('review-sample').replaceChildren();
+    $('review-visual-status').textContent='Select a workspace and sample to inspect.';
     $('camera-fallback').hidden = false;
     $('footer-session').textContent = 'No sidecar session';
     displayHealth(null);
@@ -474,6 +564,11 @@ function attachSidecar(status) {
   const token = encodeURIComponent(status.token);
   const preview = $('preview');
   previewUrl = 'http://' + host + '/mjpeg?token=' + token;
+  $('collect-preview').onload = () => {
+    const image = $('collect-preview');
+    if (image.naturalWidth > 0 && image.naturalHeight > 0)
+      $('collect-visual').style.aspectRatio = image.naturalWidth + '/' + image.naturalHeight;
+  };
   preview.onload = () => {
     $('camera-fallback').hidden = true;
     if (preview.naturalWidth && preview.naturalHeight

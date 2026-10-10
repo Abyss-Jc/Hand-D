@@ -82,6 +82,12 @@
         <article>
           <span class="marker">01</span><h2>Collect</h2>
           <p>Capture landmarks from the same live camera stream. Samples are always unreviewed until you review them.</p>
+          <div class="studio-visual" id="collect-visual">
+            <img id="collect-preview" alt="Live camera preview for capture, not recorded" />
+            <svg id="collect-hands" viewBox="0 0 1 1" preserveAspectRatio="none"
+                 role="img" aria-label="Live hand landmarks, 21 joints per detected hand"></svg>
+            <span id="collect-visual-status" role="status">Waiting for live camera and landmarks</span>
+          </div>
           <label for="collect-participant">Participant (development only)</label>
           <select id="collect-participant"><option value="P001">P001</option><option value="P002">P002</option></select>
           <label for="collect-gesture">Intended gesture</label>
@@ -107,6 +113,24 @@
           <div id="dataset-summary" aria-live="polite">Open an existing workspace to inspect samples.</div>
           <label for="review-sample">Sample</label>
           <select id="review-sample" aria-label="Select sample for manual review"></select>
+          <div class="studio-actions">
+            <button id="review-prev" disabled>Previous 40</button>
+            <span id="review-page" aria-live="polite">No samples</span>
+            <button id="review-next" disabled>Next 40</button>
+          </div>
+          <div class="studio-visual review-visual">
+            <svg id="review-hands" viewBox="0 0 1 1" preserveAspectRatio="none"
+                 role="img" aria-label="Stored sample landmark reconstruction, not a camera photo"></svg>
+          </div>
+          <p class="mini">Stored image-space landmarks (2D)</p>
+          <div class="studio-visual review-visual">
+            <svg id="review-world" viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet"
+                 role="img" aria-label="Rotatable 3D world landmark skeleton projection"></svg>
+          </div>
+          <label for="review-angle">3D view rotation</label>
+          <input id="review-angle" type="range" min="-90" max="90" step="5" value="25">
+          <p id="review-visual-status" role="status" class="mini">Select a sample to inspect its stored landmarks before reviewing.</p>
+          <p class="mini">Landmark reconstruction only. No photo or video is stored, so verify the label during collection.</p>
           <div class="studio-actions">
             <button id="review-accept">Accept</button><button id="review-reject">Reject</button>
             <button id="review-drop">Drop</button><button id="review-restore">Restore</button>

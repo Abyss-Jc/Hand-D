@@ -306,12 +306,13 @@ class DatasetStore:
 
     def list_samples_overview(self, *, review_status: str | None = None,
                               limit: int = 100,
+                              offset: int = 0,
                               include_dropped: bool = False) -> list[dict[str, Any]]:
         """Small, read-only summary for a human review queue (no raw arrays)."""
         if review_status is not None and review_status not in REVIEW_STATUSES:
             raise ValueError('invalid review status filter')
-        if limit <= 0:
-            raise ValueError('limit must be positive')
+        if type(limit) is not int or limit <= 0 or type(offset) is not int or offset < 0:
+            raise ValueError('limit and offset must be valid positive page parameters')
         return [dict(row) for row in self.conn.execute(
             '''SELECT s.sample_id, c.gesture, c.session_id, cs.participant_id,
                       s.review_status, s.lifecycle_status, s.timestamp_ms
@@ -319,8 +320,8 @@ class DatasetStore:
                JOIN collection_sessions cs ON cs.session_id=c.session_id
                WHERE (? IS NULL OR s.review_status=?)
                  AND (? OR s.lifecycle_status='active')
-               ORDER BY s.recorded_at, s.sample_id LIMIT ?''',
-            (review_status, review_status, include_dropped, limit),
+               ORDER BY s.recorded_at, s.sample_id LIMIT ? OFFSET ?''',
+            (review_status, review_status, include_dropped, limit, offset),
         ).fetchall()]
 
     def _transition(self, sample_id: str, new_status: str, *, field: str,

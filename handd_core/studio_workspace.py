@@ -20,7 +20,9 @@ class StudioWorkspace:
             raise ValueError('Select an existing Hand-D workspace with handd.sqlite')
         self.path = workspace
 
-    def overview(self) -> dict:
+    def overview(self, *, offset: int = 0) -> dict:
+        if type(offset) is not int or offset < 0:
+            raise ValueError('Review offset must be a nonnegative integer')
         store = DatasetStore(self.path / 'handd.sqlite')
         try:
             # Match the actual Snapshot Builder's strict P001/P002 eligibility;
@@ -36,7 +38,10 @@ class StudioWorkspace:
                 'workspace': str(self.path),
                 'sample_count': store.count_samples(),
                 'review_counts': store.get_active_review_counts(),
-                'samples': store.list_samples_overview(limit=40, include_dropped=True),
+                'samples': store.list_samples_overview(
+                    limit=40, offset=offset, include_dropped=True),
+                'review_offset': offset,
+                'review_page_size': 40,
                 'snapshot_ready': readiness.ready,
                 'snapshot_blockers': list(readiness.blockers),
                 'snapshot_warnings': list(readiness.warnings),
@@ -61,6 +66,23 @@ class StudioWorkspace:
             sample = store.get_sample(sample_id)
             return {'sample_id': sample_id, 'review_status': sample['review_status'],
                     'lifecycle_status': sample['lifecycle_status']}
+        finally:
+            store.close()
+
+    def sample_detail(self, sample_id: str) -> dict:
+        if not isinstance(sample_id, str) or not (1 <= len(sample_id) <= 128):
+            raise ValueError('Invalid Sample ID')
+        store = DatasetStore(self.path / 'handd.sqlite')
+        try:
+            sample = store.get_sample(sample_id)
+            return {
+                'sample_id': sample['sample_id'], 'gesture': sample['gesture'],
+                'hand': sample['hand'], 'raw_mp_handedness': sample['raw_mp_handedness'],
+                'review_status': sample['review_status'],
+                'lifecycle_status': sample['lifecycle_status'],
+                'image_landmarks': sample['image_landmarks'].tolist(),
+                'world_landmarks': sample['world_landmarks'].tolist(),
+            }
         finally:
             store.close()
 
