@@ -2,13 +2,14 @@
 mod native_files;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SidecarReady {
@@ -24,11 +25,51 @@ struct SidecarReady {
 #[derive(Clone, Default)]
 struct Supervisor {
     ready: Arc<Mutex<Option<SidecarReady>>>,
+    failure: Arc<Mutex<Option<String>>>,
     restart: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
     active_child: Arc<Mutex<Option<Child>>>,
     workspace: Arc<Mutex<Option<PathBuf>>>,
     portable_root: Arc<Mutex<Option<PathBuf>>>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum SidecarStatus {
+    Ready(SidecarReady),
+    Failed { error: String },
+}
+
+fn wait_for_sidecar_ready<R: Read + Send + 'static>(
+    stdout: R, state: &Supervisor, timeout: Duration,
+) -> Option<SidecarReady> {
+    // The reader can block on Python; the supervisor still needs to handle retries.
+    let (tx, rx) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let ready = reader.read_line(&mut line).ok()
+            .filter(|&n| n > 0)
+            .and_then(|_| serde_json::from_str::<SidecarReady>(&line).ok());
+        let _ = tx.send(ready);
+        let _ = std::io::copy(&mut reader, &mut std::io::sink());
+    });
+    let deadline = Instant::now() + timeout;
+    loop {
+        if state.shutdown.load(Ordering::SeqCst) || state.restart.load(Ordering::SeqCst) {
+            return None;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() { return None; }
+        match rx.recv_timeout(remaining.min(Duration::from_millis(100))) {
+            Ok(Some(ready)) if ready.kind == "sidecar.ready"
+                && ready.host == "127.0.0.1"
+                && ready.port > 0 && !ready.token.is_empty()
+                && !ready.runtime_session_id.is_empty() => return Some(ready),
+            Ok(_) | Err(RecvTimeoutError::Disconnected) => return None,
+            Err(RecvTimeoutError::Timeout) => {}
+        }
+    }
 }
 
 fn source_root() -> PathBuf {
@@ -67,8 +108,12 @@ fn sidecar_program(resources: Option<&PathBuf>, packaged: bool) -> Result<(Comma
 }
 
 #[tauri::command]
-fn sidecar_status(state: tauri::State<'_, Supervisor>) -> Option<SidecarReady> {
-    state.ready.lock().expect("state lock").clone()
+fn sidecar_status(state: tauri::State<'_, Supervisor>) -> Option<SidecarStatus> {
+    if let Some(ready) = state.ready.lock().expect("state lock").clone() {
+        return Some(SidecarStatus::Ready(ready));
+    }
+    state.failure.lock().expect("failure lock").clone()
+        .map(|error| SidecarStatus::Failed { error })
 }
 
 #[tauri::command]
@@ -135,8 +180,21 @@ fn export_svg(svg: String) -> Result<Option<String>, String> {
 }
 fn spawn_supervisor(state: Supervisor) {
     thread::spawn(move || {
+        let mut failures = 0u8;
         while !state.shutdown.load(Ordering::SeqCst) {
+            if failures >= 2 {
+                *state.failure.lock().expect("failure lock") =
+                    Some("RUNTIME FAILED - USE RESTART CAMERA".into());
+                while !state.shutdown.load(Ordering::SeqCst)
+                    && !state.restart.load(Ordering::SeqCst) {
+                    thread::sleep(Duration::from_millis(250));
+                }
+                if state.shutdown.load(Ordering::SeqCst) { break; }
+                state.restart.store(false, Ordering::SeqCst);
+                failures = 0;
+            }
             *state.ready.lock().expect("state lock") = None;
+            *state.failure.lock().expect("failure lock") = None;
             // Kill the Python process directly, not a uv wrapper which could
             // leave its child orphaned when the desktop exits.
             let portable=state.portable_root.lock().expect("resource lock").clone();
@@ -145,7 +203,8 @@ fn spawn_supervisor(state: Supervisor) {
                 Ok(launcher)=>launcher,
                 Err(error)=>{
                     eprintln!("Hand-D packaged sidecar unavailable: {error}");
-                    thread::sleep(Duration::from_secs(2));
+                    failures += 1;
+                    thread::sleep(Duration::from_millis(250));
                     continue;
                 }
             };
@@ -176,27 +235,21 @@ fn spawn_supervisor(state: Supervisor) {
                 Ok(mut child) => {
                     let stdout = child.stdout.take();
                     *state.active_child.lock().expect("child lock") = Some(child);
-                    if let Some(stdout) = stdout {
-                        let mut reader = BufReader::new(stdout);
-                        let mut line = String::new();
-                        match reader.read_line(&mut line) {
-                            Ok(n) if n > 0 => {
-                                if let Ok(ready) = serde_json::from_str::<SidecarReady>(&line) {
-                                    if ready.kind == "sidecar.ready"
-                                        && ready.host == "127.0.0.1"
-                                        && ready.port > 0
-                                    {
-                                        *state.ready.lock().expect("state lock") = Some(ready);
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
+                    let started_at = Instant::now();
+                    let ready = stdout.and_then(|stdout|
+                        wait_for_sidecar_ready(stdout, &state, Duration::from_secs(45)));
+                    let launched = ready.is_some();
+                    *state.ready.lock().expect("state lock") = ready;
+                    if !launched {
+                        eprintln!("Hand-D sidecar did not announce READY within 45 seconds");
                     }
+                    let mut manual_restart = false;
                     while !state.shutdown.load(Ordering::SeqCst) {
                         if state.restart.swap(false, Ordering::SeqCst) {
+                            manual_restart = true;
                             break;
                         }
+                        if !launched { break; }
                         let mut child = state.active_child.lock().expect("child lock");
                         match child.as_mut().map(|process| process.try_wait()) {
                             None | Some(Ok(Some(_))) | Some(Err(_)) => break,
@@ -211,12 +264,22 @@ fn spawn_supervisor(state: Supervisor) {
                         let _ = child.wait();
                     }
                     *state.ready.lock().expect("state lock") = None;
+                    if manual_restart || state.restart.swap(false, Ordering::SeqCst) {
+                        failures = 0;
+                    } else if !state.shutdown.load(Ordering::SeqCst) {
+                        failures = if launched && started_at.elapsed() >= Duration::from_secs(30) {
+                            1
+                        } else {
+                            failures.saturating_add(1)
+                        };
+                    }
                 }
                 Err(error) => {
                     eprintln!("Hand-D sidecar could not start: {error}");
+                    failures = failures.saturating_add(1);
                 }
             }
-            for _ in 0..8 {
+            for _ in 0..2 {
                 if state.shutdown.load(Ordering::SeqCst) {
                     break;
                 }
@@ -257,6 +320,34 @@ fn main() {
 #[cfg(test)]
 mod supervisor_tests {
     use super::*;
+    use std::io::Cursor;
+    use std::time::Instant;
+
+    #[test]
+    fn ready_reader_accepts_only_valid_local_handshake() {
+        let state = Supervisor::default();
+        let valid = br#"{"type":"sidecar.ready","host":"127.0.0.1","port":39100,"token":"abc","runtime_session_id":"session","workspace":null}"#;
+        let result = wait_for_sidecar_ready(Cursor::new(valid), &state, Duration::from_secs(1));
+        assert_eq!(result.unwrap().port, 39100);
+        let wrong_host = br#"{"type":"sidecar.ready","host":"0.0.0.0","port":39100,"token":"abc","runtime_session_id":"session","workspace":null}"#;
+        assert!(wait_for_sidecar_ready(Cursor::new(wrong_host), &state, Duration::from_secs(1)).is_none());
+    }
+
+    #[test]
+    fn stalled_handshake_times_out_instead_of_blocking_restart() {
+        struct StalledReader;
+        impl std::io::Read for StalledReader {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(Duration::from_millis(250));
+                Ok(0)
+            }
+        }
+        let state = Supervisor::default();
+        let before = Instant::now();
+        assert!(wait_for_sidecar_ready(StalledReader, &state, Duration::from_millis(25)).is_none());
+        assert!(before.elapsed() < Duration::from_millis(200));
+    }
+
     #[test]
     fn package_prefers_local_frozen_sidecar_over_developer_python() {
         let temp=std::env::temp_dir().join(format!(

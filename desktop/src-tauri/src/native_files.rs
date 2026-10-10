@@ -13,6 +13,19 @@ pub struct DrawingOpen {
     pub document: String,
 }
 
+#[cfg(any(test, target_os = "macos"))]
+fn macos_picker_result(ok: bool, stdout: &[u8], stderr: &[u8]) -> Result<Option<PathBuf>, String> {
+    if !ok {
+        let message = String::from_utf8_lossy(stderr);
+        if message.contains("(-128)") { return Ok(None); }
+        return Err(format!("macOS file picker failed: {}",
+            message.trim().chars().take(180).collect::<String>()));
+    }
+    let value = String::from_utf8(stdout.to_vec())
+        .map_err(|_| "Invalid native file selection")?;
+    Ok(value.lines().next().filter(|s| !s.is_empty()).map(PathBuf::from))
+}
+
 fn picker(kind: &str, title: &str, filename: Option<&str>) -> Result<Option<PathBuf>, String> {
     #[cfg(target_os = "linux")]
     {
@@ -59,10 +72,8 @@ fn picker(kind: &str, title: &str, filename: Option<&str>) -> Result<Option<Path
         };
         let output=Command::new("osascript").args(["-e",script]).output()
             .map_err(|e|format!("macOS file picker unavailable: {e}"))?;
-        if !output.status.success(){return Ok(None);}
-        let value=String::from_utf8(output.stdout)
-            .map_err(|_|"Invalid native file selection")?;
-        return Ok(value.lines().next().filter(|s|!s.is_empty()).map(PathBuf::from));
+        return macos_picker_result(
+            output.status.success(), &output.stdout, &output.stderr);
     }
     #[cfg(target_os="windows")]
     {
@@ -155,6 +166,15 @@ pub fn export_svg(svg: String) -> Result<Option<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn macos_dialog_distinguishes_user_cancel_from_real_error() {
+        let canceled = macos_picker_result(false, b"", b"execution error: User canceled. (-128)");
+        assert_eq!(canceled.unwrap(), None);
+        let broken = macos_picker_result(false, b"", b"Not authorized to send Apple events. (-1743)");
+        assert!(broken.unwrap_err().contains("Not authorized"));
+        let chosen = macos_picker_result(true, b"/Users/demo/drawing.handd.json\n", b"");
+        assert_eq!(chosen.unwrap(), Some(PathBuf::from("/Users/demo/drawing.handd.json")));
+    }
     #[test]
     fn native_drawing_rejects_unstructured_or_oversized_payloads(){
         assert!(is_valid_native_drawing(r#"{"format":"handd-whiteboard","version":1,"strokes":[]}"#));

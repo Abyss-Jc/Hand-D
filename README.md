@@ -1,5 +1,13 @@
 # Hand-D
 
+> **Hand-D v2 (current development):** The active desktop work lives on
+> `feature/hand-d-v2-modernization` and uses Python 3.13 via `uv`, Rust and
+> Tauri 2. Follow [docs/README.md](docs/README.md) and
+> [docs/runbook/development.md](docs/runbook/development.md). On macOS Apple
+> Silicon, start with `bash scripts/mac-preflight.sh`, then
+> `npm --prefix desktop run dev`. The legacy installation and Tkinter
+> commands below describe the previous app, not v2.
+
 A gesture-controlled virtual whiteboard application using hand tracking.
 
 

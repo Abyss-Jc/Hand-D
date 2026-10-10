@@ -1,4 +1,4 @@
-"""Bounded, no-recording Linux camera + legacy checkpoint smoke test.
+"""Bounded, no-recording camera + legacy checkpoint smoke test.
 
 This runs real MediaPipe LIVE_STREAM but DOES NOT write frames, video, Samples,
 or Workspace data. An old .pth without a verified label manifest is diagnostic
@@ -16,6 +16,7 @@ import time
 import numpy as np
 
 from handd_core.feature_transform import canonicalize_world_landmarks
+from handd_core.camera_device import open_camera
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,10 +58,10 @@ def main(argv: list[str] | None = None) -> int:
     from mediapipe.tasks.python import vision
 
     model = load_legacy_checkpoint(args.model)
-    cap = cv2.VideoCapture(args.camera, cv2.CAP_V4L2)
+    cap = open_camera(cv2, args.camera)
     if not cap.isOpened():
         cap.release()
-        print(f"CAMERA_ERROR could not open /dev/video{args.camera}")
+        print(f"CAMERA_ERROR could not open camera index {args.camera}")
         return 2
 
     buffered = deque(maxlen=1)

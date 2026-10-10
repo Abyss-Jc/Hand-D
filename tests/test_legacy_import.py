@@ -1,6 +1,8 @@
 """Import transformed historical observations without forging v2 raw Samples."""
 import csv
+import json
 import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 import tempfile
@@ -81,15 +83,33 @@ class LegacyImportTests(unittest.TestCase):
                     'DELETE FROM legacy_sources WHERE source_id=?', (result.source_id,)
                 )
 
-    def test_existing_v1_db_can_be_upgraded_without_touching_samples(self):
-        self.store.create_participant('P001')
-        with self.store.conn:
-            self.store.conn.execute('PRAGMA user_version=1')
-        self.store.close()
-        reopened = DatasetStore(self.root / 'handd.sqlite')
+    def test_real_v1_schema_upgrades_and_preserves_curated_sample(self):
+        # This fixture is the original SQL from commit 9458984 (schema v1),
+        # not a v2 database with its version number manually changed.
+        historical = self.root / 'historical.sqlite'
+        ddl = (Path(__file__).parent / 'fixtures' / 'handd_schema_v1.sql').read_text()
+        with closing(sqlite3.connect(historical)) as conn, conn:
+            conn.executescript(ddl)
+            conn.execute('PRAGMA user_version=1')
+            conn.execute("INSERT INTO participants VALUES ('P001','2026-10-08')")
+            conn.execute("INSERT INTO collection_sessions VALUES ('S001','P001','2026-10-08')")
+            conn.execute("INSERT INTO captures VALUES ('C001','S001','Fist','Right',120,'2026-10-08')")
+            points = json.dumps(landmark_fixture().tolist())
+            conn.execute(
+                "INSERT INTO samples(sample_id,capture_id,frame_index,timestamp_ms,"
+                "raw_mp_handedness,image_landmarks,world_landmarks,provenance_json,recorded_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?)",
+                ('sample-v1','C001',0,100,'Left',points,points,'{}','2026-10-08'),
+            )
+            conn.execute("UPDATE samples SET review_status='accepted' WHERE sample_id='sample-v1'")
+        reopened = DatasetStore(historical)
         self.addCleanup(reopened.close)
         self.assertEqual(reopened.conn.execute('PRAGMA user_version').fetchone()[0], 2)
         self.assertEqual(reopened.conn.execute('SELECT count(*) FROM participants').fetchone()[0], 1)
+        self.assertEqual(reopened.get_sample('sample-v1')['review_status'], 'accepted')
+        self.assertEqual(len(reopened.list_review_events('sample-v1')), 1)
+        self.assertTrue(reopened.conn.execute(
+            "SELECT name FROM sqlite_master WHERE name='legacy_sources'").fetchone())
 
     def test_snapshot_can_freeze_imported_compatible_source_without_csv(self):
         source = self.csv('new.csv', [(0.125, 0.0, 'Fist'), (0.375, 1.0, 'Idle')])

@@ -13,6 +13,8 @@ from pathlib import Path
 from threading import Lock
 import time
 
+from handd_core.camera_device import open_camera
+
 
 class HandMappingCalibration:
     """Aggregate single-hand observations for independently prompted phases."""
@@ -84,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
 
-    camera = cv2.VideoCapture(args.camera, cv2.CAP_V4L2)
+    camera = open_camera(cv2, args.camera)
     if not camera.isOpened():
         camera.release()
         print("CAMERA_ERROR could not open device", args.camera, flush=True)

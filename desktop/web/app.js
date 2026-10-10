@@ -535,6 +535,11 @@ async function poll() {
   }
   try {
     const status = await invoke('sidecar_status');
+    if (status?.error) {
+      attachSidecar(null);
+      connectionState(false, 'SIDECAR / ' + status.error);
+      return;
+    }
     if (pendingWorkspace && status?.workspace !== pendingWorkspace) {
       attachSidecar(null);
       return;

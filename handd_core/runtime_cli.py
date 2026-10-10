@@ -9,10 +9,10 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
-import sys
 import time
 
 from handd_core.model_artifact import ModelArtifactError
+from handd_core.camera_device import open_camera
 from handd_core.runtime_v2 import GestureRuntime, LatestRuntimeResults
 
 
@@ -47,8 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
 
-    camera = cv2.VideoCapture(args.camera, cv2.CAP_V4L2) if sys.platform.startswith('linux') \
-        else cv2.VideoCapture(args.camera)
+    camera = open_camera(cv2, args.camera)
     if not camera.isOpened():
         camera.release()
         print('CAMERA_ERROR: unable to open', args.camera)

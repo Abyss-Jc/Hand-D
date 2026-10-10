@@ -83,6 +83,19 @@ test('mouse strokes support undo/redo and survive modal reparenting', () => {
   assert.equal(elements.drawing.children.length, 1);
 });
 
+test('sidecar startup failure remains visible until an explicit retry', async () => {
+  window.__TAURI__ = {core: {invoke: async command => {
+    if (command === 'sidecar_status') return {error:'RUNTIME FAILED - USE RESTART CAMERA'};
+    if (command === 'restart_sidecar') return null;
+    throw Error('Unexpected command: ' + command);
+  }}};
+  await timers[0]();
+  assert.equal(elements.status.textContent, 'SIDECAR / RUNTIME FAILED - USE RESTART CAMERA');
+  elements.restart.emit('click');
+  await Promise.resolve();
+  assert.equal(elements.status.textContent, 'RESTARTING SIDECAR…');
+});
+
 test('Whiteboard and Studio navigation does not erase canvas', () => {
   elements['nav-studio'].emit('click');
   assert.equal(elements.whiteboard.hidden, true);

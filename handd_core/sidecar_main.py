@@ -18,6 +18,7 @@ from handd_core.runtime_v2 import GestureRuntime, LatestRuntimeResults
 from handd_core.sidecar_ipc import SidecarServer
 from handd_core.preview_pacing import PreviewPacer
 from handd_core.studio_models import StudioModels
+from handd_core.camera_device import open_camera
 
 
 def parser() -> argparse.ArgumentParser:
@@ -45,8 +46,7 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
     if not task.is_file():
         print(f'Hand Landmarker asset missing: {task}', file=sys.stderr, flush=True)
         return
-    camera = cv2.VideoCapture(camera_index, cv2.CAP_V4L2) if sys.platform.startswith('linux') \
-        else cv2.VideoCapture(camera_index)
+    camera = open_camera(cv2, camera_index)
     if not camera.isOpened():
         camera.release()
         print(f'Camera {camera_index} unavailable; Whiteboard stays accessible',

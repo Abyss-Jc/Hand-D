@@ -14,6 +14,7 @@ import time
 from uuid import uuid4
 
 from handd_core.capture_sampling import CaptureSampler
+from handd_core.camera_device import open_camera
 from handd_core.dataset_store import DatasetStore
 from handd_core.live_collection import LatestCaptureResults
 
@@ -60,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
 
-    cap = cv2.VideoCapture(args.camera)
+    cap = open_camera(cv2, args.camera)
     if not cap.isOpened():
         cap.release()
         raise SystemExit(f"Cannot open camera index {args.camera}")
