@@ -6,6 +6,8 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 
 | Question | Canonical document |
 |---|---|
+| I'm taking over the project today: what exists, how was it built, why, and what remains? | [Contributor handoff (2026-10-11)](reference/handoff-v2-2026-10-11.md) |
+| How do I install all dependencies and run v2 from zero on Linux/macOS? | [Fresh contributor installation](runbook/setup-v2.md) |
 | What must Hand-D v2 do? | [Requirements](requirements/hand-d-v2.md) |
 | What exactly must the October 13 tracer prove? | [Tracer specification](spec/hand-d-v2-oct13-tracer.md) |
 | Which tickets are executed next and how are they verified? | [Execution tickets](changes/hand-d-v2-tickets.md) |

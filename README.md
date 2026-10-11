@@ -2,11 +2,32 @@
 
 > **Hand-D v2 (current development):** The active desktop work lives on
 > `feature/hand-d-v2-modernization` and uses Python 3.13 via `uv`, Rust and
-> Tauri 2. Follow [docs/README.md](docs/README.md) and
-> [docs/runbook/development.md](docs/runbook/development.md). On macOS Apple
-> Silicon, start with `bash scripts/mac-preflight.sh`, then
-> `npm --prefix desktop run dev`. The legacy installation and Tkinter
-> commands below describe the previous app, not v2.
+> Tauri 2. **New contributor? Start with the
+> [v2 technical handoff](docs/reference/handoff-v2-2026-10-11.md) and
+> [installation from scratch](docs/runbook/setup-v2.md)** (Linux/macOS
+> instructions, Windows caveats). The [documentation map](docs/README.md)
+> and [development runbook](docs/runbook/development.md) contain deeper
+> evidence. On macOS Apple Silicon, after installing prerequisites, run
+> `bash scripts/mac-preflight.sh` before `npm --prefix desktop run dev`.
+> The legacy installation and Tkinter commands below describe the previous
+> app, **not v2**.
+
+## Run Hand-D v2 (development)
+
+```bash
+git clone --branch feature/hand-d-v2-modernization https://github.com/Abyss-Jc/Hand-D.git
+cd Hand-D
+# Install Rust, Node/npm, uv and Tauri system prerequisites first:
+# see docs/runbook/setup-v2.md for Linux/macOS instructions.
+uv python install 3.13
+uv sync --frozen
+npm ci --prefix desktop --no-audit --no-fund
+npm --prefix desktop run dev
+```
+
+**New contributor:** Read the [handoff](docs/reference/handoff-v2-2026-10-11.md)
+before using real gesture data. HD-10 human capture, model quality and
+macOS/Windows native acceptance remain incomplete.
 
 A gesture-controlled virtual whiteboard application using hand tracking.
 
@@ -38,7 +59,7 @@ We recently upgraded the core engine to use a custom PyTorch model that natively
 | Thumb_Up | Modifier Hand | Adjust Thickness / Eraser Size |
 | Idle | Drawing Hand | Rest / Pause actions |
 
-## Installation
+## Legacy installation (Tkinter application only)
 
 ```bash
 # Clone the repository
@@ -60,7 +81,7 @@ pip install torch torchvision --index-url [https://download.pytorch.org/whl/cu11
 pip install -r requirements.txt
 ```
 
-## Usage
+## Legacy usage
 
 Run the app from the root directory:
 
@@ -100,7 +121,7 @@ This project was inspired by:
 - [test28.html demo](https://smm.axtarget.xyz/test28.html) - Black background hand tracking demo
 - [aarontran321/FaceRay](https://github.com/aarontran321/FaceRay) - Tauri 2 + Python/MediaPipe sidecar architecture; especially the separation between lightweight control IPC and direct loopback MJPEG camera preview
 
-## Tech Stack
+## Legacy Tech Stack
 
 - Python 3.8+
 - OpenCV - Computer vision

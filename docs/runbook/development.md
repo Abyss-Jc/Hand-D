@@ -1,5 +1,10 @@
 # Development Runbook
 
+> **First day on this project?** Read the [technical handoff](../reference/handoff-v2-2026-10-11.md)
+> and the [fresh installation guide](setup-v2.md) first. This runbook is a
+> chronological evidence log; older sections describe earlier stages of v2,
+> not necessarily the current Studio UI.
+
 ## Precondiciones
 
 - Work from the Hand-D repository.
