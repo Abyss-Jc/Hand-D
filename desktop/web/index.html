@@ -9,7 +9,7 @@
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="top">
+  <header id="app-header" class="top">
     <div class="brand">HAND<span>—</span>D <small>DRAW WITH YOUR HANDS</small></div>
     <nav aria-label="Workspaces">
       <button id="nav-whiteboard" class="selected" aria-selected="true">01 / WHITEBOARD</button>
@@ -17,7 +17,7 @@
     </nav>
     <div class="connection" aria-live="polite"><span id="lamp"></span><span id="status">STARTING SIDECAR</span></div>
   </header>
-  <main>
+  <main id="app-main">
     <section id="whiteboard" class="view">
       <div class="heading">
         <div><p class="eyebrow">01 / LIVE WHITEBOARD</p><h1>Your hand.<br>Your canvas.</h1>
@@ -49,7 +49,8 @@
             <button id="tool-pen" class="selected">✎ Pen</button>
             <button id="tool-eraser">⌫ Eraser</button>
             <button id="tool-wiggly" aria-pressed="false">〰 Wiggly</button>
-            <button id="expand" aria-label="Expand whiteboard">⛶ Expand</button>
+            <button id="expand" aria-label="Expand whiteboard" aria-expanded="false"
+                    aria-controls="full-overlay">⛶ Expand</button>
           </div>
         </div>
         <aside class="camera-panel">
@@ -236,10 +237,26 @@
       </div>
     </section>
   </main>
-  <div id="full-overlay" class="overlay" hidden role="dialog" aria-modal="true" aria-label="Expanded whiteboard">
-    <div class="modal"><div class="modal-top"><strong>WHITEBOARD / EXPANDED VIEW</strong><button id="close-expand">✕ Close / Esc</button></div>
-      <div id="modal-canvas-slot"></div></div>
+  <div id="full-overlay" class="overlay" hidden role="dialog" aria-modal="true"
+       aria-labelledby="expand-title" aria-describedby="expand-description">
+    <div class="modal">
+      <div class="modal-top">
+        <div>
+          <strong id="expand-title">WHITEBOARD / EXPANDED VIEW</strong>
+          <p id="expand-description">Live canvas and camera. No drawing is lost when closing this view.</p>
+        </div>
+        <div class="modal-actions">
+          <button id="modal-camera" aria-pressed="true">Camera overlay</button>
+          <button id="modal-clean" aria-pressed="false">Clean canvas</button>
+          <button id="modal-undo" aria-label="Undo last stroke">↶ Undo</button>
+          <button id="modal-redo" aria-label="Redo last stroke">↷ Redo</button>
+          <button id="modal-save">Save drawing…</button>
+          <button id="close-expand">✕ Close / Esc</button>
+        </div>
+      </div>
+      <div id="modal-canvas-slot"></div>
+    </div>
   </div>
-  <footer><span>HAND-D / V2 · DEVELOPMENT BUILD</span><span id="footer-session">No sidecar session</span></footer>
+  <footer id="app-footer"><span>HAND-D / V2 · DEVELOPMENT BUILD</span><span id="footer-session">No sidecar session</span></footer>
 </body>
 </html>

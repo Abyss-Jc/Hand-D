@@ -88,6 +88,12 @@ h1{font-size:clamp(42px,5vw,72px);letter-spacing:-.09em;line-height:.95;margin:0
   #drawing [data-lineboil-static]{display:inline!important}
 }
 .overlay{position:fixed;inset:0;z-index:10;background:#121816cc;padding:12px;display:flex;justify-content:center;align-items:center}.modal{width:100%;height:95dvh;max-width:1700px;background:var(--paper);border:4px solid var(--ink);display:flex;flex-direction:column;box-shadow:7px 7px 0 var(--lime)}.modal-top{background:var(--lime);border-bottom:var(--line);padding:10px 15px;display:flex;align-items:center;justify-content:space-between;gap:12px}#modal-canvas-slot{flex:1;min-height:0;padding:8px;display:flex}#modal-canvas-slot .canvas-shell{flex:1;min-height:0;aspect-ratio:auto}
+.modal-top p{font-size:12px;margin:4px 0 0;line-height:1.4}
+.modal-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.modal-actions button{font-size:13px;padding:9px 12px;box-shadow:none}
+.modal-actions button[aria-pressed="true"]{background:var(--ink);color:white}
+#modal-canvas-slot .canvas-shell{min-width:0}
 footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:auto;padding:14px 25px;background:white;border-top:2px solid var(--ink);font-size:10px;font-weight:800;letter-spacing:.08em}
 @media(max-width:1050px){.workspace{grid-template-columns:1fr}.camera-panel{max-width:440px}.studio-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-grid article.wide{grid-column:1/-1}}
-@media(max-width:650px){.studio-grid{grid-template-columns:1fr}.studio-grid article.wide{grid-column:1}.canvas-shell{min-height:360px;aspect-ratio:auto}.tools{right:6px;bottom:6px}.top{padding:10px}.top nav button{padding:8px}.view{padding:15px}.modal-top{padding:8px}}
+@media(max-width:650px){.studio-grid{grid-template-columns:1fr}.studio-grid article.wide{grid-column:1}.canvas-shell{min-height:360px;aspect-ratio:auto}.tools{right:6px;bottom:6px}.top{padding:10px}.top nav button{padding:8px}.view{padding:15px}.modal-top{padding:8px;align-items:stretch;flex-direction:column}.modal-actions{justify-content:space-between}.modal-actions button{padding:8px}}
+@media(max-height:470px){.overlay{padding:4px}.modal{height:calc(100dvh - 8px)}.modal-top p{display:none}.modal-top{padding:6px}.modal-actions button{padding:6px 9px}}

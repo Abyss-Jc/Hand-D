@@ -625,6 +625,48 @@ The 2026-10-09 Linux full regression (**130 Python / 35 JavaScript / 7 Rust PASS
 
 **HD-10 remaining acceptance:** On Linux with a cooperating human operator, capture independently verified gesture labels for P001/P002 across distinct Sessions using Studio Collect. For the first untrained Capture, explicitly inspect the QC subset and batch-accept only after confirming capture labels; once a validated Candidate exists, inspect model-flagged Samples and the QC subset before consciously accepting the remainder (never assume scores are truth). Build a new immutable Development Snapshot, train with `uv run --frozen python -m handd_core.train_cli --workspace /path/to/test-workspace --snapshot dev-SNAPSHOT_ID`, activate the compatible Candidate in Studio, and observe actual gestures, Whiteboard drawing/erasing and measured full callback→IPC→frontend latency in a real Tauri window. Preserve Sample/source membership hashes, actual Macro F1, per-class errors, runtime/IPC measurements and limitations in the report; do not reuse this synthetic test as model quality evidence. Keep P003 sealed if available and do not claim generalization without a real unseen-participant test. Mac/Windows hardware validation stays separate.
 
+## HD-11 expanded Whiteboard modal (2026-10-12; code acceptance)
+
+The near-full-window **in-app modal** reuses `#canvas-shell` by DOM
+reparenting into `#modal-canvas-slot`; it never creates a second SVG
+document, camera MJPEG consumer, stroke history or Python runtime. Tauri
+does not enter OS fullscreen. The same pointer events and tracked hand
+events continue using the original canvas. The modal header exposes
+**Camera overlay / Clean canvas**, **Undo / Redo**, **Save drawing…**
+and **Close / Esc**; the reparented canvas keeps **Pen / Eraser / Wiggly**
+and the collapse control. All commands reuse the same existing
+Whiteboard functions; saving serializes only editable strokes, never
+camera pixels.
+
+Accessibility behavior: `role="dialog"`, `aria-modal="true"`, named
+and described by visible English text; opening focuses Close, makes
+header/main/footer `inert`, locks document scroll and traps
+Tab/Shift+Tab within the dialog. Escape/Close restore the original
+parent and the prior focus/background/scroll state. If programmatic
+navigation opens Studio while expanded, collapse happens *before*
+hiding Whiteboard and focus moves to Studio navigation rather than
+remaining on a hidden canvas control. Mobile/short-height CSS keeps tools visible without
+forcing a second render surface.
+
+**TDD evidence:** RED checks first caught missing modal background
+isolation and a navigation transition that stranded the canvas; another
+RED found missing Camera/Clean controls in the modal. GREEN tests use
+`desktop/tests/app-ui.test.mjs`: keyboard Escape/Tab containment and
+focus return; real move-like node reparenting; continuous SVG drawing
+and Undo/Redo both expanded and normal; preservation across Studio
+navigation; camera/clean mode and editable Save through the existing
+Tauri command, with no video in the payload. `node --test
+desktop/tests/*.test.mjs` ran **49/49 PASS**, Python
+`uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q`
+**138/138 PASS**, Rust `cargo test --manifest-path
+desktop/src-tauri/Cargo.toml --locked -q` **7/7 PASS**, plus `uv lock
+--check`, JS syntax and Git whitespace checks on Linux. The Python
+regression also stabilized a synthetic HD-10CUR test by selecting a
+historical OOF flag that remained accepted after snapshot creation.
+These tests do **not** prove actual WebKit focus order, assistive
+technology screenreader behavior, FPS during resize or native visual
+ergonomics: those human/platform checks remain deferred with HD-10.
+
 ## Recuperación
 
 - If a dependency experiment breaks the environment, remove/recreate `.venv`; do not repair by installing packages globally.

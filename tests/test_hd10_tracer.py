@@ -139,7 +139,9 @@ class HD10TracerTests(unittest.IsolatedAsyncioTestCase):
                         # model that refit on those same Samples.
                         historical_flag = next(
                             row["sample_id"] for row in oof
-                            if row["sample_id"] in samples[3:]
+                            # samples[3] was explicitly rejected AFTER freezing.
+                            # Only a still-accepted OOF flag can be acknowledged.
+                            if row["sample_id"] in samples[4:]
                             and row["predicted_label"] != row["true_label"])
                         existing_capture = next(
                             item["capture_id"] for item in overview["samples"]

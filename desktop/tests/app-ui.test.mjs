@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 const names = ['drawing','undo','redo','clear','tool-pen','tool-eraser',
   'nav-whiteboard','nav-studio','whiteboard','studio','canvas-shell',
   'modal-canvas-slot','full-overlay','close-expand','expand','camera-fallback',
+  'modal-undo','modal-redo','modal-camera','modal-clean','modal-save',
+  'app-header','app-main','app-footer',
   'preview','footer-session','status','lamp','gesture','tracking','diagnostics',
   'cursor','restart','model-status','camera-scene','hands-overlay',
   'view-camera','view-clean','toggle-hands','tool-wiggly',
@@ -37,14 +39,15 @@ class Element {
     this.id = id; this.hidden = false; this.listeners = {}; this.children = [];
     this.value = ''; this.disabled = false;
     this.style = {}; this.attributes = {}; this.classList = {toggle() {}};
+    this.inert = false;
     this.parentElement = null;
   }
   addEventListener(key, cb) { this.listeners[key] = cb; }
   setAttribute(key, val) { this.attributes[key] = val; }
   removeAttribute(key) { delete this.attributes[key]; }
   getAttribute(key) { return this.attributes[key] ?? null; }
-  append(node) { this.children.push(node); node.parentElement = this; }
-  prepend(node) { this.children.unshift(node); node.parentElement = this; }
+  append(node) { node.remove(); this.children.push(node); node.parentElement = this; }
+  prepend(node) { node.remove(); this.children.unshift(node); node.parentElement = this; }
   replaceChildren() { this.children = []; }
   remove() {
     if (!this.parentElement) return;
@@ -54,21 +57,49 @@ class Element {
   }
   setPointerCapture() {}
   getBoundingClientRect() { return {left:0,top:0,width:1000,height:600}; }
-  focus() {}
-  emit(type, event = {}) { this.listeners[type]?.(event); }
+  focus() { document.activeElement=this; }
+  contains(node) {
+    for(let current=node;current;current=current.parentElement)
+      if(current===this)return true;
+    return false;
+  }
+  emit(type, event = {}) { return this.listeners[type]?.(event); }
 }
 const elements = Object.fromEntries(names.map(name => [name, new Element(name)]));
+elements['full-overlay'].hidden=true; // matches real HTML's initial hidden attribute
+const documentListeners={};
+const dialogButtons=['modal-camera','modal-clean','modal-undo','modal-redo',
+  'modal-save','close-expand','tool-pen',
+  'tool-eraser','tool-wiggly','expand'];
+elements['full-overlay'].querySelectorAll=()=>dialogButtons.map(id=>elements[id])
+  .filter(button=>!button.disabled);
 elements['review-world-mode'].value='canonical';
 elements['review-angle'].value='25';
 elements['review-pitch'].value='0';
 elements.drawing.parentElement = elements['canvas-shell'];
 elements['canvas-shell'].parentElement = new Element('workspace');
+elements['modal-canvas-slot'].parentElement=elements['full-overlay'];
+for(const id of ['close-expand','modal-undo','modal-redo',
+                 'modal-camera','modal-clean','modal-save'])
+  elements[id].parentElement=elements['full-overlay'];
+for(const id of ['tool-pen','tool-eraser','tool-wiggly','expand'])
+  elements[id].parentElement=elements['canvas-shell'];
 globalThis.document = {
   getElementById(id) { if (!elements[id]) throw Error(id); return elements[id]; },
   createElementNS(_namespace, tag) { return new Element(tag); },
   createElement(tag) { return new Element(tag); },
-  addEventListener() {},
+  body:{style:{overflow:'auto'}},
+  activeElement:null,
+  addEventListener(type,callback) {
+    (documentListeners[type]??=[]).push(callback);
+  },
 };
+function sendKey(key, options={}) {
+  const event={key,shiftKey:false,defaultPrevented:false,
+    preventDefault(){this.defaultPrevented=true;},...options};
+  for(const listener of documentListeners.keydown||[])listener(event);
+  return event;
+}
 globalThis.window = {confirm: () => true};
 const timers = [];
 globalThis.setInterval = callback => { timers.push(callback); };
@@ -103,6 +134,92 @@ test('mouse strokes support undo/redo and survive modal reparenting', () => {
   assert.equal(elements.drawing.children.length, 1);
 });
 
+test('expanded Whiteboard is a keyboard-contained dialog and Escape restores focus',()=>{
+  elements.expand.focus();
+  elements.expand.emit('click');
+  assert.equal(elements['full-overlay'].hidden,false);
+  assert.equal(document.activeElement,elements['close-expand']);
+  for(const id of ['app-header','app-main','app-footer'])
+    assert.equal(elements[id].inert,true,id+' must be inaccessible behind modal');
+  assert.equal(document.body.style.overflow,'hidden');
+  elements['modal-undo'].focus();
+  assert.equal(sendKey('Tab').defaultPrevented,false,
+    'Tab between controls is handled by native focus order');
+  elements.expand.focus();
+  assert.equal(sendKey('Tab').defaultPrevented,true);
+  assert.equal(document.activeElement,elements['modal-camera']);
+  assert.equal(sendKey('Tab',{shiftKey:true}).defaultPrevented,true);
+  assert.equal(document.activeElement,elements.expand);
+  const escape=sendKey('Escape');
+  assert.equal(escape.defaultPrevented,true);
+  assert.equal(elements['full-overlay'].hidden,true);
+  assert.equal(document.activeElement,elements.expand);
+  for(const id of ['app-header','app-main','app-footer'])
+    assert.equal(elements[id].inert,false);
+  assert.equal(document.body.style.overflow,'auto');
+  assert.equal(sendKey('Escape').defaultPrevented,false,
+    'Escape outside modal must remain free for other UI actions');
+});
+
+test('expanded view uses one live canvas; modal Undo/Redo and section switch preserve strokes',()=>{
+  const originalCanvas=elements['canvas-shell'];
+  const originalDrawing=elements.drawing;
+  const originalPreview=elements.preview;
+  const connectionCount=connections.length;
+  const startCount=elements.drawing.children.length;
+  elements.expand.emit('click');
+  assert.equal(elements.expand.attributes['aria-expanded'],'true');
+  assert.equal(elements['modal-canvas-slot'].children.filter(x=>x===originalCanvas).length,1);
+  assert.equal(elements.drawing,originalDrawing);
+  assert.equal(elements.preview,originalPreview);
+  assert.equal(connections.length,connectionCount,'expand must not start a second runtime');
+  elements.drawing.emit('pointerdown',{button:0,pointerId:8,clientX:200,clientY:280});
+  elements.drawing.emit('pointermove',{clientX:320,clientY:380});
+  elements.drawing.emit('pointerup',{});
+  assert.equal(elements.drawing.children.length,startCount+1);
+  elements['modal-undo'].emit('click');
+  assert.equal(elements.drawing.children.length,startCount);
+  elements['modal-redo'].emit('click');
+  assert.equal(elements.drawing.children.length,startCount+1);
+  elements['nav-studio'].emit('click');
+  assert.equal(elements['full-overlay'].hidden,true,
+    'a navigation transition cannot strand the canvas inside a hidden dialog');
+  assert.equal(elements.expand.attributes['aria-expanded'],'false');
+  assert.equal(elements['canvas-shell'].parentElement.id,'workspace');
+  assert.equal(elements.whiteboard.hidden,true);
+  assert.equal(document.activeElement,elements['nav-studio'],
+    'navigation must not leave keyboard focus on a control in hidden Whiteboard');
+  elements['nav-whiteboard'].emit('click');
+  assert.equal(elements.drawing.children.length,startCount+1);
+  elements.undo.emit('click');
+  assert.equal(elements.drawing.children.length,startCount);
+  elements.redo.emit('click');
+  assert.equal(elements.drawing.children.length,startCount+1);
+});
+
+test('expanded Whiteboard exposes Camera/Clean and editable Save without duplicating the canvas',async()=>{
+  const drawing=elements.drawing, preview=elements.preview;
+  const saved=[];
+  window.__TAURI__={core:{invoke:async(command,args)=>{
+    saved.push({command,args});
+    return '/tmp/expanded-drawing.handd.json';
+  }}};
+  elements.expand.emit('click');
+  elements['modal-clean'].emit('click');
+  assert.equal(elements['view-clean'].attributes['aria-pressed'],'true');
+  assert.equal(elements['modal-clean'].attributes['aria-pressed'],'true');
+  elements['modal-camera'].emit('click');
+  assert.equal(elements['view-camera'].attributes['aria-pressed'],'true');
+  assert.equal(elements['modal-camera'].attributes['aria-pressed'],'true');
+  await elements['modal-save'].emit('click');
+  assert.equal(saved.length,1);
+  assert.equal(saved[0].command,'save_drawing');
+  assert.doesNotMatch(JSON.stringify(saved[0].args),/camera|preview|jpeg|video/i);
+  assert.equal(elements.drawing,drawing);
+  assert.equal(elements.preview,preview);
+  elements['close-expand'].emit('click');
+});
+
 test('sidecar startup failure remains visible until an explicit retry', async () => {
   window.__TAURI__ = {core: {invoke: async command => {
     if (command === 'sidecar_status') return {error:'RUNTIME FAILED - USE RESTART CAMERA'};
@@ -117,11 +234,12 @@ test('sidecar startup failure remains visible until an explicit retry', async ()
 });
 
 test('Whiteboard and Studio navigation does not erase canvas', () => {
+  const drawingCount=elements.drawing.children.length;
   elements['nav-studio'].emit('click');
   assert.equal(elements.whiteboard.hidden, true);
   elements['nav-whiteboard'].emit('click');
   assert.equal(elements.whiteboard.hidden, false);
-  assert.equal(elements.drawing.children.length, 1);
+  assert.equal(elements.drawing.children.length, drawingCount);
 });
 
 test('Studio uses separate task tabs instead of forcing all panels into one screen',()=>{

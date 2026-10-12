@@ -150,15 +150,17 @@ canvas.addEventListener('pointermove', event => {
 });
 for (const event of ['pointerup', 'pointercancel', 'lostpointercapture'])
   canvas.addEventListener(event, () => { pointerStroke = null; });
-$('undo').addEventListener('click', () => { strokes.undo(); redraw(); markDrawingEdited(); });
-$('redo').addEventListener('click', () => { strokes.redo(); redraw(); markDrawingEdited(); });
+function undoDrawing() { strokes.undo(); redraw(); markDrawingEdited(); }
+function redoDrawing() { strokes.redo(); redraw(); markDrawingEdited(); }
+for (const id of ['undo','modal-undo']) $(id).addEventListener('click',undoDrawing);
+for (const id of ['redo','modal-redo']) $(id).addEventListener('click',redoDrawing);
 $('clear').addEventListener('click', () => { strokes.clear(); redraw(); markDrawingEdited(); });
 $('tool-pen').addEventListener('click', () => setTool('draw'));
 $('tool-eraser').addEventListener('click', () => setTool('erase'));
 $('tool-wiggly').addEventListener('click', () => setTool('wiggly'));
 // Native dialogs and atomic persistence are implemented on Rust's local OS
 // boundary. The camera frame never enters a file payload.
-$('save-drawing').addEventListener('click',async()=>{
+async function saveDrawing() {
   try {
     const document=encodeWhiteboard(strokes.paths);
     const path=await window.__TAURI__?.core?.invoke('save_drawing',{document});
@@ -169,7 +171,9 @@ $('save-drawing').addEventListener('click',async()=>{
   } catch(error) {
     $('document-status').textContent='Could not save drawing: '+String(error);
   }
-});
+}
+for(const id of ['save-drawing','modal-save'])
+  $(id).addEventListener('click',saveDrawing);
 $('open-drawing').addEventListener('click',async()=>{
   if (strokes.paths.length && typeof window.confirm==='function'
       && !window.confirm('Replace your current drawing? Save any changes first.'))return;
@@ -235,6 +239,8 @@ function setCameraMode(enabled) {
   $('view-clean').classList.toggle('selected',!cameraMode);
   $('view-camera').setAttribute('aria-pressed',String(cameraMode));
   $('view-clean').setAttribute('aria-pressed',String(!cameraMode));
+  $('modal-camera').setAttribute('aria-pressed',String(cameraMode));
+  $('modal-clean').setAttribute('aria-pressed',String(!cameraMode));
   updatePreview();
 }
 function setHandsVisible(enabled) {
@@ -246,6 +252,8 @@ function setHandsVisible(enabled) {
 }
 $('view-camera').addEventListener('click',()=>setCameraMode(true));
 $('view-clean').addEventListener('click',()=>setCameraMode(false));
+$('modal-camera').addEventListener('click',()=>setCameraMode(true));
+$('modal-clean').addEventListener('click',()=>setCameraMode(false));
 $('toggle-hands').addEventListener('click',()=>setHandsVisible(!handsVisible));
 
 // Discrete ~12fps boil: three cached ink variants, one SVG root frame selector.
@@ -256,12 +264,15 @@ let animationStarted = typeof performance !== 'undefined' ? performance.now() : 
 
 function navigate(view) {
   const whiteboard = view === 'whiteboard';
+  const wasExpanded=!$('full-overlay').hidden;
+  if (!whiteboard) collapse(); // keep the canvas in Whiteboard before hiding it
   $('whiteboard').hidden = !whiteboard;
   $('studio').hidden = whiteboard;
   $('nav-whiteboard').classList.toggle('selected', whiteboard);
   $('nav-studio').classList.toggle('selected', !whiteboard);
   $('nav-whiteboard').setAttribute('aria-selected', String(whiteboard));
   $('nav-studio').setAttribute('aria-selected', String(!whiteboard));
+  if (!whiteboard && wasExpanded) $('nav-studio').focus();
   updatePreview(); // At most one MJPEG consumer; camera inference keeps running.
 }
 $('nav-whiteboard').addEventListener('click', () => navigate('whiteboard'));
@@ -763,22 +774,64 @@ for (const action of ['pause','resume','finish']) {
 }
 
 const normalParent = $('canvas-shell').parentElement;
-$('expand').addEventListener('click', () => {
+const modalBackground = ['app-header','app-main','app-footer'].map(id=>$(id));
+let modalPreviousInert = null;
+let modalPreviousOverflow = null;
+let modalReturnFocus = null;
+function expandWhiteboard() {
+  if (!$('full-overlay').hidden || $('whiteboard').hidden) return;
+  modalReturnFocus = document.activeElement || $('expand');
+  modalPreviousInert = modalBackground.map(node=>node.inert);
+  modalPreviousOverflow = document.body.style.overflow;
   $('modal-canvas-slot').append($('canvas-shell'));
   $('full-overlay').hidden = false;
+  $('expand').setAttribute('aria-expanded','true');
+  $('expand').setAttribute('aria-label','Collapse whiteboard');
+  $('expand').textContent='⤢ Collapse';
+  for (const node of modalBackground) node.inert = true;
+  document.body.style.overflow='hidden';
   $('close-expand').focus();
   layoutScene();
-});
+}
 function collapse() {
   if ($('full-overlay').hidden) return;
   normalParent.prepend($('canvas-shell'));
   $('full-overlay').hidden = true;
-  $('expand').focus();
+  $('expand').setAttribute('aria-expanded','false');
+  $('expand').setAttribute('aria-label','Expand whiteboard');
+  $('expand').textContent='⛶ Expand';
+  modalBackground.forEach((node,index)=>{
+    node.inert=modalPreviousInert?.[index]??false;
+  });
+  document.body.style.overflow=modalPreviousOverflow??'';
+  (modalReturnFocus?.isConnected ? modalReturnFocus : $('expand')).focus();
+  modalReturnFocus=null;
   layoutScene();
 }
+$('expand').addEventListener('click',()=>{
+  if($('full-overlay').hidden)expandWhiteboard();
+  else collapse();
+});
 $('close-expand').addEventListener('click', collapse);
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') collapse();
+  if ($('full-overlay').hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    collapse();
+  } else if (event.key === 'Tab') {
+    const focusables=[...$('full-overlay').querySelectorAll(
+      'button:not([disabled]):not([hidden]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter(node=>!node.hidden && !node.closest?.('[hidden]'));
+    if(!focusables.length){event.preventDefault();$('close-expand').focus();return;}
+    const first=focusables[0],last=focusables.at(-1);
+    if(event.shiftKey && (document.activeElement===first
+        || !$('full-overlay').contains(document.activeElement))){
+      event.preventDefault();last.focus();
+    } else if(!event.shiftKey && (document.activeElement===last
+        || !$('full-overlay').contains(document.activeElement))){
+      event.preventDefault();first.focus();
+    }
+  }
 });
 
 function connectionState(ready, label) {
