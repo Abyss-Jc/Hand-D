@@ -15,8 +15,15 @@ from tempfile import NamedTemporaryFile
 import numpy as np
 
 from handd_core.feature_transform import canonicalize_world_landmarks
+from handd_core.oof_review import verified_historical_oof
 from handd_core.snapshot_builder import verify_snapshot
 from handd_core.studio_models import StudioModels
+
+
+def _assessment_digest(record: dict) -> str:
+    unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+    return sha256(json.dumps(unsigned, sort_keys=True, separators=(",", ":"),
+                             allow_nan=False).encode()).hexdigest()
 
 
 def rank_suggestions(rows: list[dict], margin_threshold: float | None) -> list[dict]:
@@ -43,8 +50,8 @@ def rank_suggestions(rows: list[dict], margin_threshold: float | None) -> list[d
 def assess_capture(workspace: Path, rows: list, capture_id: str) -> dict:
     """Only verified Candidate snapshots can provide review suggestions.
 
-    In-snapshot observations are never presented as out-of-sample predictions.
-    The historical OOF report supplies a *validation-derived* ambiguity cutoff.
+    Frozen Samples use their held-out Session OOF rows, never the final refit.
+    New Samples use the verified Candidate trained without them.
     """
     result = {"assessment_state": "no_model_assessment", "suggested": [],
               "assessed_count": 0, "assessment_model_id": None}
@@ -73,9 +80,10 @@ def assess_capture(workspace: Path, rows: list, capture_id: str) -> dict:
         oof = report["variants"][variant]["oof"]
         if (report["snapshot_id"] != source["snapshot_id"]
                 or report["snapshot_sha256"] != source["manifest_sha256"]
-                or {r["sample_id"] for r in oof} != membership
-                or any(r["trained_on_this_sample"] for r in oof)):
+                or report["evaluation_kind"] != "session_grouped_development_oof"):
             raise ValueError("Candidate OOF evidence is not held out")
+        historical_oof = verified_historical_oof(
+            folder, json.loads(manifest_path.read_text()), report, variant)
         correct_margins = [
             float(row["top2_margin"]) for row in oof
             if row["true_label"] == row["predicted_label"]
@@ -89,13 +97,14 @@ def assess_capture(workspace: Path, rows: list, capture_id: str) -> dict:
         current = {row["sample_id"]: row for row in rows if row["lifecycle_status"] == "active"}
         untrained = [row for row in current.values() if row["sample_id"] not in membership]
         cache_identity = {
+            "assessment_format_version": 2,
             "model_artifact_id": active,
             "source_snapshot_id": source["snapshot_id"],
             "weights_sha256": artifact["weights_sha256"],
             "metrics_sha256": artifact["metrics_sha256"],
             "source_manifest_sha256": source["manifest_sha256"],
             "capture_id": capture_id,
-            "sample_ids": sorted(row["sample_id"] for row in untrained),
+            "sample_ids": sorted(current),
         }
         cache_key = sha256(json.dumps(cache_identity, sort_keys=True).encode()).hexdigest()
         cache_path = workspace / "assessments" / (cache_key + ".json")
@@ -105,6 +114,8 @@ def assess_capture(workspace: Path, rows: list, capture_id: str) -> dict:
             history = json.loads(cache_path.read_text(encoding="utf-8"))
             if any(history.get(key) != value for key, value in cache_identity.items()):
                 raise ValueError("Model Assessment provenance does not match current Capture")
+            if history.get("record_sha256") != _assessment_digest(history):
+                raise ValueError("Model Assessment history integrity check failed")
         else:
             candidates, features, unassessable = [], [], []
             for row in untrained:
@@ -125,18 +136,33 @@ def assess_capture(workspace: Path, rows: list, capture_id: str) -> dict:
                     best = np.argsort(score)[-2:][::-1]
                     assessments.append({
                         "sample_id": row["sample_id"],
+                        "model_artifact_id": active,
+                        "source_snapshot_id": source["snapshot_id"],
                         "true_label": row["gesture"],
                         "predicted_label": labels[int(best[0])],
                         "scores_not_calibrated": score.tolist(),
                         "top2_margin": float(score[best[0]] - score[best[1]]),
                         "trained_on_this_sample": False,
+                        "assessment_origin": "out_of_training_candidate",
                     })
+            historical = []
+            for row in current.values():
+                oof_row = historical_oof.get(row["sample_id"])
+                if oof_row is None:
+                    continue
+                if row["gesture"] != oof_row["true_label"]:
+                    raise ValueError("OOF label differs from canonical Sample")
+                historical.append({
+                    **oof_row, "model_artifact_id": active,
+                    "source_snapshot_id": source["snapshot_id"],
+                })
             history = {
                 **cache_identity,
                 "validation_margin_threshold": cutoff,
-                "assessments": assessments,
+                "assessments": [*historical, *assessments],
                 "unassessable": unassessable,
             }
+            history["record_sha256"] = _assessment_digest(history)
             # No database schema mutation: derived, append-only assessments
             # are written as one durable file per model/Capture membership.
             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,6 +193,8 @@ def assess_capture(workspace: Path, rows: list, capture_id: str) -> dict:
             "assessment_revision": cache_key,
             "validation_margin_threshold": cutoff,
             "assessed_count": len(assessments),
+            "historical_oof_count": sum(
+                row["assessment_origin"] == "heldout_session_oof" for row in assessments),
             "unassessable": history["unassessable"],
             "suggested": rank_suggestions(assessments, cutoff),
         }

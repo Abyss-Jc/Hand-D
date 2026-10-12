@@ -445,6 +445,37 @@ test('Review keeps flagged predictions and sample inspection on the same screen'
   assert.equal(elements['review-angle'].value,'25');
 });
 
+test('historical accepted OOF flags remain inspectable and Accept confirms an audited acknowledgement',()=>{
+  const socket=connections.at(-1);
+  elements['review-capture'].value='C001';
+  elements['review-capture'].emit('change');
+  const request=socket.sent.at(-1);
+  socket.sendEvent({type:'studio.response',request_id:request.request_id,ok:true,
+    data:{capture_id:'C001',token:'review-token',assessment_state:'model_assessed',
+      assessment_revision:'oof-revision',assessment_model_id:'candidate-test',
+      assessed_count:1,historical_oof_count:1,suggested_pending:1,pending:0,
+      can_batch_accept:false,qc_sample_ids:[],qc_unreviewed:[],qc_rejected:[],
+      suggested:[{sample_id:'SAMPLE0',reason:'model_disagreement',
+        predicted_label:'Idle',review_status:'accepted',
+        assessment_origin:'heldout_session_oof'}]}});
+  assert.equal(elements['review-suggested-sample'].value,'SAMPLE0');
+  assert.match(elements['review-suggested-sample'].children[0].textContent,/already accepted/);
+  elements['review-suggested-open'].emit('click');
+  const detailRequest=socket.sent.at(-1);
+  const xyz=Array.from({length:21},(_,i)=>[i*.02,(i%5)*.02,(i%7)*.01]);
+  socket.sendEvent({type:'studio.response',request_id:detailRequest.request_id,ok:true,
+    data:{sample_id:'SAMPLE0',gesture:'Fist',hand:'Right',
+      raw_mp_handedness:'Left',review_status:'accepted',lifecycle_status:'active',
+      image_landmarks:xyz,world_landmarks:xyz,canonical_landmarks:xyz}});
+  assert.match(elements['review-accept'].textContent,/Confirm accepted \(OOF review\)/);
+  elements['review-accept'].emit('click');
+  const acknowledgement=socket.sent.at(-1);
+  assert.equal(acknowledgement.action,'acknowledge');
+  assert.equal(acknowledgement.sample_id,'SAMPLE0');
+  assert.equal(acknowledgement.assessment_revision,'oof-revision');
+  assert.equal(acknowledgement.capture_id,'C001');
+});
+
 test('Studio Collect starts only on explicit action and exposes Pause Resume Finish',async()=>{
   // Existing Studio WebSocket connected by previous test.
   const socket=connections.at(-1);

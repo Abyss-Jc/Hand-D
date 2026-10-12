@@ -134,6 +134,88 @@ class HD10TracerTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(activated_event["type"], "studio.model")
                         self.assertEqual(activated_event["snapshot"]["health"]["model"], "ready")
 
+                        # Previously accepted training Samples must be assessed
+                        # from their *held-out Session* OOF rows, never the final
+                        # model that refit on those same Samples.
+                        historical_flag = next(
+                            row["sample_id"] for row in oof
+                            if row["sample_id"] in samples[3:]
+                            and row["predicted_label"] != row["true_label"])
+                        existing_capture = next(
+                            item["capture_id"] for item in overview["samples"]
+                            if item["sample_id"] == historical_flag)
+                        historical = await request("review_plan", capture_id=existing_capture)
+                        self.assertEqual(historical["assessment_state"], "model_assessed")
+                        self.assertGreater(historical["historical_oof_count"], 0)
+                        flagged_row = next(
+                            row for row in historical["suggested"]
+                            if row["sample_id"] == historical_flag)
+                        self.assertEqual(flagged_row["assessment_origin"], "heldout_session_oof")
+                        self.assertEqual(flagged_row["review_status"], "accepted")
+                        self.assertGreater(historical["suggested_pending"], 0)
+                        historical_files = [
+                            json.loads(path.read_text())
+                            for path in (workspace / "assessments").glob("*.json")
+                        ]
+                        historic_record = next(
+                            row for row in historical_files
+                            if row["capture_id"] == existing_capture)
+                        for row in historic_record["assessments"]:
+                            if row["sample_id"] in manifest["sample_ids"]:
+                                self.assertEqual(row["assessment_origin"], "heldout_session_oof")
+                                self.assertEqual(row["heldout_session_id"], row["sample_session_id"])
+                                self.assertFalse(row["trained_on_this_sample"])
+                        self.assertTrue(any(
+                            row["sample_id"] in manifest["sample_ids"]
+                            for row in historic_record["assessments"]))
+                        acknowledged = await request(
+                            "acknowledge", sample_id=historical_flag,
+                            capture_id=existing_capture,
+                            assessment_revision=historical["assessment_revision"])
+                        self.assertEqual(acknowledged["review_status"], "accepted")
+                        after_ack = await request("review_plan", capture_id=existing_capture)
+                        self.assertFalse(any(
+                            row["sample_id"] == historical_flag
+                            for row in after_ack["suggested"]))
+                        events = DatasetStore(workspace / "handd.sqlite")
+                        try:
+                            reasons = [row["reason"] for row in
+                                       events.list_review_events(historical_flag)]
+                        finally:
+                            events.close()
+                        self.assertTrue(any(
+                            historical["assessment_revision"] in (reason or "")
+                            for reason in reasons))
+                        await ws.send_json({
+                            "type": "studio.request", "request_id": "duplicate-ack",
+                            "action": "acknowledge", "sample_id": historical_flag,
+                            "capture_id": existing_capture,
+                            "assessment_revision": historical["assessment_revision"],
+                        })
+                        refused = await ws.receive_json(timeout=5)
+                        self.assertEqual(refused["request_id"], "duplicate-ack")
+                        self.assertFalse(refused["ok"], "duplicate OOF confirmation must fail")
+
+                        # Even a newly self-consistent Candidate manifest must
+                        # not make a leaking OOF validation fold trustworthy.
+                        metrics_file = model_dir / "metrics.json"
+                        manifest_file = model_dir / "manifest.json"
+                        metrics_bytes, artifact_bytes = (
+                            metrics_file.read_bytes(), manifest_file.read_bytes())
+                        forged = json.loads(metrics_bytes)
+                        fold = forged["variants"]["without_legacy"]["folds"][0]
+                        fold["train_sample_ids"][0] = fold["validation_sample_ids"][0]
+                        forged_bytes = json.dumps(forged).encode()
+                        metrics_file.write_bytes(forged_bytes)
+                        forged_manifest = json.loads(artifact_bytes)
+                        forged_manifest["metrics_sha256"] = sha256(forged_bytes).hexdigest()
+                        manifest_file.write_text(json.dumps(forged_manifest))
+                        bad_fold = await request("review_plan", capture_id=existing_capture)
+                        self.assertEqual(bad_fold["assessment_state"], "assessment_unavailable")
+                        self.assertFalse(bad_fold["can_batch_accept"])
+                        metrics_file.write_bytes(metrics_bytes)
+                        manifest_file.write_bytes(artifact_bytes)
+
                         # Only NEW observations may be flagged by final-refit
                         # Candidate, never training members from the snapshot.
                         points = landmark_fixture()
@@ -165,24 +247,31 @@ class HD10TracerTests(unittest.IsolatedAsyncioTestCase):
                             and not row["trained_on_this_sample"]
                             for row in proposed["suggested"]))
                         self.assertFalse(proposed["can_batch_accept"])
-                        history = list((workspace / "assessments").glob("*.json"))
-                        self.assertEqual(len(history), 1)
-                        provenance = json.loads(history[0].read_text())
+                        history = next(
+                            path for path in (workspace / "assessments").glob("*.json")
+                            if json.loads(path.read_text())["capture_id"] == "NEW-CAPTURE")
+                        provenance = json.loads(history.read_text())
                         self.assertEqual(provenance["model_artifact_id"], model_dir.name)
                         self.assertEqual(provenance["source_snapshot_id"], frozen["snapshot_id"])
                         self.assertEqual(len(provenance["assessments"]), 2)
-                        immutable_bytes = history[0].read_bytes()
-                        history[0].write_text('{"invalid":"cache"}')
+                        immutable_bytes = history.read_bytes()
+                        tampered = json.loads(immutable_bytes)
+                        tampered["assessments"][0]["predicted_label"] = "Forged"
+                        history.write_text(json.dumps(tampered))
+                        forged_history = await request("review_plan", capture_id="NEW-CAPTURE")
+                        self.assertEqual(forged_history["assessment_state"],
+                                         "assessment_unavailable")
+                        self.assertFalse(forged_history["can_batch_accept"])
+                        history.write_text('{"invalid":"cache"}')
                         corrupt = await request("review_plan", capture_id="NEW-CAPTURE")
                         self.assertEqual(corrupt["assessment_state"], "assessment_unavailable")
                         self.assertFalse(corrupt["can_batch_accept"])
-                        history[0].write_bytes(immutable_bytes)
+                        history.write_bytes(immutable_bytes)
                         for sample_id in ("NEW-0", "NEW-1"):
                             await request("accept", sample_id=sample_id)
                         resolved = await request("review_plan", capture_id="NEW-CAPTURE")
                         self.assertEqual(resolved["suggested_pending"], 0)
-                        self.assertEqual(history[0].read_bytes(), immutable_bytes)
-                        self.assertEqual(len(list((workspace / "assessments").glob("*.json"))), 1)
+                        self.assertEqual(history.read_bytes(), immutable_bytes)
 
                         # A novel gesture is collectable before retraining,
                         # but five-class predictions must not condemn it.

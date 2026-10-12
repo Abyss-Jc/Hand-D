@@ -389,12 +389,14 @@ function renderQualityPlan(data) {
   qualityPlan=data;
   const suggested=$('review-suggested-sample');
   suggested.replaceChildren();
-  for (const row of (data.suggested||[]).filter(r=>r.review_status!=='accepted'
-                                                 && r.review_status!=='rejected')) {
+  for (const row of data.suggested||[]) {
     const option=document.createElement('option');
     option.value=row.sample_id;
     option.textContent=row.sample_id+' · '+row.reason.replaceAll('_',' ')
-      +' · '+row.predicted_label;
+      +' · '+row.predicted_label
+      +(row.assessment_origin==='heldout_session_oof'
+        ? ' · held-out Session OOF' : ' · new Sample')
+      +(row.review_status==='accepted' ? ' · already accepted: recheck' : '');
     suggested.append(option);
   }
   suggested.value=suggested.children[0]?.value||'';
@@ -417,7 +419,8 @@ function renderQualityPlan(data) {
   const qcRejected=data.qc_rejected?.length||0;
   const evidence=data.assessment_state==='model_assessed'
     ? (data.assessment_model_id+' · '+(data.assessed_count||0)
-      +' out-of-training assessed · '+(data.suggested_pending||0)+' flagged to inspect')
+      +' out-of-training assessed, including '+(data.historical_oof_count||0)
+      +' held-out Session OOF · '+(data.suggested_pending||0)+' flagged to inspect')
     : data.assessment_state==='assessment_unavailable'
       ? 'Model assessment unavailable: '+(data.assessment_error||'invalid evidence')
       : data.assessment_state==='unsupported_gesture'
@@ -543,6 +546,11 @@ function renderSampleDetail(data) {
   const canonicalValid=Array.isArray(canonical)&&canonical.length===21&&
     canonical.every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite));
   $('review-accept').disabled=!canonicalValid;
+  const needsHistoricalConfirmation=data.review_status==='accepted'
+    && qualityPlan?.suggested?.some(row=>row.sample_id===data.sample_id
+      && row.assessment_origin==='heldout_session_oof');
+  $('review-accept').textContent=needsHistoricalConfirmation
+    ? 'Confirm accepted (OOF review)' : 'Accept';
   const role=data.raw_mp_handedness==='Left'?'drawing':'modifier';
   reviewOverlay.update({[role]:{landmarks:points.map(p=>({x:p[0],y:p[1]}))}});
   selectedReviewWorld=data.world_landmarks;
@@ -716,7 +724,19 @@ for (const action of ['accept','reject','drop','restore']) {
   $('review-' + action).addEventListener('click', () => {
     if (action==='accept' && $('review-accept').disabled) return;
     const sample_id = $('review-sample').value;
-    if (sample_id) studioRequest(action, {sample_id});
+    if(!sample_id)return;
+    const historic=action==='accept' && qualityPlan?.assessment_revision
+      && qualityPlan.suggested?.some(row=>
+        row.sample_id===sample_id && row.review_status==='accepted'
+        && row.assessment_origin==='heldout_session_oof');
+    if(historic) {
+      studioRequest('acknowledge',{
+        sample_id, capture_id:qualityPlan.capture_id,
+        assessment_revision:qualityPlan.assessment_revision,
+      });
+    } else {
+      studioRequest(action,{sample_id});
+    }
   });
 }
 $('build-snapshot').addEventListener('click', () => {

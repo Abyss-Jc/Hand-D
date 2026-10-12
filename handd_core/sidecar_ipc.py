@@ -181,6 +181,10 @@ class SidecarServer:
                 elif action in ('accept','reject','drop','restore'):
                     data = await asyncio.to_thread(
                         self.studio.transition, command.get('sample_id'), action)
+                elif action == 'acknowledge':
+                    data = await asyncio.to_thread(
+                        self.studio.acknowledge,command.get('sample_id'),
+                        command.get('capture_id'),command.get('assessment_revision'))
                 elif action == 'sample_detail':
                     data = await asyncio.to_thread(
                         self.studio.sample_detail, command.get('sample_id'))

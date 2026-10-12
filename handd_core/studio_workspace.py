@@ -105,9 +105,7 @@ class StudioWorkspace:
         qc_rejected=[r['sample_id'] for r in active if
                      r['sample_id'] in chosen and r['review_status']=='rejected']
         pending=sum(r['review_status']=='unreviewed' for r in active)
-        suggested_pending=[row for row in assessment['suggested']
-                           if any(r['sample_id']==row['sample_id'] and
-                                  r['review_status']=='unreviewed' for r in active)]
+        suggested_pending=list(assessment['suggested'])
         unassessable_pending = [
             r['sample_id'] for r in active
             if r['sample_id'] in assessment.get('unassessable', ())
@@ -147,7 +145,75 @@ class StudioWorkspace:
             rows=self._capture_rows(store,capture_id)
             from handd_core.review_assessment import assess_capture
             assessment=assess_capture(self.path,rows,capture_id)
+            self._filter_resolved_suggestions(store,assessment)
             return self._quality_plan(rows,capture_id,assessment)
+        finally:
+            store.close()
+
+    @staticmethod
+    def _filter_resolved_suggestions(store, assessment: dict) -> None:
+        if assessment['assessment_state'] != 'model_assessed':
+            return
+        unresolved=[]
+        for item in assessment['suggested']:
+            status=item['review_status']
+            if status=='rejected':
+                continue
+            if status=='accepted':
+                if item['assessment_origin'] != 'heldout_session_oof':
+                    continue  # already explicitly reviewed after capture
+                reason='OOF review acknowledged:'+assessment['assessment_revision']
+                if store.conn.execute(
+                    'SELECT 1 FROM review_events WHERE sample_id=? AND reason=? LIMIT 1',
+                    (item['sample_id'],reason)
+                ).fetchone():
+                    continue
+            unresolved.append(item)
+        assessment['suggested']=unresolved
+
+    def acknowledge(self, sample_id: str, capture_id: str, assessment_revision: str) -> dict:
+        """Human confirmation of an already-accepted but OOF-flagged Sample."""
+        if (not isinstance(sample_id,str) or not isinstance(capture_id,str)
+                or not isinstance(assessment_revision,str)
+                or len(sample_id)>128 or not sample_id or len(capture_id)>128):
+            raise ValueError('Invalid historical review acknowledgement')
+        store=DatasetStore(self.path/'handd.sqlite')
+        try:
+            rows=self._capture_rows(store,capture_id)
+            from handd_core.review_assessment import assess_capture
+            assessment=assess_capture(self.path,rows,capture_id)
+            self._filter_resolved_suggestions(store,assessment)
+            candidate=next((row for row in assessment['suggested']
+                            if row['sample_id']==sample_id and
+                            row['review_status']=='accepted' and
+                            row['assessment_origin']=='heldout_session_oof'),None)
+            if (candidate is None or
+                    assessment.get('assessment_revision')!=assessment_revision):
+                raise ValueError('Refresh Review before acknowledging this OOF suggestion')
+            reason='OOF review acknowledged:'+assessment_revision
+            with store.conn:
+                store.conn.execute('BEGIN IMMEDIATE')
+                actual=store.conn.execute(
+                    'SELECT review_status,lifecycle_status FROM samples '
+                    'WHERE sample_id=? AND capture_id=?',(sample_id,capture_id)
+                ).fetchone()
+                if actual is None or actual['review_status']!='accepted' or actual['lifecycle_status']!='active':
+                    raise ValueError('Sample changed; refresh Review')
+                if store.conn.execute(
+                    'SELECT 1 FROM review_events WHERE sample_id=? AND reason=? LIMIT 1',
+                    (sample_id,reason)
+                ).fetchone():
+                    raise ValueError('OOF suggestion has already been acknowledged')
+                from handd_core.studio_models import StudioModels
+                if StudioModels(self.path).listed_active_id()!=assessment['assessment_model_id']:
+                    raise ValueError('Active Model changed; refresh Review')
+                store.conn.execute(
+                    "INSERT INTO review_events(sample_id,previous_status,new_status,reason,created_at) "
+                    "VALUES (?,'accepted','accepted',?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+                    (sample_id,reason)
+                )
+            return {'sample_id':sample_id,'review_status':'accepted',
+                    'lifecycle_status':'active','acknowledged_revision':assessment_revision}
         finally:
             store.close()
 
@@ -164,6 +230,7 @@ class StudioWorkspace:
             with store.conn:
                 store.conn.execute('BEGIN IMMEDIATE')
                 rows=self._capture_rows(store,capture_id)
+                self._filter_resolved_suggestions(store,assessment)
                 plan=self._quality_plan(rows,capture_id,assessment)
                 if token!=plan['token']:
                     raise ValueError('Capture changed; refresh Quality Check before batch acceptance')

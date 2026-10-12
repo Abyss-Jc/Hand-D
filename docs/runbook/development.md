@@ -506,6 +506,63 @@ interim. Native Tauri/WebKit visual inspection, physical capture, and truthful
 per-gesture model-accuracy validation still require a human operator. The
 synthetic tracer verifies **contracts**, not gesture correctness.
 
+**HD-10CUR completion, source + contract gate (2026-10-12):** The paragraph
+above describes the *prior* implementation. `handd_core/oof_review.py`
+now imports authoritative stored Development OOF rows and verifies the
+associated Candidate's immutable Snapshot membership, Session labels,
+fold train/validation IDs, actual held-out Session for every Sample,
+OOF scores/margins and fold checkpoint attribution. The final-refit
+Candidate continues to assess **only** Samples outside its training
+Snapshot. `StudioWorkspace.review_plan` merges both sets into its
+existing ranked Suggested for Review queue, using explicit
+`assessment_origin=heldout_session_oof` or
+`out_of_training_candidate`, artifact and snapshot IDs, per-model
+scores and a development-derived margin threshold.
+
+Historical accepted Samples with OOF disagreement/ambiguity remain
+visible instead of being filtered as already reviewed. The operator can
+Reject them or click **Confirm accepted (OOF review)**, which creates an
+immutable accepted-to-accepted `review_events` entry scoped to the
+assessment revision. A second acknowledgement is refused. Unresolved
+flags block the deliberate remaining-batch Accept; reviewed flags no
+longer block it. New Sample acceptance, random QC, dropped Sample
+lifecycle and untouched P003 protections remain as before.
+
+Derived `workspace/assessments/*.json` histories use
+`assessment_format_version: 2` (separate from previous formats):
+applicable Sample membership, model and weights/metrics hashes,
+Snapshot checksum, per-Sample score/provenance and a record SHA256.
+Each record is created atomically without overwriting earlier ones.
+Malformed JSON, edits with stale digest, inconsistent Model Artifact
+provenance or forged validation splits cause `assessment_unavailable`
+and prevent batch approval. These are **derived append-only files**,
+not additional SQLite Model Assessment rows; SQLite remains the canonical
+Sample/Review Event source. SHA256 catches accidental/local history
+changes; it is not a tamper-proof signature against an attacker able
+to alter all workspace files.
+
+**TDD/verification:** `tests/test_hd10_tracer.py` exercises authentic
+Studio WebSocket commands through synthetic Samples → Snapshot →
+real training CLI → Candidate activation → historical OOF suggestions →
+audited reconfirmation, plus subsequent new-Sample predictions,
+integrity faults and a forged (self-consistently re-hashed) leaky fold.
+`desktop/tests/app-ui.test.mjs` checks visible historical accepted
+suggestions and the explicit confirmation command. These verify software
+contracts **without real human-gesture accuracy or Tauri/WebKit UX
+signoff**. HD-10CUR's code acceptance is DONE; HD-10 real human labels,
+camera UX, final latency, platform acceptance and unseen P003 remain open.
+
+**Linux final regression (2026-10-12):** `uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -q`
+**138/138 PASS**, `node --test desktop/tests/*.test.mjs` **46/46 PASS**,
+`cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked -q`
+**7/7 PASS**, plus `uv lock --check`, `node --check desktop/web/app.js`
+and `git diff --check`. The new tests exercised deliberate human
+re-acknowledgement of an already-accepted, OOF-flagged Sample with an
+immutable Review Event, refusal of duplicate acknowledgements, a
+tampered assessment record with otherwise-valid JSON, and a self-
+consistently re-hashed but validation-leaking training report. All
+data and Camera observations in these new tests are synthetic.
+
 **HD-10Q — visual wrist orientation and capture quality (2026-10-09):** The
 69-feature canonical transform deliberately points +Y from wrist to middle
 MCP, but SVG screen +Y points **down**. Review now inverts *only the canonical
