@@ -187,6 +187,10 @@ uv run --frozen --group training python -m handd_core.train_cli \
 
 Reemplaza el ID por el que realmente generó **Snapshots**. Si no hay suficientes sesiones de desarrollo revisadas, el comando puede bloquearse con razón; no inventes datos ni participantes. **P003 se mantiene sellado para prueba final** y no entra en Development.
 
+### Dependencias experimentales de HD-12 (NO necesarias para ejecutar Hand-D)
+
+ONNX Runtime y MediaPipe 1.1.0 **no están activados en la aplicación**. Si más adelante quieres probarlos sin cambiar el lockfile ni el runtime, sigue la [guía experimental de HD-12](hd12-onnx-experimental.md), con comandos `uv run --frozen --with onnx/onnxruntime/onnxscript` y un entorno temporal separado para `mediapipe==1.1.0`. No añadas esos paquetes con `pip install` al sistema y no edites `pyproject.toml` hasta decidir una migración formal.
+
 ## 7. Empaquetado opcional
 
 **No es necesario para desarrollar.** En cada sistema operativo/arquitectura hay que construir su propio sidecar:

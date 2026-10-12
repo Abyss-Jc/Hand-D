@@ -21,6 +21,7 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | Why did we make durable architectural choices? | [ADRs](adr/) |
 | What language must every desktop UI surface use? | [ADR 0005 — English-only product UI](adr/0005-english-only-product-ui.md) |
 | How do automatic checks work, and what must Josué enable on GitHub? | [CI-01/CI-02 runbook](runbook/ci.md) |
+| How do I optionally benchmark ONNX / MediaPipe 1.1 without changing the runtime? | [HD-12 experimental guide](runbook/hd12-onnx-experimental.md) |
 | How should a developer prepare and verify the repository? | [Development runbook](runbook/development.md) |
 | What rules should coding agents and contributors follow? | [AGENTS.md](../AGENTS.md) |
 

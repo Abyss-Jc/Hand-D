@@ -700,3 +700,25 @@ This is not camera/UX/macOS verification.
 CI-01/02 Linux local verification (2026-10-12): 142 Python / 49 JS / 7 Rust PASS; `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/ci.yml` PASS; frozen uv/npm installation PASS. See [CI runbook](ci.md). Josué admin action for mandatory `Required CI` remains pending.
 
 CI first hosted run: [Hand-D CI #38285078782](https://github.com/Abyss-Jc/Hand-D/actions/runs/38285078782) succeeded for Python, frontend, Rust and `Required CI` on commit `c0f98d5`. v5 actions are being pinned subsequently to address hosted Node 20 deprecation warnings. Branch protection still requires Josué/ADMIN.
+
+## HD-12 - ONNX/MediaPipe experimental spike (2026-10-12; intentionally OPEN)
+
+See [the opt-in HD-12 installation, benchmark and decision gates](hd12-onnx-experimental.md).
+
+TDD: first a failing ONNX benchmark module test, then hash-validated
+Candidate loading, dynamic-batch export through `torch.export` (ONNX opset 18),
+ONNX Runtime `CPUExecutionProvider` inference, numerical comparison of
+69-float logits/predictions, median/p95 inference timing and **complete** ONNX
+model size (graph + external weights). Tests can run in isolation with
+`uv run --frozen --with onnx --with onnxruntime --with onnxscript`; the
+normal Python test suite does not install ONNX and skips these optional tests.
+No code in the Active Model or Python sidecar was changed. No ONNX dependency
+was added to the project runtime or lockfile.
+
+MediaPipe `0.10.33` and isolated `1.1.0` both loaded the existing Hand Landmarker
+`.task` and delivered two black-frame LIVE_STREAM callbacks with expected
+fields/timestamps on the Linux host. To keep headless CI hardware-neutral,
+this graphics-initializing test is opt-in via `HANDD_HD12_MP_LIVE=1`.
+Neither this result nor the logged TensorFlow Lite warnings establish webcam,
+handedness, accuracy or responsiveness on Mac M4. **HD-12 stays IN PROGRESS:
+ONNX is only an experimental deployment candidate.**
