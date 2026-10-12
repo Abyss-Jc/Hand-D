@@ -678,3 +678,23 @@ ergonomics: those human/platform checks remain deferred with HD-10.
 - Collection provenance must not store hardware serials, MAC addresses, passwords, tokens, or other unnecessary identifying secrets.
 - Use an application-generated anonymous device ID for local provenance.
 - Never document secret values; document only variable/configuration names when secrets eventually exist.
+
+## CI-01 / CI-02: initial GitHub Actions rollout (2026-10-12)
+
+See [continuous integration runbook](ci.md). Workflow `.github/workflows/ci.yml`
+contains Linux Ubuntu 24.04 jobs for Python, frontend and locked Rust Tauri
+tests, with `Required CI` aggregator to enforce all check results. Triggers:
+PR and push against v2/main plus manual dispatch. Dependencies come from
+`uv.lock`, `desktop/package-lock.json` and `desktop/src-tauri/Cargo.lock`.
+Actions pinned by upstream Git SHA, read-only permission, checkout
+credentials not persisted, concurrency cancellation, and no secrets.
+Static contract: `tests/test_ci_workflow.py` using TDD (initial missing
+workflow RED; GREEN after implementation).
+
+**Access limitation:** Magia's GitHub WRITE role cannot install branch protection.
+Josué needs to mark the status check `Required CI` mandatory from Settings
+once the check appears in the first hosted run. Until that admin action,
+CI-02 has a gate that reports failures but does not actually prevent merge.
+This is not camera/UX/macOS verification.
+
+CI-01/02 Linux local verification (2026-10-12): 142 Python / 49 JS / 7 Rust PASS; `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/ci.yml` PASS; frozen uv/npm installation PASS. See [CI runbook](ci.md). Josué admin action for mandatory `Required CI` remains pending.

@@ -1,0 +1,110 @@
+# CI-01 / CI-02: repeatable, hardware-free gates for Hand-D v2.
+# Branch protection can require the single stable "Required CI" status.
+name: Hand-D CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/hand-d-v2-modernization
+  pull_request:
+    branches:
+      - main
+      - feature/hand-d-v2-modernization
+  workflow_dispatch:
+
+# Pull requests (including forks) run without repository write credentials.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          enable-cache: true
+      - name: Install locked Python and development training dependencies
+        run: |
+          uv python install 3.13
+          uv lock --check
+          uv sync --frozen --group training
+      - name: Python core, Studio, and synthetic integration tests (no camera)
+        run: uv run --frozen --group training python -m unittest discover -s tests -p 'test_*.py' -q
+
+  frontend:
+    name: Frontend tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install exact npm lockfile
+        run: npm ci --prefix desktop --no-audit --no-fund
+      - name: Check frontend syntax
+        run: npm --prefix desktop run check
+      - name: Frontend interaction and renderer tests
+        run: node --test desktop/tests/*.test.mjs
+
+  rust:
+    name: Rust tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install Tauri 2 Linux native build requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libwebkit2gtk-4.1-dev libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Select stable Rust compiler
+        run: rustup update stable --no-self-update
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: rust-ubuntu-24.04-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            rust-ubuntu-24.04-
+      - name: Run locked Tauri Rust tests (no camera)
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked -q
+
+  # Point branch protection at this job: it fails if ANY platform-independent
+  # suite failed, was cancelled, or was skipped. The name stays stable.
+  required:
+    name: Required CI
+    runs-on: ubuntu-24.04
+    needs: [python, frontend, rust]
+    if: ${{ always() }}
+    timeout-minutes: 5
+    steps:
+      - name: Reject incomplete or failing checks
+        env:
+          PYTHON_RESULT: ${{ needs.python.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          RUST_RESULT: ${{ needs.rust.result }}
+        run: |
+          echo "Python: $PYTHON_RESULT; Frontend: $FRONTEND_RESULT; Rust: $RUST_RESULT"
+          test "$PYTHON_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$RUST_RESULT" = success
