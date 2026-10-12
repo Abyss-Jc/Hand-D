@@ -11,17 +11,17 @@
 ```text
 ┌ Hand-D ─────────────────── Whiteboard | Studio ──────────┐
 │ New   Open   Save   Export   Undo   Redo      Settings   │
-├─────────────────────────────────────────────────────────┤
-│                                                 Camera  │
-│   Live camera background + editable drawing      [ON]  │
-│                                                         │
+├──────────────────────────────────────────────────────────┤
+│                                                 Camera   │
+│   Live camera background + editable drawing      [ON]    │
+│                                                          │
 │  Tools                                    Hand feedback  │
 │  Pen / Erase / Color                       Index • Draw  │
-│                                                         │
-│                 Visible canvas stays editable           │
-├─────────────────────────────────────────────────────────┤
+│                                                          │
+│                 Visible canvas stays editable            │
+├──────────────────────────────────────────────────────────┤
 │ Camera: Ready    Model: baseline    Drawing hand: Right  │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 - Camera-on drawing overlay is default. An obvious toggle switches to a clean/dark canvas **without modifying strokes or stopping inference**; hiding MJPEG stops unnecessary preview encoding.
