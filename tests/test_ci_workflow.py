@@ -44,6 +44,16 @@ class CIWorkflowContractTests(unittest.TestCase):
         ):
             self.assertIn(command, self.source)
 
+    def test_pinned_actions_use_node24_capable_major_versions(self):
+        # Checkout v5 and setup-node v5 no longer require the deprecated Node 20 runner.
+        self.assertIn('actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09', self.source)
+        self.assertIn('actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444', self.source)
+        self.assertNotIn('actions/checkout@11d5960a326750d5838078e36cf38b85af677262', self.source)
+        used = re.findall(r'(?m)^\s+- uses: ([^\s#]+)', self.source)
+        self.assertTrue(used)
+        self.assertTrue(all(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}', value)
+                            for value in used), 'Every action must be pinned to a commit SHA')
+
     def test_pr_jobs_are_read_only_and_cancel_superseded_runs(self):
         self.assertRegex(self.source, r'(?m)^permissions:\s*\n  contents: read\s*$')
         self.assertNotRegex(self.source, r'(?m)^\s+(?:contents|actions|checks|pull-requests): write\s*$')

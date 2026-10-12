@@ -70,5 +70,4 @@ unittests** (including four new CI contract assertions), `npm ci --prefix
 desktop`, `npm --prefix desktop run check`, **49/49 JavaScript tests**,
 **7/7 Rust tests**, `git diff --check`, and `actionlint v1.7.7` validating
 `.github/workflows/ci.yml`. A YAML parser also confirmed the declared
-triggers, jobs and read-only permissions. Hosted runner success remains
-**unverified until GitHub Actions finishes its first execution**.
+triggers, jobs and read-only permissions. **First hosted workflow (commit `c0f98d5`, [run #38285078782](https://github.com/Abyss-Jc/Hand-D/actions/runs/38285078782)) passed** all four jobs: Python, Frontend, Rust and `Required CI`. GitHub warned that the original checkout/setup-node v4 actions used the deprecated Node 20 runner. The follow-up uses pinned v5 actions based on Node 24; its own hosted outcome must be checked separately.

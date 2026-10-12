@@ -698,3 +698,5 @@ CI-02 has a gate that reports failures but does not actually prevent merge.
 This is not camera/UX/macOS verification.
 
 CI-01/02 Linux local verification (2026-10-12): 142 Python / 49 JS / 7 Rust PASS; `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/ci.yml` PASS; frozen uv/npm installation PASS. See [CI runbook](ci.md). Josué admin action for mandatory `Required CI` remains pending.
+
+CI first hosted run: [Hand-D CI #38285078782](https://github.com/Abyss-Jc/Hand-D/actions/runs/38285078782) succeeded for Python, frontend, Rust and `Required CI` on commit `c0f98d5`. v5 actions are being pinned subsequently to address hosted Node 20 deprecation warnings. Branch protection still requires Josué/ADMIN.
