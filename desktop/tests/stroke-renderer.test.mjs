@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {StrokeRenderer} from '../web/stroke-renderer.mjs';
+import {StrokeRenderer,MAX_ANIMATED_WIGGLY} from '../web/stroke-renderer.mjs';
 
 function fixture() {
   const stats={created:0,dUpdates:0,removes:0};
@@ -8,6 +8,7 @@ function fixture() {
   class Element {
     constructor(tag){this.tag=tag;this.attributes={};this.children=[];this.parentElement=null;}
     setAttribute(name, value){this.attributes[name]=value;if(name==='d')stats.dUpdates++;}
+    removeAttribute(name){delete this.attributes[name];}
     append(child){child.remove();this.children.push(child);child.parentElement=this;}
     remove(){if(!this.parentElement)return;const list=this.parentElement.children;list.splice(list.indexOf(this),1);stats.removes++;this.parentElement=null;}
   }
@@ -120,4 +121,45 @@ test('Pen and each Wiggly boil frame honor the selected per-stroke color and siz
   assert.equal(item.path.attributes['stroke-width'],'8');
   assert.ok(item.variants.every(v=>v.attributes.stroke==='#188A75'));
   assert.ok(item.variants.every(v=>Number(v.attributes['stroke-width'])>7));
+});
+
+test('a long Wiggly session bounds animated SVG paths, retaining older ink and undo recovery',()=>{
+  const {renderer,frame,makeStroke}=fixture();
+  const strokes=[];
+  for(let i=0;i<MAX_ANIMATED_WIGGLY+90;i++){
+    const stroke=makeStroke('wiggly',[{x:.05,y:.05},{x:.5,y:.5}]);
+    strokes.push(stroke);
+    renderer.append(stroke);
+  }
+  frame();
+  const first=renderer.elements.get(strokes[0]);
+  assert.equal(first.node.children.length,1,'older Wiggly stays inked but not animated');
+  assert.ok(first.path.attributes.d.includes('L'),'static geometry must survive demotion');
+  assert.equal(renderer.elements.get(strokes.at(-1)).node.children.length,4,
+    'recent Wiggly keeps all three animated variants');
+  const variantCount=strokes.reduce((sum,stroke)=>sum+renderer.elements.get(stroke).variants.length,0);
+  assert.equal(variantCount,MAX_ANIMATED_WIGGLY*3,'SVG animation work stays bounded');
+  renderer.animateWiggly(90);
+  assert.equal(renderer.svg.attributes['data-boil-frame'],'1');
+  renderer.sync(strokes.slice(0,2));
+  frame();
+  assert.equal(renderer.elements.get(strokes[0]).node.children.length,4,
+    'undo to old paths reactivates their animation');
+  assert.equal(renderer.elements.get(strokes[0]).path,first.path,
+    'original static SVG node and shape are preserved');
+});
+
+test('incremental append preserves eraser chronology without needing document resync',()=>{
+  const {renderer,svg,makeStroke,frame}=fixture();
+  const ink=makeStroke('wiggly',[{x:.2,y:.2},{x:.6,y:.6}]);
+  const erase=makeStroke('erase',[{x:.5,y:.5}]);
+  const later=makeStroke('draw',[{x:.3,y:.3}]);
+  renderer.append(ink);
+  renderer.append(erase);
+  renderer.append(later);
+  frame();
+  assert.equal(renderer.elements.get(ink).node.parentElement.tag,'g');
+  assert.equal(renderer.elements.get(erase).node.parentElement.tag,'mask');
+  assert.equal(renderer.elements.get(later).node.parentElement,svg);
+  assert.equal(renderer.order.length,3);
 });

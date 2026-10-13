@@ -7,6 +7,9 @@ import {strokeStyle} from './drawing-document.mjs';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let nextEraserMaskId = 0;
+// Older completed ink stays visible as a static stroke. Only recent Wiggly
+// strokes spend SVG style/paint time on the 12fps animation clock.
+export const MAX_ANIMATED_WIGGLY = 64;
 
 export class StrokeRenderer {
   constructor(svg, {
@@ -25,7 +28,21 @@ export class StrokeRenderer {
     this.order = [];
     this.defs = null;
     this.wigglyCount = 0;
+    this.animatedWiggly = [];
     this.boilFrame = null;
+  }
+
+  /** O(1) entry point for live drawing: no scanning earlier document strokes. */
+  append(stroke) {
+    if (this.elements.has(stroke)) throw Error('Stroke already added');
+    this._createStroke(stroke,stroke.tool === 'wiggly');
+    this.order.push(stroke);
+    if (stroke.tool === 'wiggly') {
+      this.animatedWiggly.push(stroke);
+      if (this.animatedWiggly.length > MAX_ANIMATED_WIGGLY)
+        this._demote(this.elements.get(this.animatedWiggly.shift()));
+    }
+    this.wigglyCount = this.animatedWiggly.length;
   }
 
   sync(paths) {
@@ -47,49 +64,86 @@ export class StrokeRenderer {
       for (const child of [...this.svg.children]) child.remove();
       this.defs = null;
     }
+    const active = paths.filter(stroke=>stroke.tool === 'wiggly').slice(-MAX_ANIMATED_WIGGLY);
+    const activeSet = new Set(active);
     const newPaths = appendOnly ? paths.slice(this.order.length) : paths;
     for (const stroke of newPaths) {
       if (this.elements.has(stroke)) {
         this._attach(stroke, this.elements.get(stroke).node);
         continue;
       }
-      const path = this.createPath();
-      const style=strokeStyle(stroke);
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke',style.color);
-      path.setAttribute('stroke-width',String(style.width));
-      path.setAttribute('stroke-linejoin', 'round');
-      path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('pointer-events', 'none');
-      const node = stroke.tool === 'wiggly' ? this.createSvg('g') : path;
-      const variants=[];
-      if (stroke.tool === 'wiggly') {
-        node.setAttribute('data-lineboil-stroke', '');
-        path.setAttribute('data-lineboil-static', '');
-        node.append(path);
-        for(let frame=0;frame<3;frame++){
-          const variant=this.createPath();
-          variant.setAttribute('fill','none');
-          variant.setAttribute('stroke',style.color);
-          variant.setAttribute('stroke-linejoin','round');
-          variant.setAttribute('stroke-linecap','round');
-          variant.setAttribute('pointer-events','none');
-          variant.setAttribute('data-lineboil-frame',String(frame));
-          node.append(variant);
-          variants.push(variant);
-        }
-      }
-      this._attach(stroke, node);
-      const first=stroke.points[0] || {x:0,y:0};
-      const seed=Number.isInteger(stroke.boilSeed) ? stroke.boilSeed
-        : (Math.imul(Math.round(first.x*1e6),2654435761)
-          ^ Math.imul(Math.round(first.y*1e6),1597334677))>>>0;
-      this.elements.set(stroke,{path,node,variants,seed,count:0,geometry:''});
-      this.pointAdded(stroke);
+      this._createStroke(stroke,activeSet.has(stroke));
+    }
+    for (const [stroke,entry] of this.elements) {
+      if (stroke.tool !== 'wiggly') continue;
+      if (activeSet.has(stroke)) this._promote(stroke,entry);
+      else this._demote(entry);
     }
     this.order = [...paths];
-    this.wigglyCount = paths.filter(stroke=>stroke.tool === 'wiggly').length;
+    this.animatedWiggly = active;
+    this.wigglyCount = active.length;
     if (!this.wigglyCount) this._showBoilFrame(null);
+  }
+
+  _createStroke(stroke,animate) {
+    const path=this.createPath();
+    const style=strokeStyle(stroke);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke',style.color);
+    path.setAttribute('stroke-width',String(style.width));
+    path.setAttribute('stroke-linejoin','round');
+    path.setAttribute('stroke-linecap','round');
+    path.setAttribute('pointer-events','none');
+    const node=stroke.tool==='wiggly'?this.createSvg('g'):path;
+    if(stroke.tool==='wiggly'){
+      node.setAttribute('data-lineboil-stroke','');
+      path.setAttribute('data-lineboil-static','');
+      node.append(path);
+    }
+    this._attach(stroke,node);
+    const first=stroke.points[0]||{x:0,y:0};
+    const seed=Number.isInteger(stroke.boilSeed)?stroke.boilSeed
+      :(Math.imul(Math.round(first.x*1e6),2654435761)
+        ^ Math.imul(Math.round(first.y*1e6),1597334677))>>>0;
+    const entry={path,node,variants:[],seed,count:0,geometry:''};
+    this.elements.set(stroke,entry);
+    if(animate)this._promote(stroke,entry);
+    this.pointAdded(stroke);
+  }
+
+  _promote(stroke,entry) {
+    if(entry.variants.length)return;
+    const style=strokeStyle(stroke);
+    entry.node.setAttribute('data-lineboil-active','');
+    for(let frame=0;frame<3;frame++){
+      const variant=this.createPath();
+      variant.setAttribute('fill','none');
+      variant.setAttribute('stroke',style.color);
+      variant.setAttribute('stroke-linejoin','round');
+      variant.setAttribute('stroke-linecap','round');
+      variant.setAttribute('pointer-events','none');
+      variant.setAttribute('data-lineboil-frame',String(frame));
+      entry.node.append(variant);
+      entry.variants.push(variant);
+    }
+    // Rebuild frame geometry only when an undo promotes an existing stroke.
+    if(entry.count)this._updateVariants(stroke,entry);
+  }
+
+  _demote(entry) {
+    if(!entry.variants.length)return;
+    for(const variant of entry.variants)variant.remove();
+    entry.variants=[];
+    entry.node.removeAttribute('data-lineboil-active');
+  }
+
+  _updateVariants(stroke,entry) {
+    const frames=buildLineBoilFrames(stroke.points,{seed:entry.seed});
+    const width=strokeStyle(stroke).width/5;
+    frames.forEach((frame,i)=>{
+      entry.variants[i].setAttribute('d',frame.d);
+      entry.variants[i].setAttribute('stroke-width',String(frame.width*width));
+    });
   }
 
   _attach(stroke, node) {
@@ -164,11 +218,7 @@ export class StrokeRenderer {
         'd', entry.geometry + (count === 1 ? ' l0.1 0.1' : '')
       );
       if (entry.variants.length) {
-        const frames=buildLineBoilFrames(stroke.points,{seed:entry.seed});
-        frames.forEach((frame,i)=>{
-          entry.variants[i].setAttribute('d',frame.d);
-          entry.variants[i].setAttribute('stroke-width',String(frame.width*strokeStyle(stroke).width/5));
-        });
+        this._updateVariants(stroke,entry);
       }
     }
   }

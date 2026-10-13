@@ -22,6 +22,9 @@ let gestureRuler = false;
 let inkColor = null;
 let brushWidth = null;
 let eraserRadius = 16;
+let cursorPoint = null;
+let cursorTool = 'draw';
+let cursorSource = null;
 let ws = null;
 let sidecarKey = null;
 let previewUrl = null;
@@ -70,7 +73,7 @@ function beginStroke(point, source, action) {
     width:action==='erase'?eraserRadius*2:(brushWidth??style.width)};
   strokes.paths.push(path);
   strokes.redoStack = [];
-  redraw();
+  strokeRenderer.append(path);
   markDrawingEdited();
   return path;
 }
@@ -94,6 +97,9 @@ function setTool(action) {
     $('brush-size').value=String(strokeStyle({tool:action==='erase'?'draw':action}).width);
     $('brush-size-value').textContent=$('brush-size').value+' px';
   }
+  updateBrushPreview();
+  if(cursorSource==='mouse')cursorTool=action;
+  refreshCursor();
 }
 const inkPalette={black:'#1a1d1c',red:'#E24742',blue:'#5263e6',
   green:'#188A75',purple:'#8545A4',orange:'#DA7A21'};
@@ -102,29 +108,76 @@ function updatePalettePressed() {
   for(const [name,color] of Object.entries(inkPalette))
     $('color-'+name).setAttribute('aria-pressed',String(color===selected));
 }
+function updateBrushPreview() {
+  const diameter=brushWidth??strokeStyle({tool:tool==='erase'?'draw':tool}).width;
+  const indicator=$('brush-size-preview');
+  indicator.style.width=diameter+'px';
+  indicator.style.height=diameter+'px';
+  indicator.style.backgroundColor=inkColor??strokeStyle({tool:tool==='erase'?'draw':tool}).color;
+}
+function updateEraserPreview() {
+  // Thumbnail is intentionally reduced; the on-canvas cursor is actual size.
+  const diameter=Math.max(4,eraserRadius/4)+'px';
+  $('eraser-size-preview').style.width=diameter;
+  $('eraser-size-preview').style.height=diameter;
+}
 for(const [name,color] of Object.entries(inkPalette)) {
   $('color-'+name).addEventListener('click',()=>{
     inkColor=color;
     updatePalettePressed();
+    updateBrushPreview();
+    refreshCursor();
   });
 }
 updatePalettePressed();
+updateBrushPreview();
+updateEraserPreview();
 function setBrushSize(value) {
   brushWidth=Math.max(1,Math.min(20,Math.round(Number(value))));
   $('brush-size').value=String(brushWidth);
   $('brush-size-value').textContent=brushWidth+' px';
+  updateBrushPreview();
+  refreshCursor();
 }
 function setEraserRadius(value) {
   eraserRadius=Math.max(10,Math.min(80,Math.round(Number(value))));
   $('eraser-size').value=String(eraserRadius);
   $('eraser-size-value').textContent=eraserRadius+' px';
+  updateEraserPreview();
+  refreshCursor();
 }
 $('brush-size').addEventListener('input',()=>setBrushSize($('brush-size').value));
 $('eraser-size').addEventListener('input',()=>setEraserRadius($('eraser-size').value));
+function refreshCursor() {
+  if(!cursorPoint)return;
+  const diameter=cursorTool==='erase' ? eraserRadius*2
+    : (brushWidth??strokeStyle({tool:cursorTool}).width);
+  const cursor=$('cursor');
+  cursor.hidden=false;
+  cursor.style.left=cursorPoint.x*100+'%';
+  cursor.style.top=cursorPoint.y*100+'%';
+  // SVG uses 1000x600 viewBox units, stretched to the camera plane.
+  cursor.style.width=diameter/10+'%';
+  cursor.style.height=diameter/6+'%';
+  cursor.style.borderColor=cursorTool==='erase'?'#E24742'
+    :(inkColor??strokeStyle({tool:cursorTool}).color);
+}
+function showCursor(point,action,source) {
+  cursorPoint=point;
+  cursorTool=action;
+  cursorSource=source;
+  refreshCursor();
+}
+function hideCursor(source) {
+  if(cursorSource!==source)return;
+  cursorPoint=null;
+  cursorSource=null;
+  $('cursor').hidden=true;
+}
 function releaseGesture(clearHands = true) {
   gestureStroke = null;
   gestureRuler = false;
-  $('cursor').hidden = true;
+  hideCursor('gesture');
   if (clearHands) handOverlay.clear();
 }
 function showModifierFeedback(message) {
@@ -182,9 +235,7 @@ function onRuntimeEvent(event) {
     releaseGesture(false); // keep Modifier landmarks if Drawing Hand disappears
     return;
   }
-  $('cursor').hidden = false;
-  $('cursor').style.left = (point.x * 100) + '%';
-  $('cursor').style.top = (point.y * 100) + '%';
+  showCursor(point, draw.action==='erase'?'erase':(tool==='wiggly'?'wiggly':'draw'), 'gesture');
   const action = draw.action;
   if (action !== 'draw' && action !== 'erase') {
     releaseGesture(false);
@@ -217,10 +268,17 @@ const canvas = $('drawing');
 canvas.addEventListener('pointerdown', event => {
   if (event.button !== 0) return;
   canvas.setPointerCapture(event.pointerId);
-  pointerStroke = beginStroke(mousePoint(event), 'pointer', tool);
+  const point=mousePoint(event);
+  showCursor(point,tool,'mouse');
+  pointerStroke = beginStroke(point, 'pointer', tool);
 });
 canvas.addEventListener('pointermove', event => {
-  if (pointerStroke) extendStroke(pointerStroke, mousePoint(event));
+  const point=mousePoint(event);
+  showCursor(point,tool,'mouse');
+  if (pointerStroke) extendStroke(pointerStroke, point);
+});
+canvas.addEventListener('pointerleave',()=>{
+  if(!pointerStroke)hideCursor('mouse');
 });
 for (const event of ['pointerup', 'pointercancel', 'lostpointercapture'])
   canvas.addEventListener(event, () => { pointerStroke = null; });
@@ -346,6 +404,7 @@ function navigate(view) {
   const whiteboard = view === 'whiteboard';
   const wasExpanded=!$('full-overlay').hidden;
   if (!whiteboard) collapse(); // keep the canvas in Whiteboard before hiding it
+  if (!whiteboard) hideCursor(cursorSource);
   $('whiteboard').hidden = !whiteboard;
   $('studio').hidden = whiteboard;
   $('nav-whiteboard').classList.toggle('selected', whiteboard);

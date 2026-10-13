@@ -57,9 +57,9 @@
               <button id="color-purple" class="swatch" style="--swatch:#8545A4" aria-label="Purple ink" aria-pressed="false" title="Purple"></button>
               <button id="color-orange" class="swatch" style="--swatch:#DA7A21" aria-label="Orange ink" aria-pressed="false" title="Orange"></button>
             </div>
-            <label for="brush-size">Brush <output id="brush-size-value" for="brush-size">4 px</output></label>
+            <label for="brush-size">Brush <span class="size-sample" aria-hidden="true"><span id="brush-size-preview" class="brush-footprint"></span></span><output id="brush-size-value" for="brush-size">4 px</output></label>
             <input id="brush-size" type="range" min="1" max="20" step="1" value="4" aria-label="Brush thickness">
-            <label for="eraser-size">Eraser radius <output id="eraser-size-value" for="eraser-size">16 px</output></label>
+            <label for="eraser-size">Eraser radius <span class="size-sample" aria-hidden="true"><span id="eraser-size-preview" class="eraser-footprint"></span></span><output id="eraser-size-value" for="eraser-size">16 px</output></label>
             <input id="eraser-size" type="range" min="10" max="80" step="1" value="16" aria-label="Eraser radius">
           </div>
           <div class="tools">

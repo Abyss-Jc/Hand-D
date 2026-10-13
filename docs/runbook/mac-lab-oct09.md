@@ -103,6 +103,10 @@ Los cambios del 12-oct-2026 estan descritos en [Whiteboard controls](../changes/
 
 No cambiar ni empaquetar ONNX/MPS para completar esta prueba: el gate es sobre interaccion y estabilidad, no sobre backend experimental. Si la clasificacion falla en un Mac donde los 21 puntos aparecen correctamente, registrar etiquetas/estado observados antes de tocar pesos o umbrales.
 
+### Seguimiento pendiente: radio visible y Wiggly con trazos acumulados (12-oct-2026)
+
+El nuevo anillo debe aumentar/disminuir con la configuracion Brush/Wiggly y con el **diametro del borrador** (doble del Eraser radius) al mover el puntero sobre el canvas o con mano detectada. Las miniaturas de Brush/Eraser en los sliders deben responder aun sin deteccion de manos. Verificar tambien que el color del anillo sigue al ink activo. En Wiggly, dibujar al menos 100 trazos; los **64 mas recientes** deben seguir vibrando, y los antiguos deben permanecer visibles **estaticos**. Probar Undo/Redo para observar reactivacion del boil, y dibujar/borrar por encima sin blanquear el video. El benchmark de Node y las pruebas SVG sinteticas de Linux estan en [el change](../changes/hand-d-v2-visualizer-controls-2026-10-12.md); el FPS y el coste de repintado reales de WebKit/macOS **No verificados**. Registrar si los bloqueos persisten y cuantos trazos de tinta y borrador habia.
+
 ## Limitaciones que no deben confundirse con bugs ya resueltos
 
 - El modo `npm --prefix desktop run dev` usa el Python local del clon. El empaquetado nativo ya tiene receta con PyInstaller y Rust ResourceDir, pero **solo existe prueba de construcción y lanzamiento del .deb Linux**. No hay todavía `.app` validado en Mac. Firma, sandbox, TCC/cámara del child PyInstaller y notarización permanecen pendientes de evidencia real.

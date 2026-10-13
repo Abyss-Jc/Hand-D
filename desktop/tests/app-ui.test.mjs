@@ -31,7 +31,8 @@ names.push('workspace-active-label');
 names.push('collect-progress-bar','collect-go-review');
 names.push('collect-quality-status');
 names.push('color-black','color-red','color-blue','color-green','color-purple','color-orange',
-  'brush-size','brush-size-value','eraser-size','eraser-size-value','modifier-feedback');
+  'brush-size','brush-size-value','brush-size-preview',
+  'eraser-size','eraser-size-value','eraser-size-preview','modifier-feedback');
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
   names.push('studio-pane-'+section);
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
@@ -821,6 +822,40 @@ test('Pen and Wiggly use selectable colors and live brush thickness indicators',
   assert.equal(elements['color-green'].attributes['aria-pressed'],'true');
 });
 
+test('brush and eraser cursors preview their actual SVG footprint, including live slider changes',()=>{
+  elements['nav-whiteboard'].emit('click');
+  elements['tool-pen'].emit('click');
+  elements['brush-size'].value='10';
+  elements['brush-size'].emit('input');
+  const before=elements.drawing.children.length;
+  elements.drawing.emit('pointermove',{clientX:250,clientY:300});
+  assert.equal(elements.cursor.hidden,false);
+  assert.equal(elements.cursor.style.left,'25%');
+  assert.equal(elements.cursor.style.top,'50%');
+  assert.equal(elements.cursor.style.width,'1%');
+  assert.ok(Math.abs(parseFloat(elements.cursor.style.height)-(10/6))<0.001);
+  assert.equal(elements.drawing.children.length,before,'hover preview never paints');
+  elements['brush-size'].value='20';
+  elements['brush-size'].emit('input');
+  assert.equal(elements.cursor.style.width,'2%','slider immediately resizes hovered brush');
+  assert.equal(elements['brush-size-preview'].style.width,'20px',
+    'brush preview changes even while the cursor is off the canvas');
+  elements['tool-wiggly'].emit('click');
+  assert.equal(elements.cursor.style.width,'2%','Wiggly shares brush footprint');
+  elements['color-green'].emit('click');
+  assert.equal(elements.cursor.style.borderColor,'#188A75',
+    'the hovered cursor immediately adopts the selected ink color');
+  elements['tool-eraser'].emit('click');
+  elements['eraser-size'].value='40';
+  elements['eraser-size'].emit('input');
+  assert.equal(elements.cursor.style.width,'8%','eraser radius 40 means diameter 80');
+  assert.equal(elements['eraser-size-preview'].style.width,'10px',
+    'compact eraser thumbnail scales with the real radius');
+  assert.ok(Math.abs(parseFloat(elements.cursor.style.height)-(80/6))<0.001);
+  elements.drawing.emit('pointerleave');
+  assert.equal(elements.cursor.hidden,true);
+});
+
 test('two-hand ruler previews one editable straight segment and thumb modifier adjusts size',async()=>{
   elements['nav-whiteboard'].emit('click');
   const fixtureAuth='synthetic';
@@ -856,10 +891,17 @@ test('two-hand ruler previews one editable straight segment and thumb modifier a
     {action:'tool_adjust',pointer:{x:1,y:.2}});
   assert.match(elements['modifier-feedback'].textContent,/brush.*20/i);
   assert.equal(elements['brush-size'].value,'20');
+  assert.equal(elements.cursor.style.width,'2%',
+    'live gesture adjustment changes the projected pen width');
   send({action:'erase',pointer:{x:.5,y:.5}},
     {action:'tool_adjust',pointer:{x:0,y:.2}});
   assert.match(elements['modifier-feedback'].textContent,/eraser.*10/i);
   assert.equal(elements['eraser-size'].value,'10');
   const eraser=elements.drawing.children.at(-1);
   assert.equal(eraser.children.at(-1)?.attributes?.['stroke-width']??eraser.attributes['stroke-width'],'20');
+  send({action:'erase',pointer:{x:.6,y:.5}},
+    {action:'tool_adjust',pointer:{x:1,y:.2}});
+  assert.equal(elements['eraser-size'].value,'80');
+  assert.equal(elements.cursor.style.width,'16%',
+    'live eraser footprint follows its radius, not the old 16px cursor');
 });

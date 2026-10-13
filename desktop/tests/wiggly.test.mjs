@@ -131,9 +131,11 @@ test('CSS selects exactly one variant per tick, reduced motion overrides clock',
   const css=readFileSync(new URL('../web/style.css',import.meta.url),'utf8');
   assert.match(css,/#drawing \[data-lineboil-frame\]\s*\{\s*display:\s*none/);
   for(let i=0;i<3;i++){
-    const selector='#drawing[data-boil-frame="'+i+'"] [data-lineboil-frame="'+i+'"]';
+    const selector='#drawing[data-boil-frame="'+i+'"] [data-lineboil-active] [data-lineboil-frame="'+i+'"]';
     assert.ok(css.includes(selector),'missing active frame '+i+' CSS selector');
   }
+  assert.match(css,/\[data-lineboil-active\] \[data-lineboil-static\]/,
+    'old static Wiggly strokes must remain visible during animation ticks');
   assert.match(css,/prefers-reduced-motion:\s*reduce/);
   assert.match(css,/#drawing \[data-lineboil-static\]\s*\{\s*display:\s*inline!important/);
 });
