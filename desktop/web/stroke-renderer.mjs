@@ -11,15 +11,49 @@ let nextEraserMaskId = 0;
 // strokes spend SVG style/paint time on the 12fps animation clock.
 export const MAX_ANIMATED_WIGGLY = 64;
 
+function strokeBounds(stroke,from=0) {
+  if (from>=stroke.points.length) return null;
+  // Include the pen radius, the eraser footprint, and Wiggly's bounded
+  // display-only displacement/width. Conservative boxes never drop an erase.
+  const width=strokeStyle(stroke).width;
+  const padding=stroke.tool==='wiggly'?width*.565+4:width/2+1;
+  const box={left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity};
+  for(let i=from;i<stroke.points.length;i++){
+    const point=stroke.points[i];
+    box.left=Math.min(box.left,point.x*1000-padding);
+    box.top=Math.min(box.top,point.y*600-padding);
+    box.right=Math.max(box.right,point.x*1000+padding);
+    box.bottom=Math.max(box.bottom,point.y*600+padding);
+  }
+  return box;
+}
+
+function unionBounds(a,b) {
+  if(!a||!b)return null; // Unknown ink geometry must not be pruned.
+  return {left:Math.min(a.left,b.left),top:Math.min(a.top,b.top),
+    right:Math.max(a.right,b.right),bottom:Math.max(a.bottom,b.bottom)};
+}
+
+function intersects(a,b) {
+  return !a||!b||(a.left<=b.right&&b.left<=a.right
+    &&a.top<=b.bottom&&b.top<=a.bottom);
+}
+
 export class StrokeRenderer {
   constructor(svg, {
     scheduleFrame = callback => typeof requestAnimationFrame === 'function'
       ? requestAnimationFrame(callback) : queueMicrotask(callback),
+    delayFrame = (callback,ms) => setTimeout(callback,ms),
+    now = () => performance.now(),
+    minEraseIntervalMs = 1000/30,
     createPath = () => document.createElementNS(SVG_NS, 'path'),
     createSvg = tag => document.createElementNS(SVG_NS, tag),
   } = {}) {
     this.svg = svg;
     this.scheduleFrame = scheduleFrame;
+    this.delayFrame = delayFrame;
+    this.now = now;
+    this.minEraseIntervalMs = minEraseIntervalMs;
     this.createPath = createPath;
     this.createSvg = createSvg;
     this.elements = new Map();
@@ -28,6 +62,12 @@ export class StrokeRenderer {
     this.order = [];
     this.defs = null;
     this.eraserLayers = [];
+    this.unmaskedInk = [];
+    this.eraserLinks = new Map();
+    this.lastErasePaintMs = null;
+    this.lastErasedStroke = null;
+    this.delayed = false;
+    this.scheduleVersion = 0;
     this.maskLayerNodes = new Set();
     this.wigglyCount = 0;
     this.animatedWiggly = [];
@@ -59,6 +99,7 @@ export class StrokeRenderer {
         entry.node.remove();
         this.elements.delete(stroke);
         this.pending.delete(stroke);
+        this.eraserLinks.delete(stroke);
       }
     }
     if (!appendOnly) {
@@ -66,7 +107,11 @@ export class StrokeRenderer {
       for (const child of [...this.svg.children]) child.remove();
       this.defs = null;
       this.eraserLayers = [];
+      this.unmaskedInk = [];
+      this.eraserLinks.clear();
       this.maskLayerNodes.clear();
+      this.lastErasePaintMs = null;
+      this.lastErasedStroke = null;
     }
     const active = paths.filter(stroke=>stroke.tool === 'wiggly').slice(-MAX_ANIMATED_WIGGLY);
     const activeSet = new Set(active);
@@ -154,6 +199,7 @@ export class StrokeRenderer {
     if (stroke.tool !== 'erase') {
       // Ink drawn AFTER an eraser is on top of the previous masked layers.
       this.svg.append(node);
+      this.unmaskedInk.push(stroke);
       return;
     }
     if (!this.defs) {
@@ -183,42 +229,82 @@ export class StrokeRenderer {
       mask.append(opaque);
       this.defs.append(mask);
     }
-    // All older epochs must see this eraser too, but each ink epoch gets
-    // exactly ONE flat mask: never rewrap earlier masks recursively.
+    // Each ink epoch has one flat mask, rather than nested scene masks.
     const pathId='handd-erase-path-'+nextEraserMaskId;
     node.setAttribute('id',pathId);
-    for(const layer of this.eraserLayers){
-      if(layer.mask===mask)continue;
-      const reference=this.createSvg('use');
-      reference.setAttribute('href','#'+pathId);
-      layer.mask.append(reference);
-    }
     mask.append(node); // black subtracts ink alpha, never the camera
     if(newInk.length){
+      const bounds=this.unmaskedInk.slice(1).reduce(
+        (box,ink)=>unionBounds(box,strokeBounds(ink)),strokeBounds(this.unmaskedInk[0]));
       const inkLayer=this.createSvg('g');
       inkLayer.setAttribute('mask','url(#'+maskId+')');
       for(const layer of newInk)inkLayer.append(layer);
       this.svg.append(inkLayer);
-      this.eraserLayers.push({mask,layer:inkLayer});
+      this.eraserLayers.push({mask,layer:inkLayer,bounds});
       this.maskLayerNodes.add(inkLayer);
     }
+    this.unmaskedInk=[];
+    this.eraserLinks.set(stroke,{pathId,count:0,bounds:null,
+      pendingLayers:this.eraserLayers.filter(layer=>layer.mask!==mask)});
+    this._linkEraser(stroke);
+  }
+
+  _linkEraser(stroke) {
+    const link=this.eraserLinks.get(stroke);
+    if(!link||link.count===stroke.points.length)return;
+    // Expand using only new points; the bounds of the connected path include
+    // every segment. Earlier ink epochs are frozen once their mask is created.
+    const from=link.count>stroke.points.length?0:link.count;
+    const bounds=from===0 ? strokeBounds(stroke)
+      : unionBounds(link.bounds,strokeBounds(stroke,from));
+    link.count=stroke.points.length;
+    link.bounds=bounds;
+    // An epoch already linked to this eraser can never need a second <use>.
+    // Remove it from the candidate set so a long stroke does not revisit it
+    // on every paint (especially on a dense/full-canvas drawing).
+    link.pendingLayers=link.pendingLayers.filter(layer=>{
+      if(!intersects(layer.bounds,bounds))return true;
+      const reference=this.createSvg('use');
+      reference.setAttribute('href','#'+link.pathId);
+      layer.mask.append(reference);
+      return false;
+    });
   }
 
   pointAdded(stroke) {
     if (!this.elements.has(stroke)) return;
     this.pending.add(stroke);
-    if (this.scheduled) return;
+    if (this.scheduled) {
+      // New pen input should not wait for an old eraser's paint timer.
+      if (stroke.tool !== 'erase' && this.delayed) {
+        this.delayed=false;
+        const version=++this.scheduleVersion;
+        this.scheduleFrame(()=>{if(version===this.scheduleVersion)this.flush();});
+      }
+      return;
+    }
     this.scheduled = true;
-    this.scheduleFrame(() => this.flush());
+    const remaining=stroke.tool==='erase'&&this.lastErasedStroke===stroke
+      ? this.lastErasePaintMs+this.minEraseIntervalMs-this.now():0;
+    const version=++this.scheduleVersion;
+    if(remaining>0){
+      this.delayed=true;
+      this.delayFrame(()=>{
+        if(version!==this.scheduleVersion)return;
+        this.scheduleFrame(()=>{if(version===this.scheduleVersion)this.flush();});
+      },remaining);
+    }else this.scheduleFrame(()=>{if(version===this.scheduleVersion)this.flush();});
   }
 
   flush() {
     this.scheduled = false;
+    this.delayed = false;
     const pending = [...this.pending];
     this.pending.clear();
     for (const stroke of pending) {
       const entry = this.elements.get(stroke);
       if (!entry) continue; // stroke was undone or document cleared
+      if(stroke.tool==='erase')this._linkEraser(stroke);
       const count = stroke.points.length;
       if (count < entry.count) {
         entry.geometry = '';
@@ -234,6 +320,10 @@ export class StrokeRenderer {
       entry.path.setAttribute(
         'd', entry.geometry + (count === 1 ? ' l0.1 0.1' : '')
       );
+      if(stroke.tool==='erase'){
+        this.lastErasePaintMs=this.now();
+        this.lastErasedStroke=stroke;
+      }
       if (entry.variants.length) {
         this._updateVariants(stroke,entry);
       }

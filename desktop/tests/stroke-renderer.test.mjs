@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {StrokeRenderer,MAX_ANIMATED_WIGGLY} from '../web/stroke-renderer.mjs';
 
-function fixture() {
+function fixture(options={}) {
   const stats={created:0,dUpdates:0,removes:0};
   const callbacks=[];
   class Element {
@@ -17,6 +17,8 @@ function fixture() {
     scheduleFrame:callback=>{callbacks.push(callback);},
     createPath:()=>{stats.created++;return new Element('path');},
     createSvg:tag=>{stats.created++;return new Element(tag);},
+    minEraseIntervalMs:0,
+    ...options,
   });
   function frame(){for(const cb of callbacks.splice(0))cb();}
   const makeStroke=(tool='draw', points=[])=>({tool, points});
@@ -192,8 +194,9 @@ test('eraser layers stay flat after many ink/erase alternations, with chronology
   const firstMaskId=firstLayer.attributes.mask.match(/#([^)]*)/)[1];
   const defs=svg.children.find(child=>child.tag==='defs');
   const firstMask=defs.children.find(node=>node.attributes.id===firstMaskId);
-  assert.ok(firstMask.children.filter(child=>child.tag==='use').length>=39,
-    'early ink must be erased by every subsequent eraser');
+  const refs=firstMask.children.filter(child=>child.tag==='use').length;
+  assert.ok(refs>=19&&refs<39,
+    'early ink receives intersecting erasers, without referencing distant ones');
   renderer.sync(sequence.slice(0,2));frame();
   assert.equal(renderer.elements.get(sequence[0]).path.parentElement.tag,'g');
   renderer.sync([...sequence,later]);frame();
@@ -212,4 +215,96 @@ test('consecutive erasers on the same ink epoch reuse a single mask',()=>{
   assert.equal(defs.children.filter(child=>child.tag==='mask').length,1);
   for(const erase of erasers)
     assert.equal(renderer.elements.get(erase).path.parentElement.tag,'mask');
+});
+
+test('active eraser paint is paced, coalesces moves, and eventually shows the final point',()=>{
+  let time=0;
+  const timers=[];
+  const {renderer,frame,makeStroke,stats}=fixture({
+    minEraseIntervalMs:32,
+    now:()=>time,
+    delayFrame:(callback,delay)=>timers.push({callback,delay}),
+  });
+  renderer.append(makeStroke('draw',[{x:.1,y:.2}]));
+  const erase=makeStroke('erase',[{x:.1,y:.2}]);
+  renderer.append(erase);
+  frame();
+  const initial=stats.dUpdates;
+  for(let i=0;i<40;i++){
+    erase.points.push({x:.1+i/100,y:.2});
+    renderer.pointAdded(erase);
+  }
+  assert.equal(timers.length,1,'one delayed repaint for many eraser movements');
+  assert.equal(timers[0].delay,32);
+  frame();
+  assert.equal(stats.dUpdates,initial,'no paint before the pacing timer');
+  time=32;
+  timers.shift().callback();
+  frame();
+  assert.equal(stats.dUpdates,initial+1);
+  assert.match(renderer.elements.get(erase).path.attributes.d,/L490\.00 120\.00/);
+});
+
+test('only ink epochs intersected by an eraser gain mask references, even if it later moves',()=>{
+  const {renderer,svg,frame,makeStroke}=fixture();
+  const left=makeStroke('draw',[{x:.1,y:.3}]);
+  const leftErase=makeStroke('erase',[{x:.1,y:.3}]);
+  const right=makeStroke('draw',[{x:.9,y:.3}]);
+  const rightErase=makeStroke('erase',[{x:.9,y:.3}]);
+  for(const stroke of [left,leftErase,right,rightErase])renderer.append(stroke);
+  frame();
+  const defs=svg.children.find(n=>n.tag==='defs');
+  const oldMask=defs.children[0];
+  assert.equal(oldMask.children.filter(n=>n.tag==='use').length,0,
+    'a distant erase cannot affect old ink and needs no reference');
+  rightErase.points.push({x:.02,y:.3});
+  renderer.pointAdded(rightErase);
+  frame();
+  assert.equal(oldMask.children.filter(n=>n.tag==='use').length,1,
+    'a segment crossing old ink must link its mask even if neither endpoint is inside');
+  rightErase.points.push({x:.15,y:.3});
+  renderer.pointAdded(rightErase);
+  frame();
+  assert.equal(oldMask.children.filter(n=>n.tag==='use').length,1,
+    'later points must not duplicate an existing reference');
+  const later=makeStroke('draw',[{x:.1,y:.3}]);
+  renderer.append(later);
+  frame();
+  assert.equal(renderer.elements.get(later).node.parentElement,svg,
+    'ink created after this erase remains unmasked');
+});
+
+test('a wide animated Wiggly stroke is not skipped at its displayed edge',()=>{
+  const {renderer,svg,frame,makeStroke}=fixture();
+  renderer.append({...makeStroke('wiggly',[{x:.5,y:.3}]),width:160});
+  renderer.append({...makeStroke('erase',[{x:.5,y:.3}]),width:20});
+  renderer.append(makeStroke('draw',[{x:.603,y:.3}]));
+  renderer.append({...makeStroke('erase',[{x:.603,y:.3}]),width:20});
+  frame();
+  const oldMask=svg.children.find(n=>n.tag==='defs').children[0];
+  assert.equal(oldMask.children.filter(n=>n.tag==='use').length,1,
+    'bounds must include the wide Wiggly display variants, not just its centerline');
+});
+
+test('new pen input bypasses a pending eraser paint timer',()=>{
+  let time=0;
+  const timers=[];
+  const {renderer,frame,makeStroke}=fixture({
+    minEraseIntervalMs:32,now:()=>time,
+    delayFrame:(callback,delay)=>timers.push(callback),
+  });
+  renderer.append(makeStroke('draw',[{x:.1,y:.2}]));
+  const erase=makeStroke('erase',[{x:.1,y:.2}]);
+  renderer.append(erase);
+  frame();
+  erase.points.push({x:.2,y:.2});
+  renderer.pointAdded(erase);
+  const pen=makeStroke('draw',[{x:.8,y:.8}]);
+  renderer.append(pen);
+  frame();
+  assert.match(renderer.elements.get(pen).path.attributes.d,/M800\.00 480\.00/);
+  assert.match(renderer.elements.get(erase).path.attributes.d,/L200\.00 120\.00/);
+  time=32;
+  timers[0]();frame();
+  assert.equal(renderer.elements.get(pen).path.attributes.d,'M800.00 480.00 l0.1 0.1');
 });

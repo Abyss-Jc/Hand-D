@@ -13,16 +13,24 @@ class SvgNode {
   append(child){child.remove();this.children.push(child);child.parentElement=this;}
 }
 
-for(const erasers of [20,60,120]) {
+for(const pattern of ['overlap','localized'])for(const erasers of [20,60,120]) {
   const svg=new SvgNode('svg');
   const renderer=new StrokeRenderer(svg,{
     scheduleFrame:fn=>fn(),
+    minEraseIntervalMs:0, // count structure, not the real-time paint scheduler
     createPath:()=>new SvgNode('path'),createSvg:tag=>new SvgNode(tag),
   });
   const start=performance.now();
   for(let index=0;index<erasers;index++){
-    renderer.append({tool:'draw',points:[{x:.1,y:.2},{x:.7,y:.8}]});
-    const points=Array.from({length:40},(_,i)=>({x:(i+1)/65,y:.2+index/300}));
+    const col=index%10,row=Math.floor(index/10)%6;
+    const x=pattern==='localized'?.05+col*.1:.1;
+    const y=pattern==='localized'?.07+row*.15:.2;
+    renderer.append({tool:'draw',points:pattern==='localized'
+      ? [{x,y},{x:x+.02,y:y+.02}]
+      : [{x:.1,y:.2},{x:.7,y:.8}]});
+    const points=Array.from({length:40},(_,i)=>pattern==='localized'
+      ? {x:x+i/2000,y:y+.01}
+      : {x:(i+1)/65,y:.2+index/300});
     renderer.append({tool:'erase',points});
   }
   const renderMs=Number((performance.now()-start).toFixed(2));
@@ -35,5 +43,5 @@ for(const erasers of [20,60,120]) {
     for(const child of node.children)visit(child,newDepth);
   }
   visit(svg,0);
-  console.log(JSON.stringify({erasers,renderMs,maxMaskDepth,maskGroups,maskReferences}));
+  console.log(JSON.stringify({pattern,erasers,renderMs,maxMaskDepth,maskGroups,maskReferences}));
 }
