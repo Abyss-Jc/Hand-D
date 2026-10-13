@@ -726,6 +726,23 @@ onnx-runtime python -m unittest discover -s tests -p 'test_*.py' -q`
 reported 157 OK (1 hardware-opt-in skipped); 59 JS and 7 Rust passed.
 Physical camera and packaging with ONNX are not verified.
 
+HD-12 child-branch continuation (2026-10-12): ONNX CPU became the **default for
+the experimental sidecar only**, still selectable back to PyTorch CPU with
+`HANDD_INFERENCE_BACKEND=torch-cpu`. The ONNX predictor retains a validated
+PyTorch reference; execution exceptions or malformed logits disable ONNX and
+force a no-action frame for both hands, resetting stabilization before subsequent
+Torch predictions. A three-session LRU cache keyed by actual in-memory weights
+avoids repeat export on repeated activation; on execution fault the matching
+cached session is evicted. No persistent ONNX artifact or active-model mutation.
+Synthetic runtime and actual no-camera subprocess tests cover default,
+mid-gesture failover, parity, caching, cache eviction and GUI status. On host
+`uv run --frozen --group training --group onnx-runtime python -m unittest discover
+-s tests -p 'test_*.py' -q` returned 165 total / 164 passed / 1 skipped,
+Node 59 pass and Rust 7 pass. Startup also skips the legacy checkpoint if a
+verified workspace Candidate is active and never restores unverified legacy
+after corrupt selection. Real physical camera failover, packaged binary and macOS remain
+**No verificado**. See [the updated HD-12 runbook](hd12-onnx-experimental.md).
+
 MediaPipe `0.10.33` and isolated `1.1.0` both loaded the existing Hand Landmarker
 `.task` and delivered two black-frame LIVE_STREAM callbacks with expected
 fields/timestamps on the Linux host. To keep headless CI hardware-neutral,

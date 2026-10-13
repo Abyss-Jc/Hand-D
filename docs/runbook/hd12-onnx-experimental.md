@@ -1,6 +1,6 @@
 # HD-12 - evaluación experimental de ONNX y MediaPipe 1.1
 
-**Estado:** IN PROGRESS / EXPERIMENTAL. En la rama hija `feature/hand-d-onnx-cpu-experimental` existe un runtime **opt-in** ONNX CPU; la rama `feature/hand-d-v2-modernization` y el backend predeterminado permanecen en PyTorch CPU. MediaPipe sigue bloqueado en `0.10.33`. Ningun Candidate ni Project Workspace se modifica al seleccionar ONNX.
+**Estado:** IN PROGRESS / EXPERIMENTAL. En la rama hija `feature/hand-d-onnx-cpu-experimental` **ONNX Runtime CPU es ahora el backend predeterminado del sidecar de desarrollo**, con PyTorch CPU como respaldo. La rama `feature/hand-d-v2-modernization` sigue sin cambios y usa PyTorch CPU por defecto. MediaPipe permanece en `0.10.33`. Ningun Candidate ni Project Workspace se modifica al seleccionar un backend.
 
 **Fecha de los datos:** 2026-10-12. **Host medido:** CachyOS x86_64 / Python 3.13.16 / PyTorch 2.14.1+cpu / ONNX 1.23.2 / ONNX Runtime 1.31.0 / onnxscript 0.7.2, CPU (1 thread). **Comparaciones macOS Apple Silicon y gestos humanos: pendientes.**
 
@@ -11,7 +11,7 @@ Desde el checkout en la rama `feature/hand-d-onnx-cpu-experimental`:
 ```bash
 git switch feature/hand-d-onnx-cpu-experimental
 uv sync --frozen --group onnx-runtime
-env HANDD_INFERENCE_BACKEND=onnx-cpu npm --prefix desktop run dev
+npm --prefix desktop run dev
 ```
 
 Con la app abierta, comprueba el texto del estado de modelo en Whiteboard:
@@ -21,7 +21,13 @@ Con la app abierta, comprueba el texto del estado de modelo en Whiteboard:
 - `PyTorch CPU fallback` significa que ONNX no supero la preparacion o paridad y se sigue usando PyTorch CPU (revisa stderr del sidecar).
 - El JSON de Diagnostics expone `health.inference_backend` (`onnx-cpu`, `torch-cpu`, `torch-cpu-fallback` o `none`).
 
-La seleccion del backend se aplica tanto a un Candidate cargado al inicio como a una activacion en Studio. Si no hay modelo, el runtime continua en tracking-only. `CPUExecutionProvider` se exige explicitamente; el export ONNX usa un directorio temporal fuera del Workspace y compara logits + etiquetas con PyTorch antes de activar la sesion. Las conversiones ocurren al arrancar/restaurar/activar un modelo y **pueden demorar unos segundos**. El bundle Tauri/PyInstaller **no incluye todavia** las dependencias ONNX experimentales: esta prueba es en modo desarrollo.
+La seleccion del backend se aplica tanto a un Candidate cargado al inicio como a una activacion en Studio. Si no hay modelo, el runtime continua en tracking-only. `CPUExecutionProvider` se exige explicitamente; el export ONNX usa un directorio temporal fuera del Workspace y compara logits + etiquetas con PyTorch antes de activar la sesion. **El primer export puede demorar unos segundos**, pero las activaciones posteriores con identicos pesos reutilizan en el proceso una sesion ONNX ya comprobada (cache LRU maxima de tres sesiones). Los pesos se identifican por su contenido, no por nombre/ruta; cada Candidate se vuelve a validar con el loader normal antes de consultar la cache. No hay archivos ONNX persistidos ni cambios a un Workspace.
+
+Si el Workspace ya tiene un Active Candidate, el arranque **omite cargar/exportar el checkpoint legacy** que Tauri pasa para diagnostico. Si su seleccion persistida esta corrupta, el runtime informa `model: error` y queda en tracking-only; no intenta sustituirlo por legacy no verificado.
+
+Si ONNX falla **despues de arrancar**, en un frame con manos presentes, el runtime desactiva ONNX para esa instancia de modelo, anula las acciones de **ambas manos en ese frame** y reinicia su estabilizacion. El frame informa `model: error` + `inference_backend: torch-cpu-fallback`; en los frames siguientes usa PyTorch CPU y restaura el estado de modelo si la inferencia Torch funciona. **No se repite el gesto fallido sobre Torch en el mismo frame**, para evitar un borrado o trazo accidental. El icono de modelo y Diagnostics permiten ver el fallback; revisa stderr para el error original. Una sesion ONNX fallida se invalida en la cache y no se reutiliza automaticamente. Esto no garantiza recuperacion de fallos nativos fatales ni de MediaPipe/camara.
+
+El bundle Tauri/PyInstaller **no incluye todavia** las dependencias ONNX experimentales: esta prueba es en modo desarrollo. El nuevo default se aplica a este sidecar experimental, no al formato de los Model Artifacts ni al proceso de entrenamiento.
 
 ### Regresar a PyTorch sin modificar datos
 
@@ -42,7 +48,7 @@ uv run --frozen --group training --group onnx-runtime \
 node --test desktop/tests/*.test.mjs
 ```
 
-**Verificado en CachyOS 2026-10-12:** 6 pruebas ONNX (incluido sidecar real sin camara, Studio activate/restore y fallback); 157 Python OK (1 omitida de MediaPipe LIVE_STREAM por ser opt-in), 59 JS y 7 Rust. **No verificado:** webcam humana con ONNX, p95 de FPS extremo a extremo, empaquetado ONNX y prueba fisica macOS.
+**Verificado en CachyOS 2026-10-12:** 165 tests Python en total (164 aprobados y 1 omitido: MediaPipe LIVE_STREAM opt-in), 59 JS, 7 Rust, `npm run check`; los tests ONNX incluyen paridad CPU, fallback en caliente ante excepcion y logits invalidos, liberacion segura de ambas manos, reestabilizacion, cache por pesos y eviction LRU, arranque real del sidecar sin camara, restauracion directa de Candidate activo y seleccion corrupta sin sustitucion legacy. La persona que probo la version previa de la rama confirmo que la camara mostraba los 21 puntos y que los gestos se sentian bien, sin mediciones FPS ni precision formal. **No verificado en esta nueva revision:** fallback inducido con camara humana, p95 de FPS extremo a extremo, empaquetado ONNX y prueba fisica macOS.
 
 ## Instalación opcional sin alterar la app
 
@@ -68,9 +74,9 @@ uv run --frozen \
   python -m unittest tests.test_hd12_benchmark -q
 ```
 
-**En macOS M4:** ejecuta los mismos comandos desde el checkout de Hand-D en la Mac despues de `uv sync --frozen`. El runtime **predeterminado PyTorch** que ejecutas con `npm --prefix desktop run dev` no necesita los paquetes ONNX; si seleccionas `HANDD_INFERENCE_BACKEND=onnx-cpu`, si necesitas `uv sync --frozen --group onnx-runtime`. Guarda los reportes fuera de un workspace real si los vas a comparar; no subas datos sensibles ni archivos `handd.sqlite`. En caso de que uv no encuentre un wheel para tu arquitectura/version de Python, registra el error en vez de instalar dependencias globales o cambiar los pins de la aplicacion.
+**En macOS M4:** ejecuta los mismos comandos desde el checkout de Hand-D en la Mac despues de `uv sync --frozen --group onnx-runtime`. Si seleccionas `HANDD_INFERENCE_BACKEND=torch-cpu`, puedes ejecutar el runtime sin instalar el grupo ONNX. Guarda los reportes fuera de un workspace real si los vas a comparar; no subas datos sensibles ni archivos `handd.sqlite`. En caso de que uv no encuentre un wheel para tu arquitectura/version de Python, registra el error en vez de instalar dependencias globales o cambiar los pins de la aplicacion.
 
-El grupo opt-in queda versionado solamente en la rama experimental. **No se debe convertir ONNX en el backend por defecto ni agregarlo al bundle de produccion** sin comparar Candidate real, latencia de extremo a extremo, startup, empaquetado y rollback en las plataformas objetivo.
+El grupo de dependencias opcional queda versionado solamente en la rama experimental. **No se debe trasladar el nuevo default ONNX al bundle de produccion ni a la rama base** sin comparar un Candidate real, latencia de extremo a extremo, startup, empaquetado y rollback en las plataformas objetivo.
 
 ## Qué valida el código experimental
 

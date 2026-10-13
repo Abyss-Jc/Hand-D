@@ -31,8 +31,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument('--task', type=Path, default=Path(__file__).resolve().parents[1]
                    / 'models' / 'hand_landmarker.task')
     p.add_argument('--inference-backend', choices=('torch-cpu', 'onnx-cpu'),
-                   default=os.environ.get('HANDD_INFERENCE_BACKEND', 'torch-cpu'),
-                   help='Optional ONNX CPU experiment; default: PyTorch CPU')
+                   default=os.environ.get('HANDD_INFERENCE_BACKEND', 'onnx-cpu'),
+                   help='Experimental default: ONNX CPU with PyTorch CPU fallback')
     model = p.add_mutually_exclusive_group()
     model.add_argument('--model-artifact', type=Path, default=None)
     model.add_argument('--legacy-checkpoint', type=Path, default=None,
@@ -146,25 +146,30 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
 
 async def run(args) -> None:
     runtime = GestureRuntime()
-    if args.model_artifact is not None:
-        runtime.activate_model(args.model_artifact,
-                               inference_backend=args.inference_backend)
-    elif args.legacy_checkpoint is not None:
-        runtime.activate_legacy_checkpoint(args.legacy_checkpoint,
-                                           inference_backend=args.inference_backend)
+    active_selection_present = False
     if args.workspace is not None:
         # A previously verified explicit workspace selection takes priority
-        # over the development-only legacy checkpoint on every restart.
+        # over the development-only legacy checkpoint on every restart. Avoid
+        # exporting a legacy ONNX graph only to discard it for this Candidate.
         models = StudioModels(args.workspace, inference_backend=args.inference_backend)
         try:
             if models.active_id() is not None:
+                active_selection_present = True
                 models.restore(runtime)
         except (ValueError, OSError) as exc:
             # Also catch corrupt persisted selection JSON: the Whiteboard
             # and camera must remain available in tracking-only mode.
             # Never silently use legacy predictions after an invalid v2 ID.
+            active_selection_present = True
             runtime.mark_model_load_error()
             print(f'Active Model could not be restored: {exc}', file=sys.stderr)
+    if not active_selection_present:
+        if args.model_artifact is not None:
+            runtime.activate_model(args.model_artifact,
+                                   inference_backend=args.inference_backend)
+        elif args.legacy_checkpoint is not None:
+            runtime.activate_legacy_checkpoint(args.legacy_checkpoint,
+                                               inference_backend=args.inference_backend)
     server = SidecarServer(runtime=runtime, workspace=args.workspace,
                            inference_backend=args.inference_backend)
     port = await server.start()

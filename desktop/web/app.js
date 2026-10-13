@@ -52,7 +52,7 @@ function modelLabel(health) {
       + (activeModelId ? ' · ' + activeModelId : '') + backend;
     case 'legacy_unverified':
       return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED' + backend;
-    case 'error': return 'MODEL: LOAD / INFERENCE ERROR';
+    case 'error': return 'MODEL: LOAD / INFERENCE ERROR' + backend;
     case 'unavailable': return 'NO MODEL LOADED · TRACKING ONLY';
     default: return 'MODEL: WAITING FOR SIDECAR';
   }

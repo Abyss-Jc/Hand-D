@@ -679,6 +679,10 @@ test('Studio activates only selected compatible candidate, shows Active Model on
   socket.sendEvent({type:'studio.model',snapshot:{active_model_id:'candidate-validated',
     health:{model:'ready',inference_backend:'torch-cpu-fallback'}}});
   assert.match(elements['model-status'].textContent,/PyTorch CPU fallback/);
+  socket.sendEvent({type:'studio.model',snapshot:{active_model_id:'candidate-validated',
+    health:{model:'error',inference_backend:'torch-cpu-fallback'}}});
+  assert.match(elements['model-status'].textContent,/PyTorch CPU fallback/,
+    'fallback must remain visible even during the safe-release error frame');
 });
 
 test('Save/Open preserves editable strokes; Export emits camera-free SVG; cancel preserves drawing',async()=>{
