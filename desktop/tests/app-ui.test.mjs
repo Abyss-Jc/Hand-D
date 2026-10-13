@@ -677,6 +677,16 @@ test('Studio activates only selected compatible candidate, shows Active Model on
   assert.match(elements['models-status'].textContent,/candidate-validated/);
 });
 
+test('Runtime visibly distinguishes experimental MPS and CPU fallback',()=>{
+  const socket=connections.at(-1);
+  socket.sendEvent({type:'studio.model',snapshot:{active_model_id:'candidate-validated',
+    health:{model:'ready',camera:'tracking',inference_backend:'mps'}}});
+  assert.match(elements['model-status'].textContent,/MPS \(experimental\)/);
+  socket.sendEvent({type:'studio.model',snapshot:{active_model_id:'candidate-validated',
+    health:{model:'error',camera:'tracking',inference_backend:'torch-cpu-mps-fallback'}}});
+  assert.match(elements['model-status'].textContent,/CPU fallback from MPS/);
+});
+
 test('Save/Open preserves editable strokes; Export emits camera-free SVG; cancel preserves drawing',async()=>{
   const invoked=[];
   const saved={document:null};
@@ -709,18 +719,57 @@ test('Save/Open preserves editable strokes; Export emits camera-free SVG; cancel
 });
 
 test('Open/Create Workspace use native picker; typed path is explicit alternative',async()=>{
-  let kind;
+  const commands=[];
   window.__TAURI__={core:{invoke:async command=>{
-    kind=command;
+    commands.push(command);
     return '/tmp/native-user-project';
   }}};
   elements['select-workspace'].emit('click');
   await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(kind,'pick_workspace');
+  assert.deepEqual(commands,['pick_workspace','select_workspace']);
   assert.equal(elements['workspace-path'].value,'/tmp/native-user-project');
   elements['create-workspace'].emit('click');
   await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(kind,'create_workspace');
+  assert.equal(commands.at(-1),'create_workspace');
+});
+
+test('native Open shows selected folder and validation failure instead of appearing to do nothing',async()=>{
+  const old=window.__TAURI__;
+  const previousPath=elements['workspace-path'].value;
+  const calls=[];
+  window.__TAURI__={core:{invoke:async (command,args)=>{
+    calls.push([command,args]);
+    if(command==='pick_workspace')return '/Users/test/Documents/New Project';
+    if(command==='select_workspace')throw Error('Select a Hand-D workspace containing handd.sqlite');
+    throw Error(command);
+  }}};
+  try {
+    await elements['select-workspace'].emit('click');
+    assert.equal(elements['workspace-path'].value,'/Users/test/Documents/New Project');
+    assert.deepEqual(calls.map(row=>row[0]),['pick_workspace','select_workspace']);
+    assert.match(elements['workspace-message'].textContent,/handd.sqlite/);
+    assert.match(elements['workspace-message'].textContent,/Create workspace/i);
+  } finally {window.__TAURI__=old;elements['workspace-path'].value=previousPath;}
+});
+
+test('native Open uses canonical Workspace path from Rust for restart matching',async()=>{
+  const previous=window.__TAURI__;
+  const previousPath=elements['workspace-path'].value;
+  const fakeAuth='synthetic-canonical-session';
+  window.__TAURI__={core:{invoke:async command=>{
+    if(command==='pick_workspace')return '/var/folders/mac-alias';
+    if(command==='select_workspace')return '/private/var/folders/mac-alias';
+    if(command==='sidecar_status')return {port:39901,token:fakeAuth,
+      runtime_session_id:'canonical-mac-test',workspace:'/private/var/folders/mac-alias'};
+    return null;
+  }}};
+  try {
+    await elements['select-workspace'].emit('click');
+    assert.equal(elements['workspace-path'].value,'/private/var/folders/mac-alias');
+    assert.match(elements['workspace-message'].textContent,/private\/var\/folders/);
+    await timers[0]();
+    assert.equal(typeof connections.at(-1).onmessage,'function');
+  } finally {window.__TAURI__=previous;elements['workspace-path'].value=previousPath;}
 });
 
 test('missing native bridge reports an error instead of silently treating Open/Create as canceled',async()=>{
@@ -796,6 +845,23 @@ test('eraser UI subtracts only existing ink, not camera or controls', async()=>{
     'undo eraser restores ink and removes its mask');
   elements.redo.emit('click');
   assert.equal(svg.children.some(child=>child.id==='defs'),true);
+});
+
+test('large eraser does not enqueue overlapping 5px point updates every move',async()=>{
+  const svg=elements.drawing;
+  elements['tool-eraser'].emit('click');
+  elements['eraser-size'].value='80';
+  elements['eraser-size'].emit('input');
+  svg.emit('pointerdown',{button:0,pointerId:14,clientX:100,clientY:250});
+  svg.emit('pointermove',{clientX:105,clientY:250});
+  svg.emit('pointermove',{clientX:115,clientY:250});
+  svg.emit('pointerup',{});
+  await Promise.resolve();
+  const defs=svg.children.find(node=>node.id==='defs');
+  const eraser=defs.children.at(-1).children.at(-1);
+  assert.match(eraser.attributes.d,/L115\.00 250\.00/);
+  assert.doesNotMatch(eraser.attributes.d,/L105\.00/,
+    'large erasers do not need overlapping mask-paint updates at 5px intervals');
 });
 
 test('Pen and Wiggly use selectable colors and live brush thickness indicators',async()=>{

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 import signal
 import sqlite3
@@ -29,6 +30,9 @@ def parser() -> argparse.ArgumentParser:
                    help='Explicit existing project directory; never creates a dataset implicitly')
     p.add_argument('--task', type=Path, default=Path(__file__).resolve().parents[1]
                    / 'models' / 'hand_landmarker.task')
+    p.add_argument('--inference-device',choices=('cpu','mps'),
+                   default=os.getenv('HANDD_INFERENCE_DEVICE','cpu'),
+                   help='Experimental PyTorch MPS inference (CPU by default)')
     model = p.add_mutually_exclusive_group()
     model.add_argument('--model-artifact', type=Path, default=None)
     model.add_argument('--legacy-checkpoint', type=Path, default=None,
@@ -143,13 +147,14 @@ async def _camera_loop(server: SidecarServer, camera_index: int, task: Path,
 async def run(args) -> None:
     runtime = GestureRuntime()
     if args.model_artifact is not None:
-        runtime.activate_model(args.model_artifact)
+        runtime.activate_model(args.model_artifact,inference_device=args.inference_device)
     elif args.legacy_checkpoint is not None:
-        runtime.activate_legacy_checkpoint(args.legacy_checkpoint)
+        runtime.activate_legacy_checkpoint(args.legacy_checkpoint,
+                                           inference_device=args.inference_device)
     if args.workspace is not None:
         # A previously verified explicit workspace selection takes priority
         # over the development-only legacy checkpoint on every restart.
-        models = StudioModels(args.workspace)
+        models = StudioModels(args.workspace,inference_device=args.inference_device)
         try:
             if models.active_id() is not None:
                 models.restore(runtime)
@@ -159,7 +164,8 @@ async def run(args) -> None:
             # Never silently use legacy predictions after an invalid v2 ID.
             runtime.mark_model_load_error()
             print(f'Active Model could not be restored: {exc}', file=sys.stderr)
-    server = SidecarServer(runtime=runtime, workspace=args.workspace)
+    server = SidecarServer(runtime=runtime, workspace=args.workspace,
+                           inference_device=args.inference_device)
     port = await server.start()
     print(json.dumps({
         'type': 'sidecar.ready', 'host': server.host, 'port': port,

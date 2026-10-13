@@ -44,12 +44,14 @@ let modelChoices = new Map();
 let drawingDirty = false;
 
 function modelLabel(health) {
+  const backend = health?.inference_backend==='mps'?' · MPS (experimental)'
+    :health?.inference_backend==='torch-cpu-mps-fallback'?' · CPU fallback from MPS':'';
   switch (health?.model) {
     case 'ready': return 'V2 MODEL: READY'
-      + (activeModelId ? ' · ' + activeModelId : '');
+      + (activeModelId ? ' · ' + activeModelId : '') + backend;
     case 'legacy_unverified':
-      return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED';
-    case 'error': return 'MODEL: LOAD / INFERENCE ERROR';
+      return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED' + backend;
+    case 'error': return 'MODEL: LOAD / INFERENCE ERROR' + backend;
     case 'unavailable': return 'NO MODEL LOADED · TRACKING ONLY';
     default: return 'MODEL: WAITING FOR SIDECAR';
   }
@@ -80,7 +82,15 @@ function beginStroke(point, source, action) {
 function extendStroke(path, point) {
   if (!path) return;
   const last = path.points.at(-1);
-  if (last && Math.hypot(last.x - point.x, last.y - point.y) < 0.002) return;
+  if (last) {
+    const dx=last.x-point.x,dy=last.y-point.y;
+    if (path.tool==='erase') {
+      // Large eraser circles overlap heavily. Fewer path updates reduce SVG
+      // mask raster work while keeping the sample spacing well below radius.
+      const minPixels=Math.max(4,Math.min(12,(path.width??32)/5));
+      if (Math.hypot(dx*1000,dy*600)<minPixels) return;
+    } else if(Math.hypot(dx,dy)<0.002) return;
+  }
   path.points.push(point);
   strokeRenderer.pointAdded(path);
   markDrawingEdited();
@@ -779,7 +789,7 @@ function renderModels(data) {
   $('models-activate').disabled = !modelChoices.get(selected.value)?.compatible;
   $('models-status').textContent = 'Active: ' + (activeModelId || 'no verified v2 model')
     + ' · Runtime: ' + (data.health || 'unknown');
-  displayHealth({model:data.health});
+  displayHealth({model:data.health,inference_backend:data.inference_backend});
 }
 $('models-list').addEventListener('change', () => {
   $('models-activate').disabled = !modelChoices.get($('models-list').value)?.compatible;
@@ -869,9 +879,21 @@ async function nativeWorkspaceDialog(command) {
         $('workspace-message').textContent=previousMessage;
       return;
     }
-    pendingWorkspace=selected;
+    let chosen=selected;
     $('workspace-path').value=selected;
-    $('workspace-message').textContent='Connecting workspace: '+selected;
+    if (command==='pick_workspace') {
+      $('workspace-message').textContent='Selected folder: '+selected+' · checking Hand-D workspace…';
+      try {
+        chosen=await invokeNative('select_workspace',{path:selected});
+      } catch (error) {
+        $('workspace-message').textContent = 'Selected folder: '+selected+' · '+String(error)
+          +' · Use Create workspace… on an empty folder to initialize a new project.';
+        return;
+      }
+    }
+    $('workspace-path').value=chosen;
+    pendingWorkspace=chosen;
+    $('workspace-message').textContent='Connecting workspace: '+chosen;
     attachSidecar(null);
   }catch(error){
     $('workspace-message').textContent=String(error);

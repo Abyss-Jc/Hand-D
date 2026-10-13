@@ -23,7 +23,11 @@ fn macos_picker_result(ok: bool, stdout: &[u8], stderr: &[u8]) -> Result<Option<
     }
     let value = String::from_utf8(stdout.to_vec())
         .map_err(|_| "Invalid native file selection")?;
-    Ok(value.lines().next().filter(|s| !s.is_empty()).map(PathBuf::from))
+    let selected=value.trim_end_matches(['\r','\n']);
+    if selected.is_empty() {
+        return Err("macOS picker returned no folder path after selection".into());
+    }
+    Ok(Some(PathBuf::from(selected)))
 }
 
 fn picker(kind: &str, title: &str, filename: Option<&str>) -> Result<Option<PathBuf>, String> {
@@ -174,6 +178,8 @@ mod tests {
         assert!(broken.unwrap_err().contains("Not authorized"));
         let chosen = macos_picker_result(true, b"/Users/demo/drawing.handd.json\n", b"");
         assert_eq!(chosen.unwrap(), Some(PathBuf::from("/Users/demo/drawing.handd.json")));
+        assert!(macos_picker_result(true, b"\n", b"").is_err(),
+            "successful osascript with no path must not masquerade as Cancel");
     }
     #[test]
     fn native_drawing_rejects_unstructured_or_oversized_payloads(){

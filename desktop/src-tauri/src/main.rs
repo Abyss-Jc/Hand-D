@@ -143,18 +143,32 @@ fn apply_workspace(path: String, state: &Supervisor) -> Result<String, String> {
 
 // OS pickers wait for a human response, so never run them on WebKit's UI thread.
 #[tauri::command(async)]
-fn pick_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String>, String> {
+fn pick_workspace() -> Result<Option<String>, String> {
     let Some(path)=native_files::pick_folder()? else {return Ok(None)};
-    apply_workspace(path.to_string_lossy().to_string(),&state).map(Some)
+    // Return the chosen path even when it is not an initialized Workspace.
+    // The UI displays the actual selection; select_workspace validates it.
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
+fn validate_new_workspace_folder(path: &std::path::Path) -> Result<(), String> {
+    if !path.is_dir() {
+        return Err("Choose an existing directory for a new workspace".into());
+    }
+    for entry in path.read_dir().map_err(|e|e.to_string())? {
+        let entry=entry.map_err(|e|e.to_string())?;
+        let metadata_name=matches!(entry.file_name().to_str(),Some(".DS_Store" | ".localized"));
+        if !metadata_name || !entry.file_type().map_err(|e|e.to_string())?.is_file() {
+            return Err("Choose an empty folder (Finder metadata is allowed) for a new workspace".into());
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]
 fn create_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String>, String> {
     let Some(path)=native_files::pick_folder()? else {return Ok(None)};
     let canonical=path.canonicalize().map_err(|e|e.to_string())?;
-    if !canonical.is_dir() || canonical.read_dir().map_err(|e|e.to_string())?.next().is_some() {
-        return Err("Choose an existing empty directory for a new workspace".into());
-    }
+    validate_new_workspace_folder(&canonical)?;
     let portable=state.portable_root.lock().expect("resource lock").clone();
     let (mut command, frozen)=sidecar_program(portable.as_ref(),!cfg!(debug_assertions))?;
     if frozen { command.arg("--init-workspace"); }
@@ -325,6 +339,18 @@ mod supervisor_tests {
     use super::*;
     use std::io::Cursor;
     use std::time::Instant;
+
+    #[test]
+    fn new_workspace_accepts_only_macos_folder_metadata_not_user_files() {
+        let root=std::env::temp_dir().join(format!("handd-picker-test-{}",std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(".DS_Store"), b"Finder metadata").unwrap();
+        std::fs::write(root.join(".localized"), b"").unwrap();
+        assert!(validate_new_workspace_folder(&root).is_ok());
+        std::fs::write(root.join("notes.txt"), b"user data").unwrap();
+        assert!(validate_new_workspace_folder(&root).is_err());
+        let _=std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn ready_reader_accepts_only_valid_local_handshake() {

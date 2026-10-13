@@ -27,6 +27,8 @@ export class StrokeRenderer {
     this.scheduled = false;
     this.order = [];
     this.defs = null;
+    this.eraserLayers = [];
+    this.maskLayerNodes = new Set();
     this.wigglyCount = 0;
     this.animatedWiggly = [];
     this.boilFrame = null;
@@ -63,6 +65,8 @@ export class StrokeRenderer {
       for (const entry of this.elements.values()) entry.node.remove();
       for (const child of [...this.svg.children]) child.remove();
       this.defs = null;
+      this.eraserLayers = [];
+      this.maskLayerNodes.clear();
     }
     const active = paths.filter(stroke=>stroke.tool === 'wiggly').slice(-MAX_ANIMATED_WIGGLY);
     const activeSet = new Set(active);
@@ -156,35 +160,48 @@ export class StrokeRenderer {
       this.defs = this.createSvg('defs');
       this.svg.append(this.defs);
     }
+    const newInk = [...this.svg.children].filter(layer=>
+      layer !== this.defs && !this.maskLayerNodes.has(layer));
+    // Reuse the last mask for consecutive erases with no new ink.
+    const reused = !newInk.length && this.eraserLayers.length;
     const maskId = 'handd-erase-' + (++nextEraserMaskId);
-    const mask = this.createSvg('mask');
-    mask.setAttribute('id', maskId);
-    mask.setAttribute('maskUnits', 'userSpaceOnUse');
-    mask.setAttribute('maskContentUnits', 'userSpaceOnUse');
-    mask.setAttribute('mask-type', 'luminance');
-    mask.setAttribute('x', '0');
-    mask.setAttribute('y', '0');
-    mask.setAttribute('width', '1000');
-    mask.setAttribute('height', '600');
-    const opaque = this.createSvg('rect');
-    opaque.setAttribute('x', '0');
-    opaque.setAttribute('y', '0');
-    opaque.setAttribute('width', '1000');
-    opaque.setAttribute('height', '600');
-    opaque.setAttribute('fill', 'white');
-    mask.append(opaque);
-    mask.append(node); // black removes *ink alpha*, not camera pixels
-    this.defs.append(mask);
-
-    const earlierInk = this.createSvg('g');
-    earlierInk.setAttribute('mask', 'url(#' + maskId + ')');
-    for (const layer of [...this.svg.children]) {
-      if (layer !== this.defs) {
-        layer.remove();
-        earlierInk.append(layer);
-      }
+    let mask;
+    if (reused) {
+      mask = this.eraserLayers.at(-1).mask;
+    } else {
+      mask = this.createSvg('mask');
+      mask.setAttribute('id',maskId);
+      mask.setAttribute('maskUnits','userSpaceOnUse');
+      mask.setAttribute('maskContentUnits','userSpaceOnUse');
+      mask.setAttribute('mask-type','luminance');
+      mask.setAttribute('x','0');mask.setAttribute('y','0');
+      mask.setAttribute('width','1000');mask.setAttribute('height','600');
+      const opaque=this.createSvg('rect');
+      opaque.setAttribute('x','0');opaque.setAttribute('y','0');
+      opaque.setAttribute('width','1000');opaque.setAttribute('height','600');
+      opaque.setAttribute('fill','white');
+      mask.append(opaque);
+      this.defs.append(mask);
     }
-    this.svg.append(earlierInk);
+    // All older epochs must see this eraser too, but each ink epoch gets
+    // exactly ONE flat mask: never rewrap earlier masks recursively.
+    const pathId='handd-erase-path-'+nextEraserMaskId;
+    node.setAttribute('id',pathId);
+    for(const layer of this.eraserLayers){
+      if(layer.mask===mask)continue;
+      const reference=this.createSvg('use');
+      reference.setAttribute('href','#'+pathId);
+      layer.mask.append(reference);
+    }
+    mask.append(node); // black subtracts ink alpha, never the camera
+    if(newInk.length){
+      const inkLayer=this.createSvg('g');
+      inkLayer.setAttribute('mask','url(#'+maskId+')');
+      for(const layer of newInk)inkLayer.append(layer);
+      this.svg.append(inkLayer);
+      this.eraserLayers.push({mask,layer:inkLayer});
+      this.maskLayerNodes.add(inkLayer);
+    }
   }
 
   pointAdded(stroke) {

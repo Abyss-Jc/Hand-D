@@ -163,3 +163,53 @@ test('incremental append preserves eraser chronology without needing document re
   assert.equal(renderer.elements.get(later).node.parentElement,svg);
   assert.equal(renderer.order.length,3);
 });
+
+test('eraser layers stay flat after many ink/erase alternations, with chronology and undo',()=>{
+  const {renderer,svg,makeStroke,frame}=fixture();
+  const sequence=[];
+  for(let index=0;index<40;index++){
+    const ink=makeStroke('draw',[{x:index/100,y:.2},{x:index/100+.2,y:.3}]);
+    const eraser=makeStroke('erase',[{x:index/100,y:.25}]);
+    sequence.push(ink,eraser);
+    renderer.append(ink);
+    renderer.append(eraser);
+  }
+  const later=makeStroke('draw',[{x:.7,y:.4}]);
+  renderer.append(later);
+  frame();
+  const levels=[];
+  function walk(node,masked=0){
+    const level=masked+(node.attributes.mask?1:0);
+    levels.push(level);
+    for(const child of node.children)walk(child,level);
+  }
+  walk(svg);
+  assert.equal(Math.max(...levels),1,'no stack of 40 nested SVG masks to re-rasterize');
+  assert.equal(renderer.elements.get(later).path.parentElement,svg,
+    'new ink after erasing is not erased retroactively');
+  const firstLayer=renderer.elements.get(sequence[0]).path.parentElement;
+  assert.equal(firstLayer.tag,'g');
+  const firstMaskId=firstLayer.attributes.mask.match(/#([^)]*)/)[1];
+  const defs=svg.children.find(child=>child.tag==='defs');
+  const firstMask=defs.children.find(node=>node.attributes.id===firstMaskId);
+  assert.ok(firstMask.children.filter(child=>child.tag==='use').length>=39,
+    'early ink must be erased by every subsequent eraser');
+  renderer.sync(sequence.slice(0,2));frame();
+  assert.equal(renderer.elements.get(sequence[0]).path.parentElement.tag,'g');
+  renderer.sync([...sequence,later]);frame();
+  assert.equal(renderer.elements.get(later).path.parentElement,svg);
+});
+
+test('consecutive erasers on the same ink epoch reuse a single mask',()=>{
+  const {renderer,svg,makeStroke,frame}=fixture();
+  const a=makeStroke('draw',[{x:.1,y:.3}]);
+  const erasers=Array.from({length:35},(_,i)=>
+    makeStroke('erase',[{x:.2+i/100,y:.3}]));
+  renderer.append(a);
+  for(const erase of erasers)renderer.append(erase);
+  frame();
+  const defs=svg.children.find(child=>child.tag==='defs');
+  assert.equal(defs.children.filter(child=>child.tag==='mask').length,1);
+  for(const erase of erasers)
+    assert.equal(renderer.elements.get(erase).path.parentElement.tag,'mask');
+});

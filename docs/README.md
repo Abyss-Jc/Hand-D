@@ -15,6 +15,7 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | How was Wiggly's line-boil rebuilt, verified, and what needs human review? | [Line-boil research + implementation evidence](changes/hand-d-v2-wiggly-line-boil-research.md) |
 | How are Pen/Wiggly colors, Fist knuckle erasing and two-hand ruler/size gestures implemented and tested? | [Whiteboard controls and Mac acceptance](changes/hand-d-v2-visualizer-controls-2026-10-12.md) |
 | How do we verify Hand-D on the Apple Silicon Macs without overstating platform support? | [macOS lab checklist (October 9)](runbook/mac-lab-oct09.md) |
+| How were macOS Workspace selection, slow Eraser SVG, and optional MPS tests updated on October 13? | [macOS picker / Eraser / MPS change record](changes/hand-d-v2-macos-workspace-mps-eraser-2026-10-13.md) |
 | What should approved Whiteboard/Studio UX look and behave like? | [v2 UX Shape](design/hand-d-v2-ux-shape.md) |
 | How is Hand-D structured today and what boundaries are we moving toward? | [Architecture reference](reference/architecture.md) |
 | What are we changing for the October 13 milestone, and in what order? | [v2 roadmap](changes/hand-d-v2-roadmap.md) |

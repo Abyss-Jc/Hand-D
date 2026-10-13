@@ -109,6 +109,45 @@ El nuevo anillo debe aumentar/disminuir con la configuracion Brush/Wiggly y con 
 
 ## Limitaciones que no deben confundirse con bugs ya resueltos
 
+### Actualizacion 13-oct-2026: selector macOS, borrador y PyTorch MPS
+
+**Reporte de operador en Mac:** la interfaz y el selector nativo abren sobre `feature/hand-d-v2-modernization`, pero elegir un directorio no refleja la seleccion; el borrador se siente lento. Tambien quiere probar MPS. La rama experimental ONNX **no funciono en su Mac** (no se recibio log de error ni se pudo reproducir en Linux), por lo que no se mezcla en este cambio.
+
+**Correcciones verificadas en el host CachyOS, pendiente de prueba Mac fisica:** `pick_workspace` devuelve la carpeta seleccionada a WebView antes de validarla; Open valida en `select_workspace`, muestra la ruta incluso si falta `handd.sqlite`, explica como crear un Workspace y usa la ruta canonicalizada de Rust para emparejar el reinicio del sidecar. `create_workspace` y `workspace_init` admiten `.DS_Store` / `.localized` **archivos normales**, pero no datos reales ni enlaces simbolicos. Los errores macOS de `osascript` con stdout vacio dejan de confundirse con Cancel. [Detalles y pruebas TDD](../changes/hand-d-v2-macos-workspace-mps-eraser-2026-10-13.md).
+
+**Pasos para Workspace en Mac:** detener la instancia anterior de la app, guardar el dibujo si hay cambios no guardados, y desde el checkout Mac:
+
+```bash
+git switch feature/hand-d-v2-modernization
+git pull --ff-only origin feature/hand-d-v2-modernization
+uv sync --frozen
+npm --prefix desktop run dev
+```
+
+1. **Create workspace...**: seleccionar una carpeta local de pruebas que este vacia (puede contener solamente `.DS_Store` o `.localized`). Debe crearse `handd.sqlite`; esperar a que reinicie el sidecar. No seleccionar carpetas reales con documentos.
+2. **Open / change workspace...**: seleccionar esa **misma carpeta que ya contiene `handd.sqlite`**. Debe aparecer su ruta y luego `Connected workspace`; Studio deberia mostrar ese Workspace, no el mensaje `No workspace selected`.
+3. Elegir una carpeta distinta **sin** `handd.sqlite` mediante Open: debe permanecer visible la ruta seleccionada y el mensaje `Select a Hand-D workspace containing handd.sqlite` con orientacion para usar Create. Cancel no cambia el Workspace activo.
+4. Repetir con **Use entered path** escribiendo la ruta canonica devuelta, y comprobar el mismo estado. Si falla, registrar el texto exacto de `workspace-message` y stderr de Tauri, sin publicar tokens del sidecar, rutas privadas completas ni bases de datos.
+
+**MPS experimental solo en macOS Apple Silicon:** PyTorch CPU sigue siendo el backend por defecto de `v2-modernization`. Para diagnosticar disponibilidad, ejecutar sin webcam:
+
+```bash
+uv run --frozen python -m handd_core.benchmark_mps --warmup 20 --iterations 100
+```
+
+Para comparar CPU versus MPS usando un Candidate verificado en lugar del checkpoint legacy diagnostico: incluir `--candidate "/ruta/al/workspace/models/candidate-ID"`. El benchmark reporta `mps.built`, `mps.available`, paridad de logits/clases, mediana/p95 en batch 1/8/32; no mide MediaPipe ni FPS. Si informa `unavailable`, no insistir instalando otra libreria sin registrar primero la version de PyTorch y macOS.
+
+Luego abrir la app con MPS solicitado, sin ONNX:
+
+```bash
+env HANDD_INFERENCE_DEVICE=mps npm --prefix desktop run dev
+```
+
+En Studio → Runtime → Diagnostics, comprobar `"inference_backend": "mps"` y repetir gestos con una y dos manos. Si aparece `"torch-cpu-mps-fallback"`, el clasificador esta ejecutandose en CPU; mirar stderr para distinguir ausencia de MPS, paridad o fallo en inferencia. Para restaurar comportamiento habitual, **cerrar la app** y ejecutar `env HANDD_INFERENCE_DEVICE=cpu npm --prefix desktop run dev`. MPS no habilita aceleracion de MediaPipe, no garantiza mayor velocidad y no reemplaza entrenamiento PyTorch CPU. La prueba fisica de MPS en Mac continua **No verificado**.
+
+**Eraser:** `desktop/web/stroke-renderer.mjs` cambio de mascaras SVG anidadas a capas cronologicas con **una sola mascara por grupo de tinta**; `desktop/web/app.js` reduce puntos solapados del borrador segun su diametro (espaciado 4–12 SVG px, sin cambiar Pen/Wiggly). Estres sintetico `node desktop/bench/eraser-stress.mjs`: 20/60/120 erasers intercalados con tinta bajaron de 20/60/120 a **1 nivel** maximo de composicion, sin borrar camara ni controles. Las referencias SVG aun crecen en sesiones alternadas extremas; esto no es una medicion de FPS/paint real en WebKit. En Mac: dibujar varias decenas de trazos Pen y Wiggly, realizar borrados largos y rapidos sobre Camera y Clean, comprobar Undo/Redo y si la UI o MJPEG se congelan. Repetir con Eraser radius 10, 40 y 80 y anotar trazos aproximados y fluidez. Si persiste, el siguiente gate sera perfilado nativo WebKit (composicion SVG) sin asumir que ONNX o MPS resuelven el renderizado.
+
+
 - El modo `npm --prefix desktop run dev` usa el Python local del clon. El empaquetado nativo ya tiene receta con PyInstaller y Rust ResourceDir, pero **solo existe prueba de construcción y lanzamiento del .deb Linux**. No hay todavía `.app` validado en Mac. Firma, sandbox, TCC/cámara del child PyInstaller y notarización permanecen pendientes de evidencia real.
 - La geometría de overlay y cámara comparte plano de imagen, pero JPEG y eventos WS llegan a ritmos distintos; posible desfase temporal, todavía sin p95 end-to-end.
 - Wiggly es un efecto visual propio, opt-in, sin sonidos, GIF ni grabación.

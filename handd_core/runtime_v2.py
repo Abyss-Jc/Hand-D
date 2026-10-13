@@ -85,7 +85,8 @@ class GestureRuntime:
         }
 
     def _health(self) -> dict:
-        health = {'model': self._model_health, 'camera': self._camera_health}
+        health = {'model': self._model_health, 'camera': self._camera_health,
+                  'inference_backend': getattr(self.predictor,'backend','none')}
         if self._compute_times_ms:
             health['compute_ms_last'] = round(self._compute_times_ms[-1], 3)
             health['compute_ms_p95'] = round(
@@ -103,9 +104,11 @@ class GestureRuntime:
         for state in self._states.values():
             state.reset()
 
-    def activate_model(self, path) -> dict:
+    def activate_model(self, path, *, inference_device='cpu') -> dict:
         """Explicit, atomic Candidate activation after Model Artifact validation."""
         model, manifest = load_model_artifact(path)
+        from handd_core.mps_runtime import select_inference_device
+        model = select_inference_device(model,inference_device)
         return self.install_loaded_model(model, manifest)
 
     def install_loaded_model(self, model, manifest: dict) -> dict:
@@ -123,10 +126,12 @@ class GestureRuntime:
             }
         return {'artifact_id': self._active_model_id, 'label_order': list(model.label_order)}
 
-    def activate_legacy_checkpoint(self, path) -> dict:
+    def activate_legacy_checkpoint(self, path, *, inference_device='cpu') -> dict:
         """Opt-in old checkpoint, clearly marked unverified in every health update."""
         from handd_core.legacy_model import load_legacy_checkpoint
+        from handd_core.mps_runtime import select_inference_device
         predictor, metadata = load_legacy_checkpoint(path)
+        predictor = select_inference_device(predictor,inference_device)
         self.predictor = predictor
         self._active_model_id = metadata['artifact_id']
         self._model_health = 'legacy_unverified'

@@ -11,8 +11,14 @@ def initialize_workspace(directory: Path | str) -> Path:
     workspace = Path(directory).expanduser().resolve(strict=True)
     if not workspace.is_dir():
         raise ValueError("Choose an existing empty directory")
-    if any(workspace.iterdir()):
-        raise ValueError("New workspace directory must be empty (existing files preserved)")
+    # Finder can put these inert regular files in an otherwise empty folder
+    # before the user selects it. Preserve them; never follow a symlink or
+    # overwrite any real user file or existing workspace database.
+    harmless = {'.DS_Store', '.localized'}
+    if any(item.name not in harmless or item.is_symlink() or not item.is_file()
+           for item in workspace.iterdir()):
+        raise ValueError('New workspace directory must be empty except for Finder metadata '
+                         '(existing files preserved)')
     db=workspace/"handd.sqlite"
     store=DatasetStore(db)
     store.close()
