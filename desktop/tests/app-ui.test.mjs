@@ -30,6 +30,8 @@ names.push('review-sample-scrub');
 names.push('workspace-active-label');
 names.push('collect-progress-bar','collect-go-review');
 names.push('collect-quality-status');
+names.push('color-black','color-red','color-blue','color-green','color-purple','color-orange',
+  'brush-size','brush-size-value','eraser-size','eraser-size-value','modifier-feedback');
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
   names.push('studio-pane-'+section);
 for(const section of ['collect','browse','review','snapshots','models','runtime'])
@@ -281,7 +283,8 @@ test('camera/clean mode, skeletal visibility and Wiggly style preserve strokes',
 });
 
 test('connection READY distinguishes legacy model from unavailable model', async () => {
-  const meta = {port: 39001, token: 'synthetic-test-token', runtime_session_id: 'session-a'};
+  const fixtureAuth='synthetic-test-token';
+  const meta = {port: 39001, token: fixtureAuth, runtime_session_id: 'session-a'};
   window.__TAURI__ = {core: {invoke: async command => {
     assert.equal(command, 'sidecar_status');
     return meta;
@@ -347,11 +350,12 @@ test('reduced-motion restores Wiggly to static path without altering strokes',as
 
 test('Studio uses explicit workspace and manual review/immutable snapshot commands',async()=>{
   elements['workspace-path'].value='/tmp/handd-user-workspace';
+  const fixtureAuth='synthetic-token';
   let selected=null;
   window.__TAURI__ = {core:{invoke:async (command,args)=>{
     if(command==='select_workspace'){selected=args.path;return args.path;}
     if(command==='sidecar_status') return {
-      port:39009,token:'synthetic-token',runtime_session_id:'studio-session',
+      port:39009,token:fixtureAuth,runtime_session_id:'studio-session',
       workspace:'/tmp/handd-user-workspace',
     };
     throw Error(command);
@@ -503,8 +507,9 @@ test('Browse filters and deliberate QC gate batch accept; no invented model sugg
   socket.sendEvent({type:'studio.response',request_id:refresh.request_id,ok:true,
     data:overview(['accepted','unreviewed'])});
   const newRequest=socket.sent.filter(r=>r.action==='review_plan').at(-1);
+  const rejectedRevision='v1-rejected';
   socket.sendEvent({type:'studio.response',request_id:newRequest.request_id,ok:true,
-    data:{capture_id:'C001',pending:1,token:'v1-rejected',assessment_state:'no_model_assessment',
+    data:{capture_id:'C001',pending:1,token:rejectedRevision,assessment_state:'no_model_assessment',
       suggested:[],qc_sample_ids:['SAMPLE0'],qc_unreviewed:[],qc_rejected:['SAMPLE0'],
       can_batch_accept:false}});
   assert.equal(elements['review-batch-accept'].disabled,true);
@@ -564,12 +569,13 @@ test('Review keeps flagged predictions and sample inspection on the same screen'
 });
 
 test('historical accepted OOF flags remain inspectable and Accept confirms an audited acknowledgement',()=>{
+  const fixturePageId='review-token';
   const socket=connections.at(-1);
   elements['review-capture'].value='C001';
   elements['review-capture'].emit('change');
   const request=socket.sent.at(-1);
   socket.sendEvent({type:'studio.response',request_id:request.request_id,ok:true,
-    data:{capture_id:'C001',token:'review-token',assessment_state:'model_assessed',
+    data:{capture_id:'C001',token:fixturePageId,assessment_state:'model_assessed',
       assessment_revision:'oof-revision',assessment_model_id:'candidate-test',
       assessed_count:1,historical_oof_count:1,suggested_pending:1,pending:0,
       can_batch_accept:false,qc_sample_ids:[],qc_unreviewed:[],qc_rejected:[],
@@ -716,6 +722,51 @@ test('Open/Create Workspace use native picker; typed path is explicit alternativ
   assert.equal(kind,'create_workspace');
 });
 
+test('missing native bridge reports an error instead of silently treating Open/Create as canceled',async()=>{
+  const previous=window.__TAURI__;
+  delete window.__TAURI__;
+  try {
+    elements['workspace-message'].textContent='Before opening';
+    await elements['select-workspace'].emit('click');
+    assert.match(elements['workspace-message'].textContent,/Tauri.*unavailable/i);
+    elements['workspace-message'].textContent='Before creating';
+    elements['create-workspace'].emit('click');
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.match(elements['workspace-message'].textContent,/Tauri.*unavailable/i);
+  } finally {
+    window.__TAURI__=previous;
+  }
+});
+
+test('workspace picker stays responsive and allows only one native dialog at a time',async()=>{
+  const previous=window.__TAURI__;
+  const previousPath=elements['workspace-path'].value;
+  let resolvePicker;
+  const commands=[];
+  window.__TAURI__={core:{invoke:command=>{
+    commands.push(command);
+    return new Promise(resolve=>{resolvePicker=resolve;});
+  }}};
+  try {
+    elements['select-workspace'].emit('click');
+    assert.match(elements['workspace-message'].textContent,/opening.*picker/i);
+    assert.equal(elements['select-workspace'].disabled,true);
+    assert.equal(elements['create-workspace'].disabled,true);
+    elements['select-workspace'].emit('click');
+    elements['create-workspace'].emit('click');
+    assert.deepEqual(commands,['pick_workspace'],
+      'rapid clicks cannot spawn multiple macOS native pickers');
+    resolvePicker(null);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(elements['select-workspace'].disabled,false);
+    assert.equal(elements['create-workspace'].disabled,false);
+    assert.equal(elements['workspace-path'].value,previousPath,
+      'canceling must preserve the selected workspace');
+  } finally {
+    window.__TAURI__=previous;
+  }
+});
+
 test('eraser UI subtracts only existing ink, not camera or controls', async()=>{
   const svg=elements.drawing;
   elements['tool-pen'].emit('click');
@@ -744,4 +795,71 @@ test('eraser UI subtracts only existing ink, not camera or controls', async()=>{
     'undo eraser restores ink and removes its mask');
   elements.redo.emit('click');
   assert.equal(svg.children.some(child=>child.id==='defs'),true);
+});
+
+test('Pen and Wiggly use selectable colors and live brush thickness indicators',async()=>{
+  elements['nav-whiteboard'].emit('click');
+  elements['color-red'].emit('click');
+  elements['brush-size'].value='12';
+  elements['brush-size'].emit('input');
+  elements['tool-pen'].emit('click');
+  elements.drawing.emit('pointerdown',{button:0,pointerId:31,clientX:120,clientY:160});
+  elements.drawing.emit('pointermove',{clientX:360,clientY:380});
+  elements.drawing.emit('pointerup',{});
+  const pen=elements.drawing.children.at(-1);
+  assert.equal(pen.attributes.stroke,'#E24742');
+  assert.equal(pen.attributes['stroke-width'],'12');
+  elements['tool-wiggly'].emit('click');
+  elements['color-green'].emit('click');
+  elements.drawing.emit('pointerdown',{button:0,pointerId:32,clientX:150,clientY:140});
+  elements.drawing.emit('pointermove',{clientX:380,clientY:310});
+  elements.drawing.emit('pointerup',{});
+  const wiggly=elements.drawing.children.at(-1);
+  assert.equal(wiggly.children[0].attributes.stroke,'#188A75');
+  assert.ok(wiggly.children.slice(1).every(node=>node.attributes.stroke==='#188A75'));
+  assert.match(elements['brush-size-value'].textContent,/12/);
+  assert.equal(elements['color-green'].attributes['aria-pressed'],'true');
+});
+
+test('two-hand ruler previews one editable straight segment and thumb modifier adjusts size',async()=>{
+  elements['nav-whiteboard'].emit('click');
+  const fixtureAuth='synthetic';
+  window.__TAURI__={core:{invoke:async command=>{
+    if(command==='sidecar_status')return {port:39107,token:fixtureAuth,runtime_session_id:'dual-hand-ui',
+      workspace:elements['workspace-path'].value};
+    throw Error(command);
+  }}};
+  await timers[0]();
+  const socket=connections.at(-1);
+  assert.equal(typeof socket.onmessage,'function','test must reach active live sidecar transport');
+  socket.sendEvent({type:'runtime.ready',snapshot:{runtime_session_id:'dual-hand-ui',seq:0,timestamp_ms:0,health:{camera:'tracking',model:'legacy_unverified'}}});
+  let seq=0;
+  const send=(drawing,modifier)=>socket.sendEvent({type:'runtime.update',
+    runtime_session_id:'dual-hand-ui',seq:++seq,timestamp_ms:seq*60,
+    payload:{drawing:{physical_hand:'Right',...drawing},
+      modifier:{physical_hand:'Left',...modifier},health:{camera:'tracking',model:'legacy_unverified'}}});
+  elements['tool-pen'].emit('click');
+  const initial=elements.drawing.children.length;
+  send({action:'draw',pointer:{x:.2,y:.2}},
+    {action:'ruler',pointer:{x:.5,y:.4}});
+  assert.match(elements['modifier-feedback'].textContent,/ruler.*straight/i,
+    'runtime gesture must reach the Whiteboard reducer');
+  send({action:'draw',pointer:{x:.8,y:.7}},
+    {action:'ruler',pointer:{x:.5,y:.4}});
+  assert.equal(elements.drawing.children.length,initial+1);
+  assert.match(elements['modifier-feedback'].textContent,/ruler.*straight/i);
+  const ruler=elements.drawing.children.at(-1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(ruler.attributes.d,/M200\.00 120\.00 L800\.00 420\.00/);
+  send({action:null,pointer:{x:.8,y:.7}}, {action:null,pointer:null});
+  send({action:'draw',pointer:{x:.4,y:.5}},
+    {action:'tool_adjust',pointer:{x:1,y:.2}});
+  assert.match(elements['modifier-feedback'].textContent,/brush.*20/i);
+  assert.equal(elements['brush-size'].value,'20');
+  send({action:'erase',pointer:{x:.5,y:.5}},
+    {action:'tool_adjust',pointer:{x:0,y:.2}});
+  assert.match(elements['modifier-feedback'].textContent,/eraser.*10/i);
+  assert.equal(elements['eraser-size'].value,'10');
+  const eraser=elements.drawing.children.at(-1);
+  assert.equal(eraser.children.at(-1)?.attributes?.['stroke-width']??eraser.attributes['stroke-width'],'20');
 });

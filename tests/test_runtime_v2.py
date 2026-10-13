@@ -44,6 +44,43 @@ class FakePredictor:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_fist_uses_middle_knuckle_and_thumb_modifier_uses_thumb_tip(self):
+        predictor = FakePredictor('Fist')
+        runtime = GestureRuntime(predictor=predictor, stable_frames=1, stable_ms=0)
+        frame = observation('Left', 'Right', x=.31, y=.64)
+        frame.hand_landmarks[0][9].x = .52
+        frame.hand_landmarks[0][9].y = .46
+        update = runtime.process_result(frame, 100)
+        self.assertEqual(update['payload']['drawing']['action'], 'erase')
+        self.assertEqual(update['payload']['drawing']['pointer'], {'x': .52, 'y': .46})
+
+        predictor.label = 'Thumb_Up'
+        frame.hand_landmarks[1][4].x = .85
+        frame.hand_landmarks[1][4].y = .30
+        update = runtime.process_result(frame, 150)
+        self.assertEqual(update['payload']['modifier']['action'], 'tool_adjust')
+        self.assertEqual(update['payload']['modifier']['pointer'], {'x': .85, 'y': .30})
+
+        predictor.label = 'Index_Finger'
+        update = runtime.process_result(frame, 200)
+        self.assertEqual(update['payload']['drawing']['pointer'], {'x': .31, 'y': .64})
+
+    def test_drawing_and_modifier_actions_can_coexist_in_one_camera_frame(self):
+        class DualPredictor(FakePredictor):
+            def __init__(self):
+                self.labels = iter(('Index_Finger', 'Ruler', 'Index_Finger', 'Thumb_Up'))
+
+            def predict(self, features):
+                return [next(self.labels)]
+
+        runtime = GestureRuntime(predictor=DualPredictor(), stable_frames=1, stable_ms=0)
+        first = runtime.process_result(observation('Left', 'Right'), 100)
+        self.assertEqual(first['payload']['drawing']['action'], 'draw')
+        self.assertEqual(first['payload']['modifier']['action'], 'ruler')
+        second = runtime.process_result(observation('Left', 'Right'), 150)
+        self.assertEqual(second['payload']['drawing']['action'], 'draw')
+        self.assertEqual(second['payload']['modifier']['action'], 'tool_adjust')
+
     def test_failed_persisted_model_remains_visible_during_valid_tracking(self):
         runtime = GestureRuntime()
         runtime.mark_model_load_error()

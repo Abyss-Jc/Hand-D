@@ -140,6 +140,10 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
+vault/Config/
+*.pem
+*.key
 .envrc
 .venv
 env/

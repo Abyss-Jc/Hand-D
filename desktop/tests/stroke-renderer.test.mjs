@@ -107,3 +107,17 @@ test('RED: a queued animation frame cannot resurrect removed strokes',()=>{
   frame();
   assert.equal(svg.children.length,0);
 });
+
+test('Pen and each Wiggly boil frame honor the selected per-stroke color and size',()=>{
+  const {renderer,frame,makeStroke}=fixture();
+  const pen={...makeStroke('draw',[{x:.1,y:.1}]),color:'#E24742',width:12};
+  const wiggly={...makeStroke('wiggly',[{x:.1,y:.1},{x:.2,y:.2}]),color:'#188A75',width:8};
+  renderer.sync([pen,wiggly]);frame();
+  assert.equal(renderer.elements.get(pen).path.attributes.stroke,'#E24742');
+  assert.equal(renderer.elements.get(pen).path.attributes['stroke-width'],'12');
+  const item=renderer.elements.get(wiggly);
+  assert.equal(item.path.attributes.stroke,'#188A75');
+  assert.equal(item.path.attributes['stroke-width'],'8');
+  assert.ok(item.variants.every(v=>v.attributes.stroke==='#188A75'));
+  assert.ok(item.variants.every(v=>Number(v.attributes['stroke-width'])>7));
+});

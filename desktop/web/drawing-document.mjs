@@ -6,6 +6,12 @@ const FORMAT='handd-whiteboard';
 const VERSION=1;
 const MAX_BYTES=8_000_000;
 const VALID_TOOLS=new Set(['draw','erase','wiggly']);
+const BASE_STYLES={draw:{color:'#1a1d1c',width:4},
+  wiggly:{color:'#5263e6',width:5},erase:{color:'black',width:32}};
+export function strokeStyle(path){
+ return {color:path.tool==='erase'?'black':path.color??BASE_STYLES[path.tool].color,
+   width:path.width??BASE_STYLES[path.tool].width};
+}
 const validPoint=p=>p&&typeof p==='object'
   &&Number.isFinite(p.x)&&Number.isFinite(p.y)
   &&p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1;
@@ -18,7 +24,15 @@ function validate(paths){
    total+=path.points.length;
    if(total>100000||path.points.some(p=>!validPoint(p)))
      throw Error('Invalid point coordinates or document size');
-   return {tool:path.tool,points:path.points.map(p=>({x:p.x,y:p.y}))};
+   if(path.color!==undefined && (path.tool==='erase'
+       || typeof path.color!=='string'||!/^#[0-9A-Fa-f]{6}$/.test(path.color)))
+     throw Error('Invalid stroke color');
+   if(path.width!==undefined && (!Number.isFinite(path.width)
+       || path.width<1 || path.width>160))throw Error('Invalid stroke width');
+   return {tool:path.tool,
+     ...(path.color!==undefined?{color:path.color}:{}),
+     ...(path.width!==undefined?{width:path.width}:{}),
+     points:path.points.map(p=>({x:p.x,y:p.y}))};
  });
 }
 export function encodeWhiteboard(paths){
@@ -48,19 +62,20 @@ export function exportCleanSvg(paths){
  let id=0;
  for(const stroke of strokes){
    const d=geometry(stroke.points);
+   const style=strokeStyle(stroke);
    if(stroke.tool==='erase'){
      const maskId='handd-export-erase-'+(id++);
      masks.push('<mask id="'+maskId+'" maskUnits="userSpaceOnUse"'
        +' maskContentUnits="userSpaceOnUse" mask-type="luminance"'
        +' x="0" y="0" width="1000" height="600">'
        +'<rect x="0" y="0" width="1000" height="600" fill="white"/>'
-       +'<path d="'+d+'" fill="none" stroke="black" stroke-width="32"'
+       +'<path d="'+d+'" fill="none" stroke="black" stroke-width="'+style.width+'"'
        +' stroke-linecap="round" stroke-linejoin="round"/></mask>');
      ink='<g mask="url(#'+maskId+')">'+ink+'</g>';
    }else{
      ink+='<path d="'+d+'" fill="none"'
-       +' stroke="'+(stroke.tool==='wiggly'?'#5263e6':'#1a1d1c')+'"'
-       +' stroke-width="'+(stroke.tool==='wiggly'?'5':'4')+'"'
+       +' stroke="'+style.color+'"'
+       +' stroke-width="'+style.width+'"'
        +' stroke-linecap="round" stroke-linejoin="round"/>';
    }
  }

@@ -13,6 +13,7 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | Which tickets are executed next and how are they verified? | [Execution tickets](changes/hand-d-v2-tickets.md) |
 | How will Camera-first overlay, smooth drawing and the optional Wiggly brush be implemented/tested? | [Camera overlay + fluidez TDD plan](changes/hand-d-v2-camera-overlay-fluidity-tdd.md) |
 | How was Wiggly's line-boil rebuilt, verified, and what needs human review? | [Line-boil research + implementation evidence](changes/hand-d-v2-wiggly-line-boil-research.md) |
+| How are Pen/Wiggly colors, Fist knuckle erasing and two-hand ruler/size gestures implemented and tested? | [Whiteboard controls and Mac acceptance](changes/hand-d-v2-visualizer-controls-2026-10-12.md) |
 | How do we verify Hand-D on the Apple Silicon Macs without overstating platform support? | [macOS lab checklist (October 9)](runbook/mac-lab-oct09.md) |
 | What should approved Whiteboard/Studio UX look and behave like? | [v2 UX Shape](design/hand-d-v2-ux-shape.md) |
 | How is Hand-D structured today and what boundaries are we moving toward? | [Architecture reference](reference/architecture.md) |

@@ -3,6 +3,7 @@
  * one SVG root attribute, not thousands of paths or canonical points.
  */
 import {buildLineBoilFrames, LINE_BOIL_FRAME_MS} from './line-boil.mjs';
+import {strokeStyle} from './drawing-document.mjs';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let nextEraserMaskId = 0;
@@ -53,11 +54,10 @@ export class StrokeRenderer {
         continue;
       }
       const path = this.createPath();
+      const style=strokeStyle(stroke);
       path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', stroke.tool === 'erase' ? 'black'
-        : stroke.tool === 'wiggly' ? '#5263e6' : '#1a1d1c');
-      path.setAttribute('stroke-width', stroke.tool === 'erase' ? '32'
-        : stroke.tool === 'wiggly' ? '5' : '4');
+      path.setAttribute('stroke',style.color);
+      path.setAttribute('stroke-width',String(style.width));
       path.setAttribute('stroke-linejoin', 'round');
       path.setAttribute('stroke-linecap', 'round');
       path.setAttribute('pointer-events', 'none');
@@ -70,7 +70,7 @@ export class StrokeRenderer {
         for(let frame=0;frame<3;frame++){
           const variant=this.createPath();
           variant.setAttribute('fill','none');
-          variant.setAttribute('stroke','#5263e6');
+          variant.setAttribute('stroke',style.color);
           variant.setAttribute('stroke-linejoin','round');
           variant.setAttribute('stroke-linecap','round');
           variant.setAttribute('pointer-events','none');
@@ -167,10 +167,19 @@ export class StrokeRenderer {
         const frames=buildLineBoilFrames(stroke.points,{seed:entry.seed});
         frames.forEach((frame,i)=>{
           entry.variants[i].setAttribute('d',frame.d);
-          entry.variants[i].setAttribute('stroke-width',String(frame.width));
+          entry.variants[i].setAttribute('stroke-width',String(frame.width*strokeStyle(stroke).width/5));
         });
       }
     }
+  }
+
+  replacePoints(stroke) {
+    // Ruler preview updates its second endpoint without accumulating points.
+    const entry=this.elements.get(stroke);
+    if (!entry) return;
+    entry.count=0;
+    entry.geometry='';
+    this.pointAdded(stroke);
   }
 
   _showBoilFrame(frame) {

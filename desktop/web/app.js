@@ -2,7 +2,7 @@ import {RuntimeGate, Strokes} from './runtime-state.mjs';
 import {StrokeRenderer} from './stroke-renderer.mjs';
 import {HandOverlay,fitScene} from './hand-overlay.mjs';
 import {projectWorldLandmarks} from './world-landmarks.mjs';
-import {encodeWhiteboard,decodeWhiteboard,exportCleanSvg} from './drawing-document.mjs';
+import {encodeWhiteboard,decodeWhiteboard,exportCleanSvg,strokeStyle} from './drawing-document.mjs';
 
 const $ = id => document.getElementById(id);
 const strokes = new Strokes();
@@ -18,6 +18,10 @@ let cameraMode = true;
 let handsVisible = true;
 let pointerStroke = null;
 let gestureStroke = null;
+let gestureRuler = false;
+let inkColor = null;
+let brushWidth = null;
+let eraserRadius = 16;
 let ws = null;
 let sidecarKey = null;
 let previewUrl = null;
@@ -60,7 +64,10 @@ function markDrawingEdited() {
   $('document-status').textContent = 'Unsaved drawing changes · video is never saved.';
 }
 function beginStroke(point, source, action) {
-  const path = {points: [point], source, tool: action};
+  const style=strokeStyle({tool:action});
+  const path = {points: [point], source, tool: action,
+    ...(action==='erase'?{}:{color:inkColor??style.color}),
+    width:action==='erase'?eraserRadius*2:(brushWidth??style.width)};
   strokes.paths.push(path);
   strokes.redoStack = [];
   redraw();
@@ -82,12 +89,49 @@ function setTool(action) {
   $('tool-eraser').classList.toggle('selected', action === 'erase');
   $('tool-wiggly').classList.toggle('selected', action === 'wiggly');
   $('tool-wiggly').setAttribute('aria-pressed',String(action === 'wiggly'));
+  updatePalettePressed();
+  if (brushWidth===null) {
+    $('brush-size').value=String(strokeStyle({tool:action==='erase'?'draw':action}).width);
+    $('brush-size-value').textContent=$('brush-size').value+' px';
+  }
 }
+const inkPalette={black:'#1a1d1c',red:'#E24742',blue:'#5263e6',
+  green:'#188A75',purple:'#8545A4',orange:'#DA7A21'};
+function updatePalettePressed() {
+  const selected=inkColor??strokeStyle({tool:tool==='erase'?'draw':tool}).color;
+  for(const [name,color] of Object.entries(inkPalette))
+    $('color-'+name).setAttribute('aria-pressed',String(color===selected));
+}
+for(const [name,color] of Object.entries(inkPalette)) {
+  $('color-'+name).addEventListener('click',()=>{
+    inkColor=color;
+    updatePalettePressed();
+  });
+}
+updatePalettePressed();
+function setBrushSize(value) {
+  brushWidth=Math.max(1,Math.min(20,Math.round(Number(value))));
+  $('brush-size').value=String(brushWidth);
+  $('brush-size-value').textContent=brushWidth+' px';
+}
+function setEraserRadius(value) {
+  eraserRadius=Math.max(10,Math.min(80,Math.round(Number(value))));
+  $('eraser-size').value=String(eraserRadius);
+  $('eraser-size-value').textContent=eraserRadius+' px';
+}
+$('brush-size').addEventListener('input',()=>setBrushSize($('brush-size').value));
+$('eraser-size').addEventListener('input',()=>setEraserRadius($('eraser-size').value));
 function releaseGesture(clearHands = true) {
   gestureStroke = null;
+  gestureRuler = false;
   $('cursor').hidden = true;
   if (clearHands) handOverlay.clear();
 }
+function showModifierFeedback(message) {
+  const status=$('modifier-feedback');
+  if(status.textContent!==message)status.textContent=message;
+}
+const modifierHelp='Modifier hand: Ruler = straight line · Thumb Up = size';
 function onRuntimeEvent(event) {
   if (!gate.accept(event)) return;
   handOverlay.update(event.payload);
@@ -98,6 +142,26 @@ function onRuntimeEvent(event) {
     : 'No tracked hand';
   const draw = event.payload?.drawing ?? {};
   const modifier = event.payload?.modifier ?? {};
+  const adjustPoint=modifier.pointer;
+  if(modifier.action==='tool_adjust' && Number.isFinite(adjustPoint?.x)
+      && adjustPoint.x>=0 && adjustPoint.x<=1){
+    if(draw.action==='erase'){
+      setEraserRadius(10+adjustPoint.x*70);
+      showModifierFeedback('Adjusting eraser radius: '+eraserRadius
+        +' px · move your '+(modifier.physical_hand||'modifier')+' thumb left / right');
+    } else {
+      setBrushSize(1+adjustPoint.x*19);
+      showModifierFeedback('Adjusting brush thickness: '+brushWidth
+        +' px · move your '+(modifier.physical_hand||'modifier')+' thumb left / right');
+    }
+  } else if(modifier.action==='ruler' && draw.action==='draw') {
+    showModifierFeedback('Ruler active · straight line preview; release to finish');
+  } else if(['Ruler','Thumb_Up'].includes(modifier.raw_gesture) && !modifier.action){
+    showModifierFeedback('Modifier: '+modifier.raw_gesture.replace('_',' ')
+      +' detected · hold steady to activate');
+  } else {
+    showModifierFeedback(modifierHelp);
+  }
   $('gesture').textContent = draw.stable_gesture || draw.raw_gesture || (
     event.payload?.health?.camera === 'tracking'
       ? 'HAND DETECTED · NO CLASSIFICATION'
@@ -123,14 +187,24 @@ function onRuntimeEvent(event) {
   $('cursor').style.top = (point.y * 100) + '%';
   const action = draw.action;
   if (action !== 'draw' && action !== 'erase') {
-    gestureStroke = null;
+    releaseGesture(false);
     return;
   }
   const effectiveTool = action === 'draw' && tool === 'wiggly' ? 'wiggly' : action;
-  if (!gestureStroke || gestureStroke.tool !== effectiveTool)
+  const ruler=action==='draw'&&modifier.action==='ruler';
+  const nextStyle=strokeStyle({tool:effectiveTool});
+  const nextWidth=effectiveTool==='erase'?eraserRadius*2:(brushWidth??nextStyle.width);
+  if (!gestureStroke || gestureStroke.tool !== effectiveTool
+      || gestureRuler!==ruler || gestureStroke.width!==nextWidth) {
     gestureStroke = beginStroke(point, 'gesture', effectiveTool);
-  else
+    gestureRuler=ruler;
+    if(ruler){gestureStroke.points.push({...point});strokeRenderer.pointAdded(gestureStroke);}
+  } else if(ruler){
+    gestureStroke.points[1]={...point};
+    strokeRenderer.replacePoints(gestureStroke);
+  } else {
     extendStroke(gestureStroke, point);
+  }
 }
 function mousePoint(event) {
   const rect = $('drawing').getBoundingClientRect();
@@ -160,10 +234,16 @@ $('tool-eraser').addEventListener('click', () => setTool('erase'));
 $('tool-wiggly').addEventListener('click', () => setTool('wiggly'));
 // Native dialogs and atomic persistence are implemented on Rust's local OS
 // boundary. The camera frame never enters a file payload.
+function invokeNative(command, args) {
+  const invoke=window.__TAURI__?.core?.invoke;
+  if(typeof invoke!=='function')
+    throw Error('Tauri native bridge unavailable. Open Hand-D in the desktop app.');
+  return invoke(command,args);
+}
 async function saveDrawing() {
   try {
     const document=encodeWhiteboard(strokes.paths);
-    const path=await window.__TAURI__?.core?.invoke('save_drawing',{document});
+    const path=await invokeNative('save_drawing',{document});
     if (path) {
       drawingDirty=false;
       $('document-status').textContent='Saved editable drawing: '+path;
@@ -178,7 +258,7 @@ $('open-drawing').addEventListener('click',async()=>{
   if (strokes.paths.length && typeof window.confirm==='function'
       && !window.confirm('Replace your current drawing? Save any changes first.'))return;
   try {
-    const result=await window.__TAURI__?.core?.invoke('open_drawing');
+    const result=await invokeNative('open_drawing');
     if (!result) return;
     const paths=decodeWhiteboard(result.document);
     releaseGesture();
@@ -195,7 +275,7 @@ $('open-drawing').addEventListener('click',async()=>{
 $('export-drawing').addEventListener('click',async()=>{
   try{
     const svg=exportCleanSvg(strokes.paths);
-    const path=await window.__TAURI__?.core?.invoke('export_svg',{svg});
+    const path=await invokeNative('export_svg',{svg});
     if(path)$('document-status').textContent='Exported clean SVG (no camera): '+path;
   }catch(error){
     $('document-status').textContent='Could not export clean drawing: '+String(error);
@@ -697,14 +777,14 @@ function handleStudioResponse(message) {
   }
 }
 $('browse-workspace').addEventListener('click', async () => {
+  if (workspaceDialogBusy) return;
   const path = $('workspace-path').value.trim();
   if (!path) {
     $('workspace-message').textContent = 'Enter an existing workspace directory.';
     return;
   }
   try {
-    const selected = await window.__TAURI__?.core?.invoke('select_workspace', {path});
-    if (!selected) throw Error('Tauri is unavailable');
+    const selected = await invokeNative('select_workspace', {path});
     pendingWorkspace = selected;
     $('workspace-message').textContent = 'Connecting workspace: ' + selected;
     attachSidecar(null);
@@ -712,20 +792,40 @@ $('browse-workspace').addEventListener('click', async () => {
     $('workspace-message').textContent = String(error);
   }
 });
+let workspaceDialogBusy=false;
 async function nativeWorkspaceDialog(command) {
+  if(workspaceDialogBusy)return;
+  workspaceDialogBusy=true;
+  const previousMessage=$('workspace-message').textContent;
+  const openingMessage='Opening native workspace folder picker…';
+  $('select-workspace').disabled=true;
+  $('create-workspace').disabled=true;
+  $('browse-workspace').disabled=true;
+  $('workspace-message').textContent=openingMessage;
   try {
-    const selected=await window.__TAURI__?.core?.invoke(command);
-    if(!selected)return; // native Cancel must never change the workspace
+    const selected=await invokeNative(command);
+    if(!selected) {
+      // Cancel changes neither the selection nor any newer connection status.
+      if($('workspace-message').textContent===openingMessage)
+        $('workspace-message').textContent=previousMessage;
+      return;
+    }
     pendingWorkspace=selected;
     $('workspace-path').value=selected;
     $('workspace-message').textContent='Connecting workspace: '+selected;
     attachSidecar(null);
   }catch(error){
     $('workspace-message').textContent=String(error);
+  }finally{
+    workspaceDialogBusy=false;
+    $('select-workspace').disabled=false;
+    $('create-workspace').disabled=false;
+    $('browse-workspace').disabled=false;
   }
 }
 $('select-workspace').addEventListener('click',()=>nativeWorkspaceDialog('pick_workspace'));
 $('create-workspace').addEventListener('click',()=>{
+  if(workspaceDialogBusy)return;
   if(typeof window.confirm==='function'&&!window.confirm(
     'Initialize a new Hand-D Project Workspace in an empty folder?'))return;
   nativeWorkspaceDialog('create_workspace');
@@ -869,6 +969,7 @@ function attachSidecar(status) {
     $('camera-fallback').hidden = false;
     $('footer-session').textContent = 'No sidecar session';
     displayHealth(null);
+    showModifierFeedback(modifierHelp);
     connectionState(false, 'STARTING / RECONNECTING SIDECAR');
     return;
   }

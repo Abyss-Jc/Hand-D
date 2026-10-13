@@ -45,6 +45,23 @@
             <div id="cursor" hidden></div>
           </div>
           <span class="canvas-tag" id="canvas-tag">WHITEBOARD · LOCAL CANVAS</span>
+          <div class="modifier-feedback" id="modifier-feedback" role="status" aria-live="polite">
+            Modifier hand: Ruler = straight line · Thumb Up = size
+          </div>
+          <div class="ink-controls" aria-label="Drawing color and size controls">
+            <div class="color-swatches" role="group" aria-label="Ink color (Pen and Wiggly)">
+              <button id="color-black" class="swatch" style="--swatch:#1a1d1c" aria-label="Black ink" aria-pressed="false" title="Black"></button>
+              <button id="color-red" class="swatch" style="--swatch:#E24742" aria-label="Red ink" aria-pressed="false" title="Red"></button>
+              <button id="color-blue" class="swatch" style="--swatch:#5263e6" aria-label="Blue ink" aria-pressed="false" title="Blue"></button>
+              <button id="color-green" class="swatch" style="--swatch:#188A75" aria-label="Green ink" aria-pressed="false" title="Green"></button>
+              <button id="color-purple" class="swatch" style="--swatch:#8545A4" aria-label="Purple ink" aria-pressed="false" title="Purple"></button>
+              <button id="color-orange" class="swatch" style="--swatch:#DA7A21" aria-label="Orange ink" aria-pressed="false" title="Orange"></button>
+            </div>
+            <label for="brush-size">Brush <output id="brush-size-value" for="brush-size">4 px</output></label>
+            <input id="brush-size" type="range" min="1" max="20" step="1" value="4" aria-label="Brush thickness">
+            <label for="eraser-size">Eraser radius <output id="eraser-size-value" for="eraser-size">16 px</output></label>
+            <input id="eraser-size" type="range" min="10" max="80" step="1" value="16" aria-label="Eraser radius">
+          </div>
           <div class="tools">
             <button id="tool-pen" class="selected">✎ Pen</button>
             <button id="tool-eraser">⌫ Eraser</button>

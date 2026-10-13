@@ -67,6 +67,42 @@ El script instala dependencias **en el proyecto** mediante `uv sync --frozen` y 
 
 No compartir tokens del sidecar, seriales, fotos ni video; solo comandos, errores y medidas agregadas.
 
+## Bitacora de la primera sesion en Mac y regresion del selector (12-oct-2026)
+
+**Origen de las observaciones fisicas:** reportes del operador en la conversacion del 9-12 de octubre; no se dispone de logs completos, version exacta de macOS ni identificacion de la Mac. Los campos `No verificado` de la tabla anterior siguen abiertos como *gates de aceptacion*: un reporte visual no sustituye una prueba repetible.
+
+- El operador pudo abrir la interfaz de Hand-D en su Mac y reporto que los puntos de manos eran visibles correctamente. **Reportado, sin medicion de FPS, calibracion Left/Right ni comprobacion del bundle `.app`.**
+- En esa sesion, los botones **Create workspace...**, **Open / change workspace...** y el flujo de ruta introducida no produjeron el resultado esperado. En contraste, un comando `osascript` ejecutado por separado **si abrio el selector nativo de carpetas**. No se guardo la transcripcion exacta de ese comando ni un log de errores de la app.
+- Diagnostico por codigo: `desktop/src-tauri/src/main.rs` invocaba funciones sincronas que esperan la seleccion humana de `osascript` y la inicializacion del sidecar. En Tauri 2 esos comandos se ejecutan en el hilo UI por defecto; bloquearlo puede dejar la app aparentemente sin reaccion. Ademas, `desktop/web/app.js` interpretaba la ausencia de `window.__TAURI__.core.invoke` como cancelacion silenciosa. **Causa probable respaldada por codigo, pero no confirmada aun en Mac.** Ver [Tauri 2: Async commands](https://v2.tauri.app/develop/calling-rust/).
+- Correccion Linux del 12-oct-2026: `select_workspace`, `pick_workspace`, `create_workspace`, `save_drawing`, `open_drawing` y `export_svg` ahora se despachan fuera del hilo principal mediante `#[tauri::command(async)]`; el frontend muestra error explicito si falta el puente nativo. Mientras espera el dialogo, Studio muestra `Opening native workspace folder picker...`, deshabilita temporalmente los botones y evita dialogs duplicados; Cancel preserva la seleccion anterior. RED antes del cambio para los tres contratos; GREEN despues. Ejecutados: `node --test desktop/tests/native-threading.test.mjs desktop/tests/app-ui.test.mjs` (**26/26**), `node --test desktop/tests/*.test.mjs` (**52/52**), `cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml` (**7/7**) y `npm --prefix desktop run check` (PASS). Ninguna de estas pruebas ejecuta `osascript` en macOS.
+
+### Repetir en macOS despues de actualizar la rama
+
+Usar el checkout de la Mac en `feature/hand-d-v2-modernization` (sin copiar `.venv` ni `target` desde Linux):
+
+```bash
+git pull --ff-only
+npm --prefix desktop run dev
+```
+
+1. Abrir **Studio** y elegir **Create workspace...**. Confirmar y seleccionar una carpeta **existente, vacia y de laboratorio**, nunca el repositorio ni un proyecto real. Mientras se abre el selector, Studio debe indicar que lo esta abriendo y evitar clics repetidos; la ventana no debe quedar congelada. Comprobar que se crea `handd.sqlite`, que Studio indica **Connecting workspace**, y finalmente **Connected workspace**. Esperar al nuevo READY del sidecar; no interpretar el reinicio como fallo.
+2. Probar **Open / change workspace...** seleccionando ese mismo directorio; comprobar que vuelve el contenido de Studio. En **Open using an existing folder path**, pegar la ruta y pulsar **Use entered path**; debe conseguir el mismo resultado.
+3. Cancelar el dialogo y confirmar que no cambia el workspace activo. Elegir una carpeta sin `handd.sqlite` con Open: debe verse un error real, no una cancelacion falsa. Si aparece una solicitud de permisos de macOS, registrar solo el mensaje y la accion tomada.
+4. En Whiteboard, probar **Save drawing...**, **Open drawing...** y **Export SVG...**. La ventana no debe quedar congelada mientras espera el selector. Comprobar que guardar/exportar excluye el video de la camara.
+
+**Todavia No verificado en Mac despues del cambio:** ejecucion de estos cuatro pasos, permisos nativos de camara/TCC, `.app` empaquetada, MPS, benchmark de ONNX y pruebas de HD-10 con humanos. ONNX continua estrictamente opt-in segun [HD-12](hd12-onnx-experimental.md).
+
+### Gate del 13 de octubre: controles de Whiteboard y segunda mano
+
+Los cambios del 12-oct-2026 estan descritos en [Whiteboard controls](../changes/hand-d-v2-visualizer-controls-2026-10-12.md). **Contrato Linux sintético aprobado; Mac físico No verificado.** Tras hacer `git pull --ff-only` y reiniciar la app:
+
+1. Mostrar ambas manos y mantener **Index Finger (Drawing/Right)** mientras la **Modifier/Left** hace **Ruler**: debe verse `Ruler active · straight line preview`, una recta anclada en el punto de inicio, sin zigzag; al salir del gesto la recta queda editable con Undo/Redo. Si no hay feedback, mirar `raw_gesture`/`stable_gesture` y salud del modelo (legacy no es accuracy validada).
+2. Con **Thumb Up de Modifier/Left**, mover el pulgar a izquierda y derecha. Con Drawing Index Finger, el indicador **Brush** debe recorrer 1–20; con Drawing Fist debe verse **Eraser radius** 10–80. El HUD indica que se esta ajustando y el numero. El borrador tiene que seguir el **Middle Finger MCP (joint 9)**; el dibujo conserva **Index Finger Tip (joint 8)**. Repetir borrando sobre camara: no hay manchas blancas ni controles cubiertos.
+3. En Pen y Wiggly, elegir dos colores distintos entre los seis swatches y ajustar grosor. Guardar, abrir y exportar SVG: cada trazo conserva color y grosor, la tinta borrada sigue siendo transparente y Wiggly mantiene sus tres frames con Reduced Motion estatico. La seleccion sigue accesible dentro del modal ampliado.
+4. Alternar Camera/Clean, cambiar de Studio a Whiteboard, pulsar Restart camera. Documento y controles permanecen operativos incluso sin sidecar. Verificar que el input de un gesto no dibuja sobre Whiteboard cuando Studio esta visible.
+
+No cambiar ni empaquetar ONNX/MPS para completar esta prueba: el gate es sobre interaccion y estabilidad, no sobre backend experimental. Si la clasificacion falla en un Mac donde los 21 puntos aparecen correctamente, registrar etiquetas/estado observados antes de tocar pesos o umbrales.
+
 ## Limitaciones que no deben confundirse con bugs ya resueltos
 
 - El modo `npm --prefix desktop run dev` usa el Python local del clon. El empaquetado nativo ya tiene receta con PyInstaller y Rust ResourceDir, pero **solo existe prueba de construcción y lanzamiento del .deb Linux**. No hay todavía `.app` validado en Mac. Firma, sandbox, TCC/cámara del child PyInstaller y notarización permanecen pendientes de evidencia real.

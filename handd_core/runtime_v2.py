@@ -213,8 +213,6 @@ class GestureRuntime:
                                        stable_gesture=None, action=None)
                 continue
             image, features = item
-            tip = image[8, :2]
-            pointer = {'x': float(tip[0]), 'y': float(tip[1])}
             try:
                 raw = self.predictor.predict(features.reshape(1, 69))[0] if self.predictor else None
                 self._model_health = (
@@ -231,13 +229,22 @@ class GestureRuntime:
             else:
                 state.reset()
                 stable = None
+            # Match the legacy interaction points: a closed drawing fist erases
+            # from the middle knuckle (MCP 9); a Thumb Up modifier uses thumb
+            # tip 4 for horizontal adjustment. Normal drawing stays at tip 8.
+            landmark_index = (9 if role == 'drawing' and stable == 'Fist'
+                              else 4 if role == 'modifier' and stable == 'Thumb_Up'
+                              else 8)
+            tip = image[landmark_index, :2]
+            in_frame = bool(np.all((tip >= 0) & (tip <= 1)))
+            pointer = {'x': float(tip[0]), 'y': float(tip[1])} if in_frame else None
             landmark_xy = np.clip(image[:, :2], 0., 1.)
             role_data[role] = dict(
                 physical_hand=physical_hand, pointer=pointer,
                 landmarks=[{'x': float(x), 'y': float(y)} for x, y in landmark_xy],
                 raw_gesture=raw,
                 stable_gesture=stable,
-                action=self._actions[role].get(stable),
+                action=self._actions[role].get(stable) if in_frame else None,
             )
         if inference_failed:
             self._model_health = 'error'

@@ -121,7 +121,9 @@ fn restart_sidecar(state: tauri::State<'_, Supervisor>) {
     state.restart.store(true, Ordering::SeqCst);
 }
 
-#[tauri::command]
+// Filesystem calls can block (including network-mounted paths). Tauri's normal
+// synchronous commands run on the UI thread; dispatch this off-thread.
+#[tauri::command(async)]
 fn select_workspace(path: String, state: tauri::State<'_, Supervisor>) -> Result<String, String> {
     apply_workspace(path, &state)
 }
@@ -139,13 +141,14 @@ fn apply_workspace(path: String, state: &Supervisor) -> Result<String, String> {
     Ok(canonical.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+// OS pickers wait for a human response, so never run them on WebKit's UI thread.
+#[tauri::command(async)]
 fn pick_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String>, String> {
     let Some(path)=native_files::pick_folder()? else {return Ok(None)};
     apply_workspace(path.to_string_lossy().to_string(),&state).map(Some)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn create_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String>, String> {
     let Some(path)=native_files::pick_folder()? else {return Ok(None)};
     let canonical=path.canonicalize().map_err(|e|e.to_string())?;
@@ -164,17 +167,17 @@ fn create_workspace(state: tauri::State<'_, Supervisor>) -> Result<Option<String
     apply_workspace(canonical.to_string_lossy().to_string(),&state).map(Some)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_drawing(document: String) -> Result<Option<String>, String> {
     native_files::save_drawing(document)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn open_drawing() -> Result<Option<native_files::DrawingOpen>, String> {
     native_files::open_drawing()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn export_svg(svg: String) -> Result<Option<String>, String> {
     native_files::export_svg(svg)
 }

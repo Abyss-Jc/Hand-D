@@ -45,3 +45,21 @@ test('clean SVG exports chronological ink masks and NEVER camera or UI',()=>{
    svg.indexOf('M500.00 300.00 L600.00 330.00'),
    'new ink is ABOVE previous eraser mask');
 });
+
+test('colored Pen and Wiggly strokes retain individual widths across editable Save/Open and clean SVG',()=>{
+ const colored=[
+   {tool:'draw',color:'#E24742',width:12,points:[{x:.1,y:.2},{x:.4,y:.5}]},
+   {tool:'wiggly',color:'#188A75',width:8,points:[{x:.4,y:.2},{x:.7,y:.5}]},
+   {tool:'erase',width:80,points:[{x:.3,y:.4}]},
+ ];
+ const saved=encodeWhiteboard(colored);
+ assert.deepEqual(decodeWhiteboard(saved),colored);
+ const svg=exportCleanSvg(decodeWhiteboard(saved));
+ assert.match(svg,/stroke="#E24742" stroke-width="12"/);
+ assert.match(svg,/stroke="#188A75" stroke-width="8"/);
+ assert.match(svg,/stroke="black" stroke-width="80"/);
+ assert.doesNotMatch(svg,/<image|<script|camera/);
+ for(const color of ['red', 'url(javascript:1)', '"/><script>'])
+   assert.throws(()=>encodeWhiteboard([{...colored[0],color}]));
+ assert.throws(()=>encodeWhiteboard([{...colored[0],width:Infinity}]));
+});

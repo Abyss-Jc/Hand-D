@@ -14,6 +14,15 @@ h1{font-size:clamp(42px,5vw,72px);letter-spacing:-.09em;line-height:.95;margin:0
 .model-line{display:block;background:#f4e6ac;border:2px solid var(--ink);font-weight:800;font-size:11px!important;padding:7px;line-height:1.4}.mini{font-size:11px;color:#4b5452;line-height:1.55}.studio-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}.studio-grid article{background:white;border:var(--line);padding:23px;box-shadow:6px 6px 0 var(--ink)}.studio-grid article.wide{grid-column:1/-1}.marker{display:inline-block;background:var(--lime);border:2px solid var(--ink);padding:7px 11px;font-size:14px;font-weight:1000}.studio-grid article p{max-width:55ch}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#e9edff;border:2px solid var(--ink);padding:14px;font-size:12px}
 .canvas-shell{background:#17202a}
 .canvas-shell.clean{background:#fffef9}
+.modifier-feedback{position:absolute;z-index:6;right:12px;top:12px;max-width:min(55%,340px);pointer-events:none;background:#fffef9e8;border:2px solid var(--ink);padding:6px 9px;font-size:12px;font-weight:850;line-height:1.35}
+.ink-controls{position:absolute;z-index:6;bottom:12px;left:12px;width:188px;background:#fffef9ed;border:2px solid var(--ink);padding:8px 9px;display:grid;gap:2px;box-shadow:2px 2px 0 var(--ink)}
+.ink-controls label{display:flex;justify-content:space-between;gap:5px;font-size:11px;font-weight:850}.ink-controls output{font-variant-numeric:tabular-nums;color:#30393b}
+.ink-controls input[type="range"]{width:100%;margin:2px 0 5px;accent-color:var(--blue)}
+.color-swatches{display:flex;gap:4px;justify-content:space-between;margin-bottom:5px}
+.color-swatches .swatch{width:23px;height:23px;min-width:0;padding:0;background:var(--swatch);border:2px solid #fff;outline:1px solid var(--ink);border-radius:50%;box-shadow:none}
+.color-swatches .swatch[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:1px;transform:scale(1.07)}
+.color-swatches .swatch:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+@media(max-width:650px){.ink-controls{width:150px;bottom:58px;left:6px;padding:6px}.color-swatches .swatch{width:18px;height:18px}.modifier-feedback{font-size:10px;right:6px;top:46px;max-width:65%}}
 .camera-scene{position:absolute;z-index:0;background:#202d32;overflow:hidden}
 .canvas-shell.clean .camera-scene{background:#fffef9}
 #preview{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:0}
