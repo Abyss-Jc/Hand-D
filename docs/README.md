@@ -23,6 +23,7 @@ This directory is the canonical documentation entry point for Hand-D v2. It sepa
 | What language must every desktop UI surface use? | [ADR 0005 — English-only product UI](adr/0005-english-only-product-ui.md) |
 | How do automatic checks work, and what must Josué enable on GitHub? | [CI-01/CI-02 runbook](runbook/ci.md) |
 | How do I optionally benchmark ONNX / MediaPipe 1.1 without changing the runtime? | [HD-12 experimental guide](runbook/hd12-onnx-experimental.md) |
+| How do I try experimental ONNX CPU inference and return safely to PyTorch? | [ONNX CPU branch, startup and rollback](runbook/hd12-onnx-experimental.md#probar-el-runtime-onnx-cpu-experimental-en-cachyos) |
 | How should a developer prepare and verify the repository? | [Development runbook](runbook/development.md) |
 | What rules should coding agents and contributors follow? | [AGENTS.md](../AGENTS.md) |
 

@@ -1,12 +1,52 @@
 # HD-12 - evaluación experimental de ONNX y MediaPipe 1.1
 
-**Estado:** IN PROGRESS / EXPERIMENTAL. Este experimento **no activa ONNX ni actualiza MediaPipe en producción**. El backend de inferencia sigue siendo PyTorch CPU, con MediaPipe `0.10.33` bloqueado en `pyproject.toml` y `uv.lock`. No hay que modificar un Candidate ni un Project Workspace para evaluar los backends.
+**Estado:** IN PROGRESS / EXPERIMENTAL. En la rama hija `feature/hand-d-onnx-cpu-experimental` existe un runtime **opt-in** ONNX CPU; la rama `feature/hand-d-v2-modernization` y el backend predeterminado permanecen en PyTorch CPU. MediaPipe sigue bloqueado en `0.10.33`. Ningun Candidate ni Project Workspace se modifica al seleccionar ONNX.
 
 **Fecha de los datos:** 2026-10-12. **Host medido:** CachyOS x86_64 / Python 3.13.16 / PyTorch 2.14.1+cpu / ONNX 1.23.2 / ONNX Runtime 1.31.0 / onnxscript 0.7.2, CPU (1 thread). **Comparaciones macOS Apple Silicon y gestos humanos: pendientes.**
 
+## Probar el runtime ONNX CPU experimental en CachyOS
+
+Desde el checkout en la rama `feature/hand-d-onnx-cpu-experimental`:
+
+```bash
+git switch feature/hand-d-onnx-cpu-experimental
+uv sync --frozen --group onnx-runtime
+env HANDD_INFERENCE_BACKEND=onnx-cpu npm --prefix desktop run dev
+```
+
+Con la app abierta, comprueba el texto del estado de modelo en Whiteboard:
+
+- `LEGACY MODEL ACTIVE ... · ONNX CPU` significa que el checkpoint diagnostico antiguo se ejecuta con ONNX **sin convertir sus etiquetas ni su procedencia en verificadas**.
+- `V2 MODEL: READY · candidate-... · ONNX CPU` significa que el Candidate verificado activo se ejecuta con ONNX.
+- `PyTorch CPU fallback` significa que ONNX no supero la preparacion o paridad y se sigue usando PyTorch CPU (revisa stderr del sidecar).
+- El JSON de Diagnostics expone `health.inference_backend` (`onnx-cpu`, `torch-cpu`, `torch-cpu-fallback` o `none`).
+
+La seleccion del backend se aplica tanto a un Candidate cargado al inicio como a una activacion en Studio. Si no hay modelo, el runtime continua en tracking-only. `CPUExecutionProvider` se exige explicitamente; el export ONNX usa un directorio temporal fuera del Workspace y compara logits + etiquetas con PyTorch antes de activar la sesion. Las conversiones ocurren al arrancar/restaurar/activar un modelo y **pueden demorar unos segundos**. El bundle Tauri/PyInstaller **no incluye todavia** las dependencias ONNX experimentales: esta prueba es en modo desarrollo.
+
+### Regresar a PyTorch sin modificar datos
+
+Deten la app y ejecuta:
+
+```bash
+env HANDD_INFERENCE_BACKEND=torch-cpu npm --prefix desktop run dev
+```
+
+Para volver a la rama base: `git switch feature/hand-d-v2-modernization` y `uv sync --frozen`. La seleccion Active Model se guarda como antes, independientemente del backend. No se alteran pesos, manifests, snapshots, muestras, ni dibujos.
+
+### Pruebas automatizadas del experimento
+
+```bash
+uv run --frozen --group onnx-runtime python -m unittest tests.test_onnx_cpu_runtime -q
+uv run --frozen --group training --group onnx-runtime \
+  python -m unittest discover -s tests -p 'test_*.py' -q
+node --test desktop/tests/*.test.mjs
+```
+
+**Verificado en CachyOS 2026-10-12:** 6 pruebas ONNX (incluido sidecar real sin camara, Studio activate/restore y fallback); 157 Python OK (1 omitida de MediaPipe LIVE_STREAM por ser opt-in), 59 JS y 7 Rust. **No verificado:** webcam humana con ONNX, p95 de FPS extremo a extremo, empaquetado ONNX y prueba fisica macOS.
+
 ## Instalación opcional sin alterar la app
 
-No añadir estos paquetes a las dependencias normales de `[project]` ni actualizar `uv.lock` para el spike. `uv run --frozen --with` instala extras en un entorno temporal gestionado por uv; no convierte ONNX en una dependencia del sidecar. Con un Candidate existente, la instalación experimental reproducible es:
+Para el benchmark aislado, `uv run --frozen --with` continua permitiendo extras temporales. En **esta rama hija**, el grupo opt-in `[dependency-groups].onnx-runtime` y su `uv.lock` ya incluyen los tres paquetes, pero **no** forman parte de `[project].dependencies`. Con un Candidate existente, la instalacion experimental reproducible es:
 
 ```bash
 uv run --frozen \
@@ -28,9 +68,9 @@ uv run --frozen \
   python -m unittest tests.test_hd12_benchmark -q
 ```
 
-**En macOS M4:** ejecuta los mismos comandos desde el checkout de Hand-D en la Mac después de `uv sync --frozen`. El runtime que ejecutas con `npm --prefix desktop run dev` **no necesita** esos paquetes. Guarda los reportes fuera de un workspace real si los vas a comparar; no subas datos sensibles ni archivos `handd.sqlite`. En caso de que uv no encuentre un wheel para tu arquitectura/versión de Python, registra el error en vez de instalar dependencias globales o cambiar los pins de la aplicación.
+**En macOS M4:** ejecuta los mismos comandos desde el checkout de Hand-D en la Mac despues de `uv sync --frozen`. El runtime **predeterminado PyTorch** que ejecutas con `npm --prefix desktop run dev` no necesita los paquetes ONNX; si seleccionas `HANDD_INFERENCE_BACKEND=onnx-cpu`, si necesitas `uv sync --frozen --group onnx-runtime`. Guarda los reportes fuera de un workspace real si los vas a comparar; no subas datos sensibles ni archivos `handd.sqlite`. En caso de que uv no encuentre un wheel para tu arquitectura/version de Python, registra el error en vez de instalar dependencias globales o cambiar los pins de la aplicacion.
 
-Si más adelante se decide **mantener una implementación ONNX permanente**, antes de cambiar producción habrá que agregar un grupo opcional, por ejemplo `[dependency-groups].onnx-benchmark`, a `pyproject.toml`, actualizar y versionar `uv.lock`, y ejecutar las matrices de CI y packaging. **No hacerlo ahora** evita sumar `onnxruntime` al bundle o provocar un cambio de inferencia sin pruebas suficientes.
+El grupo opt-in queda versionado solamente en la rama experimental. **No se debe convertir ONNX en el backend por defecto ni agregarlo al bundle de produccion** sin comparar Candidate real, latencia de extremo a extremo, startup, empaquetado y rollback en las plataformas objetivo.
 
 ## Qué valida el código experimental
 
@@ -81,4 +121,4 @@ En macOS M4 aún debemos verificar webcam, permisos, interpretación Left/Right,
 2. Medir callback→inferencia→WS→Tauri en Linux y Mac M4 con cámara real, guardando p50/p95 y la latencia percibida; priorizar fluidez sin perder la cámara por una optimización prematura.
 3. Construir y lanzar los sidecars PyTorch y ONNX en macOS ARM64 y Linux, comparar bytes reales del bundle, dependencias nativas, startup y fallback seguro CPU.
 4. Verificar que MediaPipe 1.1.x preserva handedness, 21 landmarks, timestamps, comportamiento de tracking y los contratos de captura, especialmente ante pérdida temporal de cámara.
-5. Tomar la decisión explícita en un nuevo ticket/ADR. **Por ahora HD-12 permanece abierto como spike opcional; HD-10 validación humana también sigue aparte.**
+5. Tomar la decisión explícita en un nuevo ticket/ADR. **Por ahora HD-12 permanece abierto; la rama ONNX CPU permite pruebas de usuario, pero HD-10 validación humana también sigue aparte.**

@@ -671,10 +671,14 @@ test('Studio activates only selected compatible candidate, shows Active Model on
   socket.sendEvent({type:'studio.response',request_id:socket.sent.at(-1).request_id,
     ok:true,data:{artifact_id:'candidate-validated',label_order:['Fist','Index_Finger']}});
   socket.sendEvent({type:'studio.model',snapshot:{
-    active_model_id:'candidate-validated',health:{model:'ready',camera:'tracking'}
+    active_model_id:'candidate-validated',health:{model:'ready',camera:'tracking',inference_backend:'onnx-cpu'}
   }});
   assert.match(elements['model-status'].textContent,/candidate-validated/);
+  assert.match(elements['model-status'].textContent,/ONNX CPU/);
   assert.match(elements['models-status'].textContent,/candidate-validated/);
+  socket.sendEvent({type:'studio.model',snapshot:{active_model_id:'candidate-validated',
+    health:{model:'ready',inference_backend:'torch-cpu-fallback'}}});
+  assert.match(elements['model-status'].textContent,/PyTorch CPU fallback/);
 });
 
 test('Save/Open preserves editable strokes; Export emits camera-free SVG; cancel preserves drawing',async()=>{

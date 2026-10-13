@@ -19,8 +19,9 @@ CANDIDATE_ID = re.compile(r"candidate-[A-Za-z0-9_-]{1,96}\Z")
 
 
 class StudioModels:
-    def __init__(self, workspace: Path | str):
+    def __init__(self, workspace: Path | str, *, inference_backend='torch-cpu'):
         self.workspace = StudioWorkspace(workspace).path
+        self.inference_backend = inference_backend
         self.model_root = self.workspace / "models"
         self.selection_path = self.model_root / ".active-model.json"
 
@@ -91,6 +92,8 @@ class StudioModels:
         predictor, manifest = load_model_artifact(path)
         if manifest["artifact_id"] != artifact_id:
             raise ValueError("Model Artifact ID does not match candidate directory")
+        from handd_core.onnx_cpu import select_backend
+        predictor = select_backend(predictor, self.inference_backend)
         return predictor, manifest
 
     def _write_active(self, artifact_id: str) -> None:

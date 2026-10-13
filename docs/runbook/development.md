@@ -715,6 +715,17 @@ normal Python test suite does not install ONNX and skips these optional tests.
 No code in the Active Model or Python sidecar was changed. No ONNX dependency
 was added to the project runtime or lockfile.
 
+Follow-up on the child branch `feature/hand-d-onnx-cpu-experimental` (2026-10-12):
+the verified-model and legacy diagnostic paths can now optionally run an
+ONNX Runtime `CPUExecutionProvider` session using the existing model weights.
+`uv.lock` includes ONNX only in optional dependency group `onnx-runtime`;
+PyTorch CPU remains the default and ONNX initialization errors fall back
+visibly. `docs/runbook/hd12-onnx-experimental.md` contains dev launch and
+rollback commands. Verification: `uv run --frozen --group training --group
+onnx-runtime python -m unittest discover -s tests -p 'test_*.py' -q`
+reported 157 OK (1 hardware-opt-in skipped); 59 JS and 7 Rust passed.
+Physical camera and packaging with ONNX are not verified.
+
 MediaPipe `0.10.33` and isolated `1.1.0` both loaded the existing Hand Landmarker
 `.task` and delivered two black-frame LIVE_STREAM callbacks with expected
 fields/timestamps on the Linux host. To keep headless CI hardware-neutral,

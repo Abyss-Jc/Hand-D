@@ -44,11 +44,14 @@ let modelChoices = new Map();
 let drawingDirty = false;
 
 function modelLabel(health) {
+  const backend = health?.inference_backend === 'onnx-cpu' ? ' · ONNX CPU'
+    : health?.inference_backend === 'torch-cpu-fallback' ? ' · PyTorch CPU fallback'
+    : '';
   switch (health?.model) {
     case 'ready': return 'V2 MODEL: READY'
-      + (activeModelId ? ' · ' + activeModelId : '');
+      + (activeModelId ? ' · ' + activeModelId : '') + backend;
     case 'legacy_unverified':
-      return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED';
+      return 'LEGACY MODEL ACTIVE · LABELS NOT INDEPENDENTLY VERIFIED' + backend;
     case 'error': return 'MODEL: LOAD / INFERENCE ERROR';
     case 'unavailable': return 'NO MODEL LOADED · TRACKING ONLY';
     default: return 'MODEL: WAITING FOR SIDECAR';
@@ -779,7 +782,7 @@ function renderModels(data) {
   $('models-activate').disabled = !modelChoices.get(selected.value)?.compatible;
   $('models-status').textContent = 'Active: ' + (activeModelId || 'no verified v2 model')
     + ' · Runtime: ' + (data.health || 'unknown');
-  displayHealth({model:data.health});
+  displayHealth({model:data.health, inference_backend:data.inference_backend});
 }
 $('models-list').addEventListener('change', () => {
   $('models-activate').disabled = !modelChoices.get($('models-list').value)?.compatible;

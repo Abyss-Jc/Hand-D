@@ -41,6 +41,8 @@ class GestureMLP(nn.Module):
 
 
 class ModelPredictor:
+    backend = 'torch-cpu'
+
     def __init__(self, model: GestureMLP, label_order: tuple[str, ...]):
         self.model = model.eval()
         self.label_order = label_order

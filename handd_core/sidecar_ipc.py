@@ -26,11 +26,12 @@ class SidecarServer:
     host = '127.0.0.1'
 
     def __init__(self, *, runtime: GestureRuntime, token: str | None = None,
-                 workspace=None):
+                 workspace=None, inference_backend='torch-cpu'):
         self.runtime = runtime
         self.token = token or token_urlsafe(32)
         self.studio = StudioWorkspace(workspace) if workspace is not None else None
-        self.models = StudioModels(self.studio.path) if self.studio else None
+        self.models = (StudioModels(self.studio.path, inference_backend=inference_backend)
+                       if self.studio else None)
         self.collection = StudioCollection(self.studio.path) if self.studio else None
         self.camera_available = False
         self._studio_lock = asyncio.Lock()
@@ -197,6 +198,7 @@ class SidecarServer:
                         'selected_candidate_id': self.models.listed_active_id(),
                         'candidates': await asyncio.to_thread(self.models.list_candidates),
                         'health': self.runtime.snapshot()['health']['model'],
+                        'inference_backend': self.runtime.snapshot()['health']['inference_backend'],
                     }
                 elif action == 'model_activate':
                     data = self.models.activate(command.get('artifact_id'), self.runtime)
